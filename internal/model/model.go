@@ -1,0 +1,96 @@
+// Package model holds the domain types shared across the daemon.
+package model
+
+import "time"
+
+// Project is a design workspace: a directory on disk plus its metadata.
+type Project struct {
+	ID             string    `json:"id"`
+	Name           string    `json:"name"`
+	Slug           string    `json:"slug"`
+	Dir            string    `json:"-"`
+	DesignSystemID string    `json:"designSystemId,omitempty"`
+	SkillID        string    `json:"skillId,omitempty"`
+	EntryFile      string    `json:"entryFile,omitempty"`
+	CreatedAt      time.Time `json:"createdAt"`
+	UpdatedAt      time.Time `json:"updatedAt"`
+}
+
+// Conversation is a thread of messages inside a project.
+type Conversation struct {
+	ID         string    `json:"id"`
+	ProjectID  string    `json:"projectId"`
+	Title      string    `json:"title,omitempty"`
+	CreatedAt  time.Time `json:"createdAt"`
+	UpdatedAt  time.Time `json:"updatedAt"`
+	MessageCnt int       `json:"messageCount"`
+}
+
+// Message roles.
+const (
+	RoleUser      = "user"
+	RoleAssistant = "assistant"
+	RoleEvent     = "event"
+)
+
+// Message is one turn in a conversation. Delta messages stream partial text.
+type Message struct {
+	ID             string    `json:"id"`
+	ConversationID string    `json:"conversationId"`
+	Role           string    `json:"role"`
+	Content        string    `json:"content"`
+	CreatedAt      time.Time `json:"createdAt"`
+}
+
+// Run statuses.
+const (
+	RunRunning   = "running"
+	RunSucceeded = "succeeded"
+	RunFailed    = "failed"
+	RunCanceled  = "canceled"
+)
+
+// Run tracks one agent invocation against a project.
+type Run struct {
+	ID             string     `json:"id"`
+	ProjectID      string     `json:"projectId"`
+	ConversationID string     `json:"conversationId,omitempty"`
+	Status         string     `json:"status"`
+	Prompt         string     `json:"prompt,omitempty"`
+	Error          string     `json:"error,omitempty"`
+	StartedAt      time.Time  `json:"startedAt"`
+	EndedAt        *time.Time `json:"endedAt,omitempty"`
+}
+
+// File is a project file entry as reported to clients.
+type File struct {
+	Name string `json:"name"`
+	Path string `json:"path"`
+	Size int64  `json:"size"`
+	Kind string `json:"kind"`
+	Mime string `json:"mime,omitempty"`
+}
+
+// DesignSystem is a brand package from the content catalog.
+type DesignSystem struct {
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	Category    string   `json:"category,omitempty"`
+	Description string   `json:"description,omitempty"`
+	Slug        string   `json:"slug"`
+	Source      string   `json:"source,omitempty"`
+	HasPreview  bool     `json:"hasPreview"`
+	Files       []string `json:"files,omitempty"`
+}
+
+// Skill is an agent-behavior pack from the content catalog.
+type Skill struct {
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	Description string   `json:"description,omitempty"`
+	Triggers    []string `json:"triggers,omitempty"`
+	Mode        string   `json:"mode,omitempty"`
+	Scenario    string   `json:"scenario,omitempty"`
+	Path        string   `json:"-"`
+	HasScripts  bool     `json:"hasScripts"`
+}
