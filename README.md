@@ -99,7 +99,7 @@ No account, billing, cloud-model proxy, image generation, or video-generation wo
 
 ## Branding and design
 
-The app is **πDesigner**, using the Greek letter π rather than the written “π”. The workspace retains its charcoal/lavender family palette. The Dock/app icon is a lavender π on charcoal; a standalone π identifies the execution engine. Locally bundled model/provider marks distinguish OpenAI, Claude/Anthropic, DeepSeek, OpenCode, Gemini and OpenRouter. Model maker and routing provider remain separate identities.
+The app is **πDesigner**, using the Greek letter π in its name. Its independent designer-tool mark is a deep-ink pen nib drawing a Bézier curve on an ivory artboard, inside a vermilion tile—not another πDesk-style π icon. The same vector drives the Dock, favicon and workspace brand; a monochrome nib identifies the menu bar and the native activity panel uses the app icon. Workspace layout/state colors stay unchanged, and a standalone π continues to identify the execution engine. Locally bundled model/provider marks distinguish OpenAI, Claude/Anthropic, DeepSeek, OpenCode, Gemini and OpenRouter. Model maker and routing provider remain separate identities.
 
 - `PRODUCT.md`: confirmed product scope and constraints.
 - `DESIGN.md` and `.impeccable/design.json`: implemented design tokens and component rules.

@@ -63,7 +63,7 @@
   ],
   "narrative": {
     "northStar": "A place for ideas to take shape",
-    "overview": "A light, operational Mac workspace with a PiDesk-family identity. The shell uses lavender-gray tonal separation; the artifact sits on a clean canvas.",
+    "overview": "A light, operational Mac workspace with a distinct vermilion/ivory/ink pen-and-artboard identity. The shell retains its existing lavender-gray tonal separation; the artifact sits on a clean canvas.",
     "keyCharacteristics": ["Persistent navigation", "A prompt-first starting point", "Restrained typography", "An artifact-led studio"],
     "rules": [
       { "name": "The Artifact Boundary Rule", "body": "Workspace colors stop at the prototype iframe. A selected design system controls the artifact’s colors; it never recolors the app shell.", "section": "colors" }

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Real API + browser, isolated data, fixture RPC. No accounts or inference.
 const { chromium } = require('../ui/node_modules/playwright-core');
-const { spawn } = require('node:child_process');
+const { spawn, execFileSync } = require('node:child_process');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
@@ -74,6 +74,40 @@ const assert = require('node:assert/strict');
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
   assert.ok(await page.getByLabel('Refine your design').isVisible());await page.screenshot({path:path.join(out,'activity-studio-900.png')});
   pass('Activity, composer and preview fit the minimum Mac window');
+  const stress=await api('/api/projects',{name:'Scroll containment fixture',skillId:'web-prototype'});
+  const stressRun=await api(`/api/projects/${stress.project.id}/chat`,{prompt:'SCROLL_STRESS',conversationId:stress.conversationId,model:'openai/gpt-fixture',thinking:'medium'});
+  await waitForRun(stressRun.runId,'succeeded');
+  const stressURL=base+'/#project/'+stress.project.id+'?activity=1';
+  await page.goto(stressURL);await page.locator('.todo-item').last().waitFor();
+  assert.equal(await page.locator('.todo-item').count(),60);
+  for(const size of [{width:1440,height:900},{width:900,height:620},{width:900,height:480}]) {
+    await page.setViewportSize(size);await page.waitForTimeout(200);
+    const dimensions=await page.evaluate(()=>({height:innerHeight,scroll:document.scrollingElement.scrollHeight}));
+    assert.ok(dimensions.scroll<=dimensions.height+1,`Document grew beyond viewport with long plan/critique: ${JSON.stringify(dimensions)}`);
+    await page.evaluate(()=>{window.scrollTo(0,100000);const pane=document.querySelector('.conversation-messages');pane.scrollTop=pane.scrollHeight;});
+    assert.equal(await page.evaluate(()=>scrollY),0,'App shell must not scroll into blank space');
+    assert.ok(await page.locator('.conversation-messages').evaluate(e=>e.scrollTop>1000),'Conversation must remain independently scrollable');
+    const bounds=await page.locator('.conversation-messages').boundingBox();await page.mouse.move(bounds.x+30,bounds.y+bounds.height-5);await page.mouse.wheel(0,10000);await page.waitForTimeout(100);
+    assert.equal(await page.evaluate(()=>scrollY),0,'Reaching the conversation end must not scroll the app shell');
+    const fixed=await page.evaluate(()=>({header:document.querySelector('.studio-header').getBoundingClientRect().top,composer:document.querySelector('.studio-composer').getBoundingClientRect().bottom,height:innerHeight}));
+    assert.ok(fixed.header>=0&&fixed.composer<=fixed.height+1,'Header and composer must remain visible');
+    assert.ok((await page.locator('.todo-card').ariaSnapshot()).includes('Pending'),'Visually hidden plan statuses must stay accessible');
+    await page.screenshot({path:path.join(out,`scroll-contained-${size.width}.png`)});
+  }
+  pass('Long plans and critiques cannot expand or scroll the document; inner conversation and accessible statuses remain intact');
+  await page.evaluate(()=>{const banner=document.createElement('div');banner.className='error-banner';banner.id='scroll-error-fixture';const text=document.createElement('span');text.textContent='Long recoverable error. '.repeat(100)+'x'.repeat(3000);banner.append(text);document.getElementById('app').prepend(banner);});
+  const errorLayout=await page.evaluate(()=>({height:innerHeight,root:document.scrollingElement.scrollHeight,banner:document.getElementById('scroll-error-fixture').getBoundingClientRect().height,shell:document.querySelector('.studio-shell').getBoundingClientRect().bottom,composer:document.querySelector('.studio-composer').getBoundingClientRect().bottom}));
+  assert.ok(errorLayout.root<=errorLayout.height+1&&errorLayout.shell<=errorLayout.height+1&&errorLayout.composer<=errorLayout.height+1&&errorLayout.banner<=errorLayout.height*.25+1,JSON.stringify(errorLayout));
+  await page.locator('#scroll-error-fixture').evaluate(e=>e.remove());
+  pass('Variable-height error banners preserve the bounded Studio and composer');
+  if(process.platform==='darwin') {
+    const renderer=path.join(root,'bin/pidesigner-render');let available=true;try{await fs.access(renderer);}catch{available=false;}
+    if(available){for(const size of [{width:1440,height:900},{width:900,height:620},{width:900,height:480}]) {
+      const report=JSON.parse(execFileSync(renderer,['--url',stressURL,'--width',String(size.width),'--height',String(size.height),'--out',path.join(out,`scroll-webkit-${size.width}.png`),'--timeout','20'],{encoding:'utf8'}));
+      assert.ok(report.ok&&report.scrollHeight<=size.height+1,`WebKit document overflow: ${JSON.stringify(report)}`);assert.ok(report.title.includes('Scroll containment fixture'),'WebKit must load the actual Studio, not an empty page');
+    }pass('Native WebKit contains long conversations at normal, minimum, and reduced-height viewports');}
+    else console.log('SKIP native WebKit scroll check: build bin/pidesigner-render first');
+  }
   assert.deepEqual(errors,[]);pass('No browser runtime errors');
   await fs.writeFile(path.join(out,'activity-report.json'),JSON.stringify({checks,errors,data},null,2));
  } finally {

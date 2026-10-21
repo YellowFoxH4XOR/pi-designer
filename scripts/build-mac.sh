@@ -54,6 +54,7 @@ swiftc \
 
 echo "==> assembling bundle"
 cp mac/Info.plist "${BUNDLE}/Contents/Info.plist"
+cp ui/public/brand-symbol.svg "${BUNDLE}/Contents/Resources/BrandTemplate.svg"
 cp bin/pidesigner "${BUNDLE}/Contents/MacOS/pidesigner"
 cp bin/pidesigner-mcp "${BUNDLE}/Contents/MacOS/pidesigner-mcp"
 cp bin/pidesigner-render "${BUNDLE}/Contents/MacOS/pidesigner-render"
