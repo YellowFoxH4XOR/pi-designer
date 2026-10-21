@@ -21,16 +21,17 @@ import (
 
 // AgentEvent is one event in a run's event stream.
 type AgentEvent struct {
-	Type    string          `json:"type"`
-	RunID   string          `json:"runId"`
-	Text    string          `json:"text,omitempty"`
-	Tool    string          `json:"tool,omitempty"`
-	Args    json.RawMessage `json:"args,omitempty"`
-	IsError bool            `json:"isError,omitempty"`
-	Aborted bool            `json:"aborted,omitempty"`
-	Todos   []model.Todo    `json:"todos,omitempty"`
-	Render  *model.Render   `json:"render,omitempty"`
-	At      int64           `json:"at"`
+	Type     string          `json:"type"`
+	RunID    string          `json:"runId"`
+	Text     string          `json:"text,omitempty"`
+	Tool     string          `json:"tool,omitempty"`
+	Args     json.RawMessage `json:"args,omitempty"`
+	IsError  bool            `json:"isError,omitempty"`
+	Aborted  bool            `json:"aborted,omitempty"`
+	Todos    []model.Todo    `json:"todos,omitempty"`
+	Render   *model.Render   `json:"render,omitempty"`
+	Critique *model.Critique `json:"critique,omitempty"`
+	At       int64           `json:"at"`
 }
 
 // broker fans a run's events out to any number of SSE subscribers.
@@ -363,6 +364,13 @@ func (r *Runner) execute(run model.Run, proj model.Project, req RunRequest, b *b
 						b.publish(AgentEvent{Type: "render", RunID: run.ID, Render: &render, At: nowMs()})
 					}
 				}
+				if ev.ToolName == "submit_critique" && !ev.IsError {
+					var c model.Critique
+					if json.Unmarshal(ev.ToolDetails, &c) == nil && c.Round > 0 {
+						work.addCritique(c)
+						b.publish(AgentEvent{Type: "critique", RunID: run.ID, Critique: &c, At: nowMs()})
+					}
+				}
 			case pirun.EventStderr:
 				b.publish(AgentEvent{Type: "stderr", RunID: run.ID, Text: ev.Text, At: nowMs()})
 			case pirun.EventError:
@@ -420,9 +428,9 @@ func (r *Runner) execute(run model.Run, proj model.Project, req RunRequest, b *b
 		failure = providerFailure
 	}
 
-	// Persist the plan, the renders, and the assistant turn.
-	todos, renders := work.snapshot()
-	_ = r.store.SaveRunWork(run.ID, todos, renders)
+	// Persist the plan, renders, critique rounds, and the assistant turn.
+	w := work.snapshot()
+	_ = r.store.SaveRunWork(run.ID, w.todos, w.renders, w.critiques)
 	if txt := strings.TrimSpace(assistantText.String()); txt != "" && run.ConversationID != "" {
 		_ = r.store.AppendMessage(model.Message{
 			ID: newID("msg"), ConversationID: run.ConversationID,
@@ -558,11 +566,11 @@ func (r *Runner) writeSystemPrompt(proj model.Project, req RunRequest) (string, 
 // resolveSkill finds a workflow skill among skills and design templates;
 // both are directories with a SKILL.md.
 func (r *Runner) resolveSkill(id string) *prompt.Skill {
-	name, dir := "", ""
+	name, dir, mode := "", "", ""
 	if sk, ok := r.catalog.Skill(id); ok {
-		name, dir = sk.Name, sk.Path
+		name, dir, mode = sk.Name, sk.Path, sk.Mode
 	} else if t, ok := r.catalog.Template(id); ok {
-		name, dir = t.Name, t.Path
+		name, dir, mode = t.Name, t.Path, t.Mode
 	} else {
 		return nil
 	}
@@ -570,7 +578,7 @@ func (r *Runner) resolveSkill(id string) *prompt.Skill {
 	if body == "" {
 		return nil
 	}
-	return &prompt.Skill{ID: id, Name: name, Dir: dir, Body: body}
+	return &prompt.Skill{ID: id, Name: name, Dir: dir, Mode: mode, Body: body}
 }
 
 // hasSession reports whether Pi already stores a session for a conversation.
@@ -605,11 +613,12 @@ func (r *Runner) priorTranscript(conversationID string) []prompt.Message {
 	return out
 }
 
-// runWork accumulates the plan and renders of a run.
+// runWork accumulates the plan, renders, and critique rounds of a run.
 type runWork struct {
-	mu      sync.Mutex
-	todos   []model.Todo
-	renders []model.Render
+	mu        sync.Mutex
+	todos     []model.Todo
+	renders   []model.Render
+	critiques []model.Critique
 }
 
 func (w *runWork) setTodos(t []model.Todo) {
@@ -624,10 +633,21 @@ func (w *runWork) addRender(r model.Render) {
 	w.mu.Unlock()
 }
 
-func (w *runWork) snapshot() ([]model.Todo, []model.Render) {
+func (w *runWork) addCritique(c model.Critique) {
+	w.mu.Lock()
+	w.critiques = append(w.critiques, c)
+	w.mu.Unlock()
+}
+
+// snapshot returns copies safe to use after the event loop ends.
+func (w *runWork) snapshot() *runWork {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	return append([]model.Todo(nil), w.todos...), append([]model.Render(nil), w.renders...)
+	return &runWork{
+		todos:     append([]model.Todo(nil), w.todos...),
+		renders:   append([]model.Render(nil), w.renders...),
+		critiques: append([]model.Critique(nil), w.critiques...),
+	}
 }
 
 // parseTodos reads a todo_write call's arguments.
@@ -654,7 +674,7 @@ func parseTodos(args json.RawMessage) ([]model.Todo, bool) {
 }
 
 // renderFileName matches the PNG names the extension writes.
-var renderFileName = regexp.MustCompile(`^[0-9]+-(web|desktop|mobile)(-full)?\.png$`)
+var renderFileName = regexp.MustCompile(`^[0-9]+-(web|desktop|mobile)(-full|-s[0-9]+)?\.png$`)
 
 // parseRender reads a finished render_preview call's details.
 func parseRender(projectID string, details json.RawMessage) (model.Render, bool) {
@@ -663,6 +683,7 @@ func parseRender(projectID string, details json.RawMessage) (model.Render, bool)
 		Path      string `json:"path"`
 		File      string `json:"file"`
 		FullPage  bool   `json:"fullPage"`
+		Slide     int    `json:"slide"`
 		OverflowX bool   `json:"overflowX"`
 		Errors    int    `json:"errors"`
 	}
@@ -670,11 +691,13 @@ func parseRender(projectID string, details json.RawMessage) (model.Render, bool)
 		return model.Render{}, false
 	}
 	return model.Render{
-		Viewport:  d.Viewport,
-		Path:      d.Path,
-		Image:     "/api/projects/" + projectID + "/renders/" + d.File,
-		FullPage:  d.FullPage,
-		OverflowX: d.OverflowX,
+		Viewport: d.Viewport,
+		Path:     d.Path,
+		Image:    "/api/projects/" + projectID + "/renders/" + d.File,
+		FullPage: d.FullPage,
+		Slide:    d.Slide,
+		// A swiping deck's slide strip is wide by design, not an overflow.
+		OverflowX: d.OverflowX && d.Slide == 0,
 		Errors:    d.Errors,
 	}, true
 }

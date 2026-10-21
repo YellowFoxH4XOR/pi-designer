@@ -74,3 +74,13 @@ func TestTodoSnapshotsNormalizeStatusAndDropEmptyItems(t *testing.T) {
 		t.Fatal("arguments without todos were treated as a plan")
 	}
 }
+
+func TestDeckSlideRendersAreNotPageOverflow(t *testing.T) {
+	got, ok := parseRender("p", []byte(`{"viewport":"web","file":"5-web-s3.png","slide":3,"overflowX":true}`))
+	if !ok || got.Slide != 3 || got.OverflowX {
+		t.Fatalf("slide render parsed as %+v", got)
+	}
+	if (&Runner{cfg: RunnerConfig{RenderDir: "/r"}}).RenderFile("p", "5-web-s3.png") == "" {
+		t.Fatal("slide render file is not served")
+	}
+}

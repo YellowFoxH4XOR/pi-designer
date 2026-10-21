@@ -5,6 +5,8 @@
  * - render_preview: renders a project HTML file at one of PiDesigner's preview
  *   frames with the bundled WebKit renderer and returns the screenshot to the
  *   model, so it can critique what it actually built.
+ * - submit_critique: records one round of the expert panel critique, scores
+ *   it, and decides whether the design ships or must be revised.
  *
  * Configuration comes from the environment PiDesigner sets for the run:
  *   PIDESIGNER_RENDERER    absolute path of pidesigner-render (optional)
@@ -26,8 +28,15 @@ const VIEWPORTS = {
 } as const;
 type ViewportID = keyof typeof VIEWPORTS;
 
-/** Renders allowed per run: primary + mobile, plus one confirming re-render each. */
-const RENDER_BUDGET = 4;
+/** Renders allowed per run: primary + mobile, then confirming re-renders across critique rounds. */
+const RENDER_BUDGET = 6;
+
+/** Panel critique: weights per scoring role, ship threshold, round limit (Open Design's Critique Theater defaults). */
+const PANEL_WEIGHTS = { critic: 0.4, brand: 0.2, a11y: 0.2, copy: 0.2 } as const;
+const SHIP_THRESHOLD = 8;
+const MAX_ROUNDS = 3;
+type ScoringRole = keyof typeof PANEL_WEIGHTS;
+
 /** Longest edge of the image sent to the model; the full PNG stays on disk. */
 const MODEL_IMAGE_EDGE = 1568;
 
@@ -99,6 +108,76 @@ export default function pidesigner(pi: ExtensionAPI) {
 		},
 	});
 
+	let critiqueRound = 0;
+	let shallowRejected = false;
+	pi.registerTool({
+		name: "submit_critique",
+		label: "Critique",
+		description:
+			"Record one round of the expert panel critique of the built design and get the ship/revise decision. " +
+			"The designer states the intent; the critic (hierarchy, type, contrast, rhythm, space), brand (fidelity to the design system or design plan), " +
+			"a11y (contrast, focus, headings, alt text, touch targets) and copy (specificity, voice, length) each score 0-10 with evidence and list must-fix items. " +
+			`The design ships when the weighted score is at least ${SHIP_THRESHOLD} with no must-fix items; at most ${MAX_ROUNDS} rounds.`,
+		parameters: Type.Object({
+			designer: Type.String({ description: "One sentence: the design intent this round was judged against." }),
+			panelists: Type.Array(
+				Type.Object({
+					role: Type.Union([Type.Literal("critic"), Type.Literal("brand"), Type.Literal("a11y"), Type.Literal("copy")]),
+					score: Type.Number({ minimum: 0, maximum: 10 }),
+					notes: Type.String({ description: "Evidence from the screenshots and code, not general praise." }),
+					mustFix: Type.Array(Type.String({ description: "A specific, actionable fix." })),
+				}),
+				{ description: "Exactly one entry for each of critic, brand, a11y, copy." },
+			),
+		}),
+		async execute(_id, params) {
+			const roles = new Set(params.panelists.map((p) => p.role));
+			const missing = (Object.keys(PANEL_WEIGHTS) as ScoringRole[]).filter((r) => !roles.has(r));
+			if (missing.length || params.panelists.length !== roles.size) {
+				throw new Error(`Send exactly one panelist for each of critic, brand, a11y, copy (missing: ${missing.join(", ") || "none"}; duplicates are not allowed).`);
+			}
+			const empty = params.panelists.filter((p) => !p.notes.trim()).map((p) => p.role);
+			if (empty.length) throw new Error(`Every panelist needs evidence-based notes (empty: ${empty.join(", ")}).`);
+
+			// A first round where every reviewer agrees and nobody finds anything
+			// is a rubber stamp, not a critique (Open Design requires panelists
+			// to diverge). Send it back once before it counts.
+			const scores = params.panelists.map((p) => p.score);
+			const spread = Math.max(...scores) - Math.min(...scores);
+			const anyMustFix = params.panelists.some((p) => p.mustFix.some((m) => m.trim()));
+			if (critiqueRound === 0 && !anyMustFix && spread < 1 && !shallowRejected) {
+				shallowRejected = true;
+				throw new Error(
+					"Critique too shallow: all four reviewers agree within a point and none found anything to fix. " +
+						"Look at the screenshots again as each reviewer separately — weakest section, densest screen, mobile layout, hover/focus states, copy specificity — and resubmit with the scores and must-fix items you actually find.",
+				);
+			}
+
+			critiqueRound++;
+			const round = critiqueRound;
+			const composite = Math.round(params.panelists.reduce((sum, p) => sum + PANEL_WEIGHTS[p.role] * Math.min(10, Math.max(0, p.score)), 0) * 10) / 10;
+			const mustFix = params.panelists.flatMap((p) => p.mustFix.map((m) => m.trim()).filter(Boolean));
+			const decision = composite >= SHIP_THRESHOLD && mustFix.length === 0 ? "ship" : round >= MAX_ROUNDS ? "ship_with_issues" : "revise";
+
+			const next =
+				decision === "ship"
+					? "Decision: ship. Deliver now."
+					: decision === "revise"
+						? `Decision: revise. Fix every must-fix item in the files, re-render the affected viewport to confirm, then call submit_critique again for round ${round + 1}. Score the revised design honestly; do not raise scores without a visible improvement.`
+						: "Decision: round limit reached. Deliver the best version and list the remaining must-fix items as open issues in your summary.";
+			const text = [`Critique round ${round}: weighted score ${composite.toFixed(1)}/10, ${mustFix.length} must-fix item(s).`, ...mustFix.map((m) => `- ${m}`), next].join("\n");
+			return {
+				content: [{ type: "text", text }],
+				details: {
+					round,
+					composite,
+					decision,
+					panelists: [{ role: "designer", notes: params.designer, mustFix: [] }, ...params.panelists],
+				},
+			};
+		},
+	});
+
 	pi.registerTool({
 		name: "render_preview",
 		label: "Render preview",
@@ -110,6 +189,7 @@ export default function pidesigner(pi: ExtensionAPI) {
 			path: Type.Optional(Type.String({ description: "Project-relative HTML file. Defaults to index.html." })),
 			viewport: Type.Union([Type.Literal("web"), Type.Literal("desktop"), Type.Literal("mobile")]),
 			fullPage: Type.Optional(Type.Boolean({ description: "Capture the whole page height (up to 6000px) instead of the first viewport." })),
+			slide: Type.Optional(Type.Integer({ minimum: 1, description: "Slide decks: 1-based slide to show before capturing." })),
 		}),
 		async execute(_id, params, signal, _onUpdate, ctx) {
 			const renderer = process.env.PIDESIGNER_RENDERER;
@@ -136,19 +216,23 @@ export default function pidesigner(pi: ExtensionAPI) {
 
 			renders++;
 			await mkdir(renderDir, { recursive: true });
-			const name = `${Date.now()}-${params.viewport}${params.fullPage ? "-full" : ""}.png`;
+			const suffix = params.slide ? `-s${params.slide}` : params.fullPage ? "-full" : "";
+			const name = `${Date.now()}-${params.viewport}${suffix}.png`;
 			const out = path.join(renderDir, name);
 			const args = ["--url", pathToFileURL(file).href, "--width", String(viewport.width), "--height", String(viewport.height), "--out", out];
-			if (params.fullPage) args.push("--full-page");
+			if (params.slide) args.push("--slide", String(params.slide));
+			else if (params.fullPage) args.push("--full-page");
 			const report = lastJSONLine(await run(renderer, args, signal));
 			if (!report.ok) throw new Error(`Render failed: ${report.error ?? "unknown error"}`);
 
 			const facts: string[] = [
-				`Rendered ${path.relative(root, file)} at ${viewport.label} ${viewport.width}×${viewport.height}${params.fullPage ? " (full page)" : ""}.`,
+				`Rendered ${path.relative(root, file)} at ${viewport.label} ${viewport.width}×${viewport.height}${params.slide ? `, slide ${params.slide}` : params.fullPage ? " (full page)" : ""}.`,
 				`Page height: ${report.scrollHeight ?? "?"}px.`,
-				report.overflowX
-					? `HORIZONTAL OVERFLOW: content is ${report.scrollWidth}px wide in a ${viewport.width}px viewport. Fix this before delivering.`
-					: "No horizontal overflow.",
+				!report.overflowX
+					? "No horizontal overflow."
+					: params.slide
+						? `The slide strip is ${report.scrollWidth}px wide, as expected for a horizontally swiping deck; judge whether this slide's own content fits.`
+						: `HORIZONTAL OVERFLOW: content is ${report.scrollWidth}px wide in a ${viewport.width}px viewport. Fix this before delivering.`,
 			];
 			const errors = report.errors ?? [];
 			const broken = report.brokenImages ?? [];
@@ -173,7 +257,8 @@ export default function pidesigner(pi: ExtensionAPI) {
 					viewport: params.viewport,
 					path: path.relative(root, file),
 					file: name,
-					fullPage: !!params.fullPage,
+					fullPage: !!params.fullPage && !params.slide,
+					slide: params.slide ?? 0,
 					overflowX: !!report.overflowX,
 					scrollWidth: report.scrollWidth,
 					scrollHeight: report.scrollHeight,

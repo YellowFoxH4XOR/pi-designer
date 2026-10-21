@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { api, subscribeRun, type Run, type AgentEvent, type Render, type Todo } from './api';
+import { api, subscribeRun, type Run, type AgentEvent, type Critique, type Render, type Todo } from './api';
 
 export type Frame = 'web' | 'mobile' | 'desktop';
 export const frames: Record<Frame, { w: number; h: number; label: string }> = {
@@ -8,11 +8,12 @@ export const frames: Record<Frame, { w: number; h: number; label: string }> = {
 export const workflows = [
   { id: 'web-prototype', name: 'Prototype', icon: 'web' as const, description: 'A working interface, built from your brief.' },
   { id: 'motion-design', name: 'Motion design', icon: 'motion' as const, description: 'Bring a page or interaction to life.' },
+  { id: 'simple-deck', name: 'Slide deck', icon: 'deck' as const, description: 'A swipeable presentation, slide by slide.' },
   { id: 'web-clone', name: 'Website clone', icon: 'clone' as const, description: 'Rebuild a reference website with Pi.' },
 ];
 export const skillNames: Record<string, string> = {
   'web-prototype': 'Prototype', 'web-artifacts-builder': 'Prototype', 'motion-design': 'Motion design', 'web-clone': 'Website clone',
-  'emilkowalski-motion': 'Interaction motion', 'web-design-guidelines': 'Interface review', 'agent-browser': 'Browser verification',
+  'simple-deck': 'Slide deck', 'emilkowalski-motion': 'Interaction motion', 'web-design-guidelines': 'Interface review',
 };
 export interface Preferences { model: string; thinking: string }
 export function loadPreferences(): Preferences {
@@ -40,7 +41,7 @@ export function useRoute() {
 }
 export interface RunState {
   id: string; projectId: string; status: Run['status']; text: string; tools: AgentEvent[];
-  todos: Todo[]; renders: Render[];
+  todos: Todo[]; renders: Render[]; critiques: Critique[];
   error?: string; conversationId?: string; model?: string;
 }
 export function useRuns(onFinished: () => void) {
@@ -55,7 +56,7 @@ export function useRuns(onFinished: () => void) {
       ...all,
       [run.projectId]: {
         id: run.id, projectId: run.projectId, status: run.status, text: '', tools: [],
-        todos: run.todos ?? [], renders: run.renders ?? [], conversationId: run.conversationId,
+        todos: run.todos ?? [], renders: run.renders ?? [], critiques: run.critiques ?? [], conversationId: run.conversationId,
       },
     }));
     let stopped = false, polling = false;
@@ -72,6 +73,10 @@ export function useRuns(onFinished: () => void) {
         if (ev.type === 'todos' && Array.isArray(ev.todos)) next.todos = ev.todos;
         if (ev.type === 'render' && ev.render?.image && !next.renders.some((render) => render.image === ev.render?.image)) {
           next.renders = [...next.renders, ev.render];
+        }
+        if (ev.type === 'critique' && ev.critique) {
+          const round = ev.critique;
+          next.critiques = [...next.critiques.filter((critique) => critique.round !== round.round), round].sort((a, b) => a.round - b.round);
         }
         return { ...all, [run.projectId]: next };
       });
@@ -94,6 +99,7 @@ export function useRuns(onFinished: () => void) {
                 error: latest.error,
                 todos: latest.todos?.length ? latest.todos : current.todos,
                 renders: latest.renders?.length ? latest.renders : current.renders,
+                critiques: latest.critiques?.length ? latest.critiques : current.critiques,
               },
             };
           });

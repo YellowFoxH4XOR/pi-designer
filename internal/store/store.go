@@ -98,8 +98,8 @@ func (s *Store) migrate() error {
 			return fmt.Errorf("migrate: %w", err)
 		}
 	}
-	// The last plan and preview renders of a run, as JSON arrays.
-	for _, col := range []string{"todos", "renders"} {
+	// A run's latest plan, preview renders, and critique rounds, as JSON arrays.
+	for _, col := range []string{"todos", "renders", "critiques"} {
 		if err := s.addColumn("runs", col, "TEXT"); err != nil {
 			return fmt.Errorf("migrate: %w", err)
 		}
@@ -376,31 +376,32 @@ func (s *Store) FinishRun(id, status, errMsg string) error {
 	return err
 }
 
-// SaveRunWork records a run's latest plan and its preview renders.
-func (s *Store) SaveRunWork(id string, todos []model.Todo, renders []model.Render) error {
-	t, err := json.Marshal(todos)
-	if err != nil {
-		return err
-	}
-	r, err := json.Marshal(renders)
-	if err != nil {
-		return err
+// SaveRunWork records a run's latest plan, preview renders, and critique
+// rounds.
+func (s *Store) SaveRunWork(id string, todos []model.Todo, renders []model.Render, critiques []model.Critique) error {
+	cols := make([]any, 0, 4)
+	for _, v := range []any{todos, renders, critiques} {
+		b, err := json.Marshal(v)
+		if err != nil {
+			return err
+		}
+		cols = append(cols, string(b))
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	_, err = s.db.Exec(`UPDATE runs SET todos=?, renders=? WHERE id=?`, string(t), string(r), id)
+	_, err := s.db.Exec(`UPDATE runs SET todos=?, renders=?, critiques=? WHERE id=?`, append(cols, id)...)
 	return err
 }
 
 const runColumns = `id,project_id,COALESCE(conversation_id,''),status,COALESCE(prompt,''),
-		COALESCE(error,''),started_at,ended_at,COALESCE(todos,''),COALESCE(renders,'')`
+		COALESCE(error,''),started_at,ended_at,COALESCE(todos,''),COALESCE(renders,''),COALESCE(critiques,'')`
 
 func scanRun(scan func(...any) error) (model.Run, error) {
 	var r model.Run
 	var started int64
 	var ended sql.NullInt64
-	var todos, renders string
-	if err := scan(&r.ID, &r.ProjectID, &r.ConversationID, &r.Status, &r.Prompt, &r.Error, &started, &ended, &todos, &renders); err != nil {
+	var todos, renders, critiques string
+	if err := scan(&r.ID, &r.ProjectID, &r.ConversationID, &r.Status, &r.Prompt, &r.Error, &started, &ended, &todos, &renders, &critiques); err != nil {
 		return r, err
 	}
 	r.StartedAt = time.UnixMilli(started)
@@ -414,6 +415,9 @@ func scanRun(scan func(...any) error) (model.Run, error) {
 	}
 	if renders != "" {
 		_ = json.Unmarshal([]byte(renders), &r.Renders)
+	}
+	if critiques != "" {
+		_ = json.Unmarshal([]byte(critiques), &r.Critiques)
 	}
 	return r, nil
 }

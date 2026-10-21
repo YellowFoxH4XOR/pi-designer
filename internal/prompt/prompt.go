@@ -34,6 +34,12 @@ var workflow string
 //go:embed craft.md
 var craft string
 
+//go:embed deck.md
+var deck string
+
+// DeckMode is the skill mode of slide-deck workflows.
+const DeckMode = "deck"
+
 // FrontendDesignSkillID is the always-on design guidance skill.
 const FrontendDesignSkillID = "frontend-design"
 
@@ -77,6 +83,8 @@ type Skill struct {
 	ID   string
 	Name string
 	Dir  string
+	// Mode is the skill's declared output mode (prototype, deck, ...).
+	Mode string
 	// Body is SKILL.md. Frontmatter is stripped before injection.
 	Body string
 }
@@ -126,6 +134,12 @@ func System(in Input) string {
 	writeDesignSystem(&b, in.DesignSystem)
 	writeCraftIndex(&b, in.CraftDir, in.CraftDocs)
 	writeSkill(&b, in.Skill)
+	if in.Skill != nil && in.Skill.Mode == DeckMode {
+		// Pinned after the skill so its density rules win over softer
+		// slide wording elsewhere.
+		b.WriteString(strings.TrimSpace(deck))
+		b.WriteString("\n")
+	}
 	return strings.TrimSpace(b.String()) + "\n"
 }
 
@@ -167,7 +181,7 @@ func writeCraftIndex(b *strings.Builder, dir string, docs []string) {
 		return
 	}
 	b.WriteString("## Craft references\n\n")
-	b.WriteString("Deeper guidance beyond the craft rules above. Read the ones that matter for this brief (for example accessibility and state coverage for app prototypes, form validation for forms, typography hierarchy for editorial pages) in one batch before building:\n\n")
+	b.WriteString("Deeper guidance beyond the craft rules above. Read at most two that matter most for this brief (for example accessibility and state coverage for app prototypes, form validation for forms, typography hierarchy for editorial pages), in one batch before building:\n\n")
 	for _, d := range docs {
 		fmt.Fprintf(b, "- %s\n", filepath.Join(dir, d))
 	}
@@ -193,6 +207,7 @@ func writeSkill(b *strings.Builder, sk *Skill) {
 	}
 	fmt.Fprintf(b, "## Active skill: %s\n\n", sk.Name)
 	fmt.Fprintf(b, "Skill root: %s — relative paths in the skill resolve against this directory. The skill files are read-only: copy a seed into the project, never edit it in place.\n\n", sk.Dir)
+	b.WriteString("This skill was written for Open Design. Its commands for `$OD_BIN`, `$OD_NODE_BIN`, `od`, `$OD_PROJECT_ID`, `.od-skills/` staging, or Open Design media generation do not exist in PiDesigner: run the skill's own scripts directly from the skill root with `node`, write outputs into the project, deliver motion as runnable HTML (no rendered video), and verify with `render_preview`.\n\n")
 	b.WriteString("Follow this skill's workflow exactly.")
 	var reads []string
 	for _, f := range preflightFiles {

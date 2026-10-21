@@ -461,6 +461,36 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .dialog.render-dialog { width: min(920px, calc(100vw - 32px)); }
 .render-full { display: block; width: 100%; height: auto; max-height: 68dvh; object-fit: contain; margin-top: 14px; background: #f5f5f9; border: 1px solid var(--line); border-radius: 8px; }
 .render-dialog-meta { display: flex; align-items: center; gap: 6px; font-size: 10px; color: var(--muted); margin: 11px 0 0; }
+.critique-card { background: #fff; border: 1px solid #e1e1ea; border-radius: 11px; padding: 11px 12px 10px; margin: 0 0 14px; }
+.critique-card-live { border-color: #d7d4ee; box-shadow: 0 0 0 3px #5c61b60a; }
+.critique-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
+.critique-head h3 { margin: 0; font-size: 10.5px; font-weight: 600; color: #4b4a5b; }
+.critique-decision { display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border: 1px solid transparent; border-radius: 999px; font-size: 9px; font-weight: 550; white-space: nowrap; }
+.critique-decision.is-ship { color: #2f6a4a; background: #eef6f1; border-color: #cfe5d9; }
+.critique-decision.is-revise { color: #57528f; background: #f1f0fb; border-color: #ddd9f1; }
+.critique-decision.is-ship_with_issues { color: #7f5a2f; background: #fdf4e7; border-color: #efdfc6; }
+.critique-overview { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin: 2px 0 9px; }
+.critique-score { display: flex; align-items: baseline; gap: 3px; margin: 0; }
+.critique-score strong { font-size: 21px; line-height: 1.05; font-weight: 600; letter-spacing: -.02em; color: #2b2a39; font-variant-numeric: tabular-nums; }
+.critique-score span { font-size: 10px; color: var(--muted); }
+.critique-history { display: flex; align-items: baseline; gap: 5px; margin: 0; font-size: 9.5px; color: #7d7b8b; font-variant-numeric: tabular-nums; }
+.critique-history-label { font-size: 8.5px; letter-spacing: .05em; text-transform: uppercase; color: #9a98a7; }
+.critique-panel { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+.critique-panelist { padding: 6px 8px 7px; border: 1px solid #edeef4; border-radius: 7px; background: #fbfbfd; }
+.critique-panelist-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.critique-role { margin: 0; font-size: 8.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: #6c6980; }
+.critique-panelist-score { font-size: 10px; color: #4a4959; font-variant-numeric: tabular-nums; }
+.critique-notes { margin: 3px 0 0; font-size: 10.5px; line-height: 1.55; color: #575666; }
+.critique-more { margin-left: 4px; padding: 0; font-size: 10px; color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+.critique-more:hover { color: #43488f; }
+.critique-fixes { border-top: 1px solid #eeeff5; padding-top: 7px; }
+.critique-fixes h4 { margin: 0 0 4px; font-size: 8.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: #6c6980; }
+.critique-fixes ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.critique-fixes li { display: flex; align-items: flex-start; gap: 7px; font-size: 10.5px; line-height: 1.5; color: #4d4c5c; }
+.critique-fix-mark { width: 5px; height: 5px; flex: 0 0 auto; margin-top: 6px; border-radius: 50%; background: #b6b4c6; }
+.critique-fix-mark.is-open { background: #b1793c; }
+.critique-fix-text { min-width: 0; }
+.critique-fix-source { margin-left: auto; flex: 0 0 auto; font-size: 8.5px; letter-spacing: .04em; text-transform: uppercase; color: #9a98a7; }
 .message-form-answers .form-answer-summary { margin-left: 20px; background: #f1f1f7; border: 1px solid #e2e2ec; border-radius: 11px 11px 3px 11px; padding: 10px 12px; }
 .form-answer-summary-title { display: flex; align-items: center; gap: 5px; font-size: 9.5px; letter-spacing: .05em; text-transform: uppercase; color: #6b6880; margin-bottom: 5px; }
 .form-answer-summary ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }

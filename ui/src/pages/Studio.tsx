@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { api, type Conversation, type DesignSystem, type FileEntry, type Message, type Project, type Render, type Run } from '../api';
 import { AgentMessage } from '../components/AgentMessage';
 import { Composer } from '../components/Composer';
+import { CritiqueCard } from '../components/CritiqueCard';
 import { Dialog, Empty, IconButton } from '../components/common';
 import { Icon, Logo, PiLogo } from '../components/Icon';
 import { RenderDialogBody, RenderStrip, renderLabel } from '../components/RenderStrip';
@@ -93,7 +94,7 @@ export function Studio({ projectId, systems, run, onMonitor, onStart, onHome, on
   useEffect(() => {
     const el = messagesPane.current;
     if (follow.current && el) el.scrollTop = el.scrollHeight;
-  }, [messages, run?.text, run?.tools.length, run?.todos.length, run?.renders.length]);
+  }, [messages, run?.text, run?.tools.length, run?.todos.length, run?.renders.length, run?.critiques.length]);
 
   // Every user turn goes through here: the composer, question forms and
   // next-step chips all submit the same way.
@@ -144,6 +145,7 @@ export function Studio({ projectId, systems, run, onMonitor, onStart, onHome, on
   const activeRun = showLive ? conversationRun : undefined;
   const planTodos = activeRun?.todos?.length ? activeRun.todos : historyRun?.todos?.length ? historyRun.todos : conversationRun?.todos ?? [];
   const planRenders = activeRun?.renders?.length ? activeRun.renders : historyRun?.renders?.length ? historyRun.renders : conversationRun?.renders ?? [];
+  const planCritiques = activeRun?.critiques?.length ? activeRun.critiques : historyRun?.critiques?.length ? historyRun.critiques : conversationRun?.critiques ?? [];
   const latestAssistantIndex = messages.reduce((last, message, index) => (message.role === 'assistant' ? index : last), -1);
   const latestAssistant = latestAssistantIndex >= 0 ? parseAssistantText(messages[latestAssistantIndex].content) : null;
   const latestAnswers = latestAssistantIndex >= 0 ? answeredFormsFor(latestAssistantIndex) : new Map<string, ParsedFormAnswers>();
@@ -195,6 +197,7 @@ export function Studio({ projectId, systems, run, onMonitor, onStart, onHome, on
         {run?.model && run.conversationId === conversationId && <p class="run-model"><PiLogo size={14}/>Using {run.model}</p>}
         {planTodos.length > 0 && <TodoCard todos={planTodos} live={showLive}/>}
         {planRenders.length > 0 && <RenderStrip renders={planRenders} onOpen={setPreview}/>}
+        {planCritiques.length > 0 && <CritiqueCard critiques={planCritiques} live={showLive}/>}
         {visibleTools.length > 0 && <details class="tool-log"><summary><Icon name={busy ? 'code' : 'check'} size={15}/>{busy ? `Pi is using ${visibleTools[visibleTools.length - 1].tool}` : `${visibleTools.length} recent agent actions`}</summary><ul>{visibleTools.map((event, i) => <li key={i}><code>{event.tool}</code><span>{String(event.args?.path || event.args?.command || '').slice(0, 140)}</span></li>)}</ul></details>}
         {canContinue && <div class="continue-tasks"><button class="button secondary" onClick={() => void sendText(continueMessage(planTodos))} disabled={connecting}><Icon name="refresh" size={15}/>Continue remaining tasks<span class="continue-count">{openTodos.length}</span></button></div>}
         {run?.status === 'failed' && <div class="inline-error" role="alert"><strong>Pi couldn’t finish this run.</strong><p>{run.error || 'Check your Pi model configuration, then try again.'}</p></div>}

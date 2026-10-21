@@ -13,7 +13,7 @@ export function Projects({ projects, onOpen, onNew }: { projects: Project[]; onO
     <div class="page-heading"><div><h1>All projects</h1><p>A place for every idea, and every iteration.</p></div><button class="button primary" onClick={onNew}><Icon name="plus" size={17}/>New project</button></div>
     <div class="library-toolbar"><span>{projects.length} {projects.length === 1 ? 'project' : 'projects'}</span><SearchField value={search} onInput={setSearch} placeholder="Search projects"/></div>
     {!filtered.length ? <Empty icon="projects" title={search ? 'No projects found' : 'A clean canvas awaits'}><p>{search ? 'Try another project name.' : 'Start with a brief. Pi will take it from there.'}</p>{!search && <button class="button primary" onClick={onNew}>Create a project<Icon name="plus" size={17}/></button>}</Empty> : <div class="project-grid">{filtered.map((p) => <button key={p.id} class="project-card" onClick={() => onOpen(p.id)}>
-      <div class="project-cover"><Icon name={p.skillId === 'web-clone' ? 'clone' : p.skillId === 'motion-design' ? 'motion' : 'web'} size={36}/><span>{p.entryFile ? 'Open prototype' : 'Ready for your first brief'}<Icon name="chevron" size={14}/></span></div>
+      <div class="project-cover"><Icon name={p.skillId === 'web-clone' ? 'clone' : p.skillId === 'motion-design' ? 'motion' : p.skillId === 'simple-deck' ? 'deck' : 'web'} size={36}/><span>{p.entryFile ? 'Open prototype' : 'Ready for your first brief'}<Icon name="chevron" size={14}/></span></div>
       <div class="project-card-meta"><strong>{p.name}</strong><small>{relativeDate(p.updatedAt)}</small></div><p>{skillNames[p.skillId || ''] || 'Prototype'}{p.designSystemId ? ` · ${p.designSystemId.replace(/-/g, ' ')}` : ''}</p>
     </button>)}</div>}
   </div>;
@@ -60,9 +60,9 @@ const skillDescriptions: Record<string, string> = {
   'frontend-design': 'Always on: plan a distinctive direction, review it against generic defaults, then critique the build.',
   'motion-design': 'Shape animation, timing, typography, and visual continuity.',
   'web-clone': 'Inspect a reference website and rebuild its structure and interactions.',
+  'simple-deck': 'Build a horizontal-swipe presentation one slide at a time.',
   'emilkowalski-motion': 'Refine the feel of interface transitions and micro-interactions.',
   'web-design-guidelines': 'Review an interface for usability, accessibility, and visual hierarchy.',
-  'agent-browser': 'Let Pi inspect and verify a prototype in the browser.',
 };
 export function Skills({ skills, onUse, onError }: { skills: Skill[]; onUse: (s: string) => void; onError: (s: string) => void }) {
   const [document, setDocument] = useState<{ title: string; content: string } | null>(null);

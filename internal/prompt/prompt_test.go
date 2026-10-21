@@ -74,3 +74,14 @@ func TestTurnReplaysTruncatedTranscriptAndHonorsSkipDiscovery(t *testing.T) {
 		t.Fatal("skip-discovery override missing")
 	}
 }
+
+func TestDeckDisciplineOnlyForDeckSkills(t *testing.T) {
+	deckSkill := &Skill{ID: "simple-deck", Name: "simple-deck", Dir: "/d", Mode: DeckMode, Body: "# Deck\nCopy `assets/template.html`."}
+	if s := System(Input{ProjectDir: "/p", Skill: deckSkill}); !strings.Contains(s, "## Slide deck discipline") {
+		t.Fatal("deck skill did not get deck discipline")
+	}
+	page := &Skill{ID: "web-prototype", Name: "web-prototype", Dir: "/w", Mode: "prototype", Body: "# Web"}
+	if s := System(Input{ProjectDir: "/p", Skill: page}); strings.Contains(s, "## Slide deck discipline") {
+		t.Fatal("page skill got deck discipline")
+	}
+}

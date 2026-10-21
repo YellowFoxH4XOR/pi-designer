@@ -21,7 +21,6 @@ SKILLS=(
   motion-design
   emilkowalski-motion
   web-design-guidelines
-  agent-browser
 )
 
 TEMPLATES=(
@@ -32,6 +31,7 @@ TEMPLATES=(
   motion-frames
   tweaks
   critique
+  simple-deck
 )
 
 echo "==> design systems"

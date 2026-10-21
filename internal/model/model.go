@@ -64,6 +64,8 @@ type Run struct {
 	Todos []Todo `json:"todos,omitempty"`
 	// Renders are the previews the agent rendered to inspect its work.
 	Renders []Render `json:"renders,omitempty"`
+	// Critiques are the expert panel critique rounds, in order.
+	Critiques []Critique `json:"critiques,omitempty"`
 }
 
 // Todo is one step of the agent's plan.
@@ -78,8 +80,25 @@ type Render struct {
 	Path      string `json:"path"`
 	Image     string `json:"image"` // daemon URL of the PNG
 	FullPage  bool   `json:"fullPage,omitempty"`
+	Slide     int    `json:"slide,omitempty"` // deck slide shown, 1-based
 	OverflowX bool   `json:"overflowX"`
 	Errors    int    `json:"errors"`
+}
+
+// Critique is one round of the expert panel critique.
+type Critique struct {
+	Round     int        `json:"round"`
+	Composite float64    `json:"composite"`
+	Decision  string     `json:"decision"` // revise | ship | ship_with_issues
+	Panelists []Panelist `json:"panelists"`
+}
+
+// Panelist is one reviewer's verdict in a critique round.
+type Panelist struct {
+	Role    string   `json:"role"` // designer | critic | brand | a11y | copy
+	Score   *float64 `json:"score,omitempty"`
+	Notes   string   `json:"notes"`
+	MustFix []string `json:"mustFix"`
 }
 
 // File is a project file entry as reported to clients.

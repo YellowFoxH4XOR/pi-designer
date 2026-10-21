@@ -1,6 +1,6 @@
 import type { ComponentChildren } from 'preact';
 
-export type IconName = 'home' | 'projects' | 'palette' | 'skills' | 'settings' | 'plus' | 'search' | 'arrow' | 'chevron' | 'back' | 'close' | 'web' | 'mobile' | 'desktop' | 'code' | 'eye' | 'refresh' | 'external' | 'copy' | 'check' | 'stop' | 'folder' | 'file' | 'motion' | 'clone' | 'connect' | 'menu' | 'send' | 'download' | 'clock';
+export type IconName = 'home' | 'projects' | 'palette' | 'skills' | 'settings' | 'plus' | 'search' | 'arrow' | 'chevron' | 'back' | 'close' | 'web' | 'mobile' | 'desktop' | 'code' | 'eye' | 'refresh' | 'external' | 'copy' | 'check' | 'stop' | 'folder' | 'file' | 'motion' | 'clone' | 'deck' | 'connect' | 'menu' | 'send' | 'download' | 'clock';
 const paths: Record<IconName, ComponentChildren> = {
   home: <><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z"/></>,
   projects: <><rect x="5" y="3" width="15" height="17" rx="2"/><path d="M5 7H2v14a1 1 0 0 0 1 1h13M9 7h7M9 11h7"/></>,
@@ -27,6 +27,7 @@ const paths: Record<IconName, ComponentChildren> = {
   file: <><path d="M14 2H5v20h14V7Z"/><path d="M14 2v5h5M8 12h8M8 16h6"/></>,
   motion: <><path d="m10 4 11 8-11 8Z"/><path d="M3 6h3M1 12h5M3 18h3"/></>,
   clone: <><rect x="3" y="3" width="13" height="13" rx="2"/><path d="M9 19v2h12V9h-2M7 7h5M7 11h3"/></>,
+  deck: <><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 8.5h7M8 11.5h4.5"/><path d="m9 21 3-3 3 3"/></>,
   connect: <><path d="m8 3 2 2-5 5-2-2m11 11 2 2 5-5-2-2M8 8l8 8M7 12l-3 3a4 4 0 0 0 5 5l3-3M12 7l3-3a4 4 0 0 1 5 5l-3 3"/></>,
   menu: <path d="M4 6h16M4 12h16M4 18h16"/>,
   send: <><path d="m3 3 19 9-19 9 3-9Z"/><path d="M6 12h16"/></>,

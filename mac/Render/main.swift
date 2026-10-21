@@ -37,13 +37,14 @@ private struct RenderOptions {
     var height = 900
     var outPath = ""
     var fullPage = false
+    var slide = 0 // 1-based slide to bring into view; 0 = none
     var timeout: TimeInterval = 15
 }
 
 private func usageText() -> String {
     """
     usage: pidesigner-render --url <file:// or http:// URL> --width 1440 --height 900 \
-    --out /abs/path.png [--full-page] [--timeout 15]
+    --out /abs/path.png [--full-page] [--slide N] [--timeout 15]
     """
 }
 
@@ -110,6 +111,12 @@ private func parseOptions() -> RenderOptions {
             options.timeout = value
         case "--full-page":
             options.fullPage = true
+        case "--slide":
+            let raw = nextValue(arg)
+            guard let value = Int(raw), value > 0 else {
+                fail("invalid --slide: \(raw)")
+            }
+            options.slide = value
         case "-h", "--help":
             FileHandle.standardError.write(Data((usageText() + "\n").utf8))
             exit(0)
@@ -432,10 +439,45 @@ private final class Renderer: NSObject, WKNavigationDelegate, WKUIDelegate {
             case .failure(let error):
                 self.finishFailure("readiness check failed: \(error.localizedDescription)")
             case .success:
-                DispatchQueue.main.asyncAfter(deadline: .now() + settleDelay) { [weak self] in
-                    self?.measure(secondPass: false)
+                self.showSlideIfRequested { [weak self] in
+                    DispatchQueue.main.asyncAfter(deadline: .now() + settleDelay) { [weak self] in
+                        self?.measure(secondPass: false)
+                    }
                 }
             }
+        }
+    }
+
+    /// Brings the requested slide of a deck into view: slides are elements
+    /// labelled with data-screen-label or classed .slide, in document order.
+    /// Scroll-snap decks scroll to it; class-toggling decks get it as .active.
+    private func showSlideIfRequested(then next: @escaping () -> Void) {
+        guard options.slide > 0 else { next(); return }
+        let script = """
+        (function (n) {
+          var list = Array.prototype.slice.call(document.querySelectorAll('[data-screen-label], .slide'));
+          if (n > list.length) return list.length;
+          var el = list[n - 1];
+          if (el.classList.contains('slide')) {
+            list.forEach(function (s) { if (s.classList.contains('slide')) s.classList.toggle('active', s === el); });
+          }
+          el.scrollIntoView({ behavior: 'instant', block: 'start', inline: 'start' });
+          return -1;
+        })(\(options.slide))
+        """
+        webView.evaluateJavaScript(script) { [weak self] value, error in
+            guard let self = self, !self.finished else { return }
+            if let error = error {
+                self.finishFailure("could not show slide \(self.options.slide): \(error.localizedDescription)")
+                return
+            }
+            if let count = (value as? NSNumber)?.intValue, count >= 0 {
+                self.finishFailure(count == 0
+                    ? "no slides found (expected [data-screen-label] or .slide elements)"
+                    : "slide \(self.options.slide) does not exist; the deck has \(count) slides")
+                return
+            }
+            next()
         }
     }
 

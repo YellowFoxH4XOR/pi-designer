@@ -25,7 +25,7 @@ This replaces `/Applications/PiDesigner.app`. It does not modify your Pi configu
 
 ## The workspace
 
-- **Home:** a prompt-first composer, prototype/motion/website-clone workflows, device target, and design-system selection.
+- **Home:** a prompt-first composer, prototype/motion/slide-deck/website-clone workflows, device target, and design-system selection.
 - **Projects:** searchable local projects, recent work, and persistent conversations.
 - **Design systems:** the complete bundled catalog, category/search filters, actual guidelines, CSS tokens, and component fixtures. Grid specimens are illustrative; inspect a system for its exact content.
 - **Skills:** inspect the installed workflow instructions and choose one for a new project.
@@ -45,8 +45,11 @@ Each run follows the clarify → plan → design → verify → refine loop used
 2. **Plan visibly.** The agent's first tool call is `todo_write`; the studio shows it as a live plan card. Unfinished plans offer **Continue remaining tasks**.
 3. **Design plan, reviewed.** Before code, it writes a palette, type roles, an ASCII wireframe, and principles, then revises anything that reads like a generic default (Anthropic's `frontend-design` skill, always on).
 4. **Build from real resources.** The design system's DESIGN.md and `tokens.css` are bound verbatim; the workflow skill's seed, layouts, and checklist are read before writing.
-5. **Look at the result.** `render_preview` renders the artifact in WebKit at the Web/Desktop/Mobile frames and returns the screenshot plus measured overflow, script errors, and broken images. Renders appear in the conversation. Budget: four per run.
-6. **Deliver.** Working notes collapse under **Design notes**; the summary follows, with up to three follow-up suggestions.
+5. **Look at the result.** `render_preview` renders the artifact in WebKit at the Web/Desktop/Mobile frames (or a given slide of a deck) and returns the screenshot plus measured overflow, script errors, and broken images. Renders appear in the conversation. Budget: six per run.
+6. **Expert panel critique.** A critic, brand, accessibility, and copy reviewer score the rendered design through `submit_critique`; the tool computes the weighted score and decides. Below 8/10 or with must-fix items, the agent fixes and re-scores (at most three rounds); a unanimous first round with nothing to fix is sent back once as too shallow. The scorecard appears in the conversation.
+7. **Deliver.** Working notes collapse under **Design notes**; the summary follows, with up to three follow-up suggestions.
+
+Slide decks (`simple-deck`) additionally get deck discipline: keep the seed's navigation framework, one idea per slide, density limits, and computed chart bars.
 
 Each conversation is a persistent Pi session, so follow-ups keep the agent's full context. Conversations created before sessions existed replay their transcript once.
 

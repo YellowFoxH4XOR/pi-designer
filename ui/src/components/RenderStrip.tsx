@@ -3,11 +3,12 @@ import { frames } from '../state';
 import { Icon } from './Icon';
 
 export function renderLabel(render: Render): string {
+  const slide = render.slide ? ` · slide ${render.slide}` : '';
   if (render.viewport === 'web' || render.viewport === 'desktop' || render.viewport === 'mobile') {
-    return frames[render.viewport].label;
+    return frames[render.viewport].label + slide;
   }
   const value = String(render.viewport || '');
-  return value ? value.charAt(0).toUpperCase() + value.slice(1) : 'Preview';
+  return (value ? value.charAt(0).toUpperCase() + value.slice(1) : 'Preview') + slide;
 }
 
 function renderNotes(render: Render): string {
