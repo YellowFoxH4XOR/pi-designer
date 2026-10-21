@@ -62,6 +62,7 @@ export const api = {
   models: (refresh = false) => req<ModelCatalog>(`/api/models${refresh ? '?refresh=1' : ''}`),
   thinkingLevels: (model: string) => req<{ levels: string[] }>(`/api/models/thinking?model=${encodeURIComponent(model)}`),
   projects: () => req<{ projects: Project[] }>('/api/projects'),
+  selectProject: (projectId: string) => req<{ projectId: string }>('/api/active-project', json({ projectId }, 'PUT')),
   createProject: (body: { name: string; designSystemId?: string; skillId?: string }) =>
     req<{ project: Project; conversationId: string }>('/api/projects', json(body)),
   project: (id: string) => req<{ project: Project; conversations: Conversation[] }>(projectPath(id)),

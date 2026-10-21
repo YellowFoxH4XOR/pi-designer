@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/akki/pidesigner/internal/content"
@@ -23,13 +24,15 @@ import (
 
 // Server holds the daemon's dependencies.
 type Server struct {
-	Store       *store.Store
-	Catalog     *content.Catalog
-	Runner      *Runner
-	Hub         *preview.Hub
-	ProjectRoot string
-	OmpBin      string
-	Models      *omprun.Catalog
+	Store         *store.Store
+	Catalog       *content.Catalog
+	Runner        *Runner
+	Hub           *preview.Hub
+	ProjectRoot   string
+	OmpBin        string
+	Models        *omprun.Catalog
+	activeMu      sync.RWMutex
+	activeProject string
 }
 
 // Routes builds the HTTP mux.
@@ -46,6 +49,7 @@ func (s *Server) Routes() http.Handler {
 	// Projects
 	mux.HandleFunc("GET /api/projects", s.handleListProjects)
 	mux.HandleFunc("POST /api/projects", s.handleCreateProject)
+	mux.HandleFunc("PUT /api/active-project", s.handleActiveProject)
 	mux.HandleFunc("GET /api/projects/{id}", s.handleGetProject)
 	mux.HandleFunc("PATCH /api/projects/{id}", s.handleUpdateProject)
 	mux.HandleFunc("DELETE /api/projects/{id}", s.handleDeleteProject)
@@ -126,6 +130,15 @@ func decodeBody(r *http.Request, v any) error {
 // resolveProject loads a project and its file manager.
 func (s *Server) resolveProject(w http.ResponseWriter, r *http.Request) (model.Project, *project.Manager, bool) {
 	ref := r.PathValue("id")
+	if ref == "@active" {
+		s.activeMu.RLock()
+		ref = s.activeProject
+		s.activeMu.RUnlock()
+		if ref == "" {
+			writeErr(w, http.StatusConflict, "No active project. Open a project in πDesigner or pass an explicit project id or name.")
+			return model.Project{}, nil, false
+		}
+	}
 	proj, err := s.Store.GetProject(ref)
 	if err != nil {
 		if err == store.ErrNotFound {

@@ -591,19 +591,15 @@ func (r *Runner) writeSystemPrompt(proj model.Project, req RunRequest) (string, 
 // resolveSkill finds a workflow skill among skills and design templates;
 // both are directories with a SKILL.md.
 func (r *Runner) resolveSkill(id string) *prompt.Skill {
-	name, dir, mode := "", "", ""
-	if sk, ok := r.catalog.Skill(id); ok {
-		name, dir, mode = sk.Name, sk.Path, sk.Mode
-	} else if t, ok := r.catalog.Template(id); ok {
-		name, dir, mode = t.Name, t.Path, t.Mode
-	} else {
+	sk, ok := r.catalog.Skill(id)
+	if !ok {
 		return nil
 	}
-	body := readFile(filepath.Join(dir, "SKILL.md"))
+	body := readFile(filepath.Join(sk.Path, "SKILL.md"))
 	if body == "" {
 		return nil
 	}
-	return &prompt.Skill{ID: id, Name: name, Dir: dir, Mode: mode, Body: body}
+	return &prompt.Skill{ID: id, Name: sk.Name, Dir: sk.Path, Mode: sk.Mode, Body: body}
 }
 
 // hasSession reports whether omp already stores a session in a

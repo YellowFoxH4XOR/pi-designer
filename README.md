@@ -95,9 +95,11 @@ The internal HTTP server is implementation infrastructure for the app and MCP se
 
 Both executables are bundled in the app. The configuration points to a runtime discovery file, so the editor follows the Mac app after a port change or restart. Generate the configuration after moving the app to its permanent location. Keep the app running while using MCP.
 
-The MCP server supports project/file reading and writing, artifact retrieval, skills/design-system discovery, generation through omp, polling, and cancellation. Pass an explicit project id or name when operating on a project. The editor can either edit files directly or delegate a task to omp. `pidesigner-mcp --print-config --client omp` prints the config for `~/.omp/agent/mcp.json`.
+The MCP server supports project/file reading and writing, artifact retrieval, skills/design-system discovery, generation through omp, polling, and cancellation. An omitted `project` uses the project currently open in Studio; explicit project IDs or names override that selection. Leaving Studio clears the default, and calls without a selection return an actionable error rather than choosing an arbitrary project. The selection is daemon-session state, not persisted across restarts. The editor can either edit files directly or delegate a task to omp. `pidesigner-mcp --print-config --client omp` prints the config for `~/.omp/agent/mcp.json`.
 
 `list_models` exposes the installed omp catalog to editors. Runs that omit a model use the choice saved in πDesigner. A selected model is passed with an explicit provider and checked through omp’s reported state; provider failures are reported as failures, not successful generation.
+
+`list_skills` and the skill resources include runnable design-template workflows such as `web-prototype`, matching the workflows the runner can actually load. Existing project skill IDs do not need migration.
 
 No account, billing, cloud-model proxy, image generation, or video-generation workflow is part of this app.
 

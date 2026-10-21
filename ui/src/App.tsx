@@ -16,6 +16,8 @@ const navigation: { id: string; label: string; icon: IconName }[] = [
   { id: 'home', label: 'Home', icon: 'home' }, { id: 'projects', label: 'All projects', icon: 'projects' },
   { id: 'systems', label: 'Design systems', icon: 'palette' }, { id: 'skills', label: 'Skills', icon: 'skills' },
 ];
+let activeProjectUpdate: Promise<unknown> = Promise.resolve();
+
 export function App() {
   const [route, navigate] = useRoute();
   const [projects, setProjects] = useState<Project[]>([]);
@@ -45,6 +47,12 @@ export function App() {
     return () => { active = false; };
   }, []);
   useEffect(() => { setError(''); }, [route]);
+  useEffect(() => {
+    // Serialize selection updates so rapid navigation cannot leave the
+    // daemon pointing at a project the user has already left.
+    activeProjectUpdate = activeProjectUpdate.catch(() => {}).then(() => api.selectProject(projectId));
+    activeProjectUpdate.catch((e) => report(e.message));
+  }, [projectId]);
   useEffect(() => {
     const title = projectId ? projects.find((p) => p.id === projectId)?.name || 'Studio' : navigation.find((n) => n.id === route)?.label || 'Settings';
     document.title = `${title} — πDesigner`;
