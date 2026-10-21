@@ -6,7 +6,7 @@ Mode: Operate. Code-led implementation, using the user's pinned reference rather
 
 THESIS: A familiar prompt-first design workspace. Replace the developer-console arrangement with Home, Projects, Design systems, Skills, Settings, and an artifact-led Studio.
 
-OWN-WORLD: Light lavender-gray shell, off-white canvas and charcoal ink retain the existing workspace. The distinct app mark is a vermilion tile with an ivory artboard, Bézier curve and ink pen nib; a monochrome nib identifies the native menu bar. The `omp` text badge identifies execution, while maker/provider marks identify models. Neutral system UI type and the restrained Georgia Home heading remain unchanged. Soft corners, fine rules, no glow.
+OWN-WORLD: Light lavender-gray shell, off-white canvas and charcoal ink retain the existing workspace. The distinct app mark is a vermilion tile with an ivory artboard, Bézier curve and ink pen nib; a monochrome nib identifies the native menu bar. The execution engine is identified by the official omp logo (`ui/public/omp.svg`, vendored unchanged from can1357/oh-my-pi `assets/icon.svg`, MIT) on its native dark tile. Neutral system UI type and the restrained Georgia Home heading remain unchanged. Soft corners, fine rules, no glow.
 
 STORY: Choose a workflow and design system, write a brief, then enter a studio with the conversation left and the actual preview right. Browse real existing projects and the complete system catalog.
 

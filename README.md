@@ -53,7 +53,7 @@ Slide decks (`simple-deck`) additionally get deck discipline: keep the seed's na
 
 Each conversation is a persistent omp session, so follow-ups keep the agent's full context. Conversations that only have legacy π sessions replay their transcript once into a new omp session.
 
-The prompt lives in `internal/prompt` (stable instructions per project, per-turn context separately so provider prompt caches survive). The πDesigner tools live in `internal/agentext/pidesigner.ts`, installed into the data directory at startup and loaded with `omp --extension`. Runs launch `omp --mode rpc` restricted to the `read`, `bash`, `edit`, `write`, `grep` and `glob` tools plus those extension tools (`todo_write`, `render_preview`, `submit_critique`), with `--auto-approve` because runs are unattended.
+The prompt lives in `internal/prompt` (stable instructions per project, per-turn context separately so provider prompt caches survive). The πDesigner tools live in `internal/agentext/pidesigner.ts`, installed into the data directory at startup and loaded with `omp --extension`. Runs launch `omp --mode rpc` with every omp tool and `--auto-approve` (runs are unattended), inside a macOS Seatbelt sandbox (`sandbox-exec`): the agent, its shell and everything they start can write only the project directory (plus that conversation's session and renders, omp's `~/.omp` state and temp files) and cannot read anything else in your home directory except the bundled design content and the extension. System locations outside your home (`/usr`, `/opt/homebrew`, …) stay readable so shells and toolchains work. MCP servers or tools that need other home-directory paths fail inside the sandbox.
 
 ## Observable work and Mac activity
 
@@ -101,7 +101,7 @@ No account, billing, cloud-model proxy, image generation, or video-generation wo
 
 ## Branding and design
 
-The app is **πDesigner**, using the Greek letter π in its name. Its independent designer-tool mark is a deep-ink pen nib drawing a Bézier curve on an ivory artboard, inside a vermilion tile—not another πDesk-style π icon. The same vector drives the Dock, favicon and workspace brand; a monochrome nib identifies the menu bar and the native activity panel uses the app icon. Workspace layout/state colors stay unchanged, and the execution engine is shown as a neutral `omp` text badge rather than a logo. Locally bundled model/provider marks distinguish OpenAI, Claude/Anthropic, DeepSeek, OpenCode, Gemini and OpenRouter. Model maker and routing provider remain separate identities.
+The app is **πDesigner**, using the Greek letter π in its name. Its independent designer-tool mark is a deep-ink pen nib drawing a Bézier curve on an ivory artboard, inside a vermilion tile—not another πDesk-style π icon. The same vector drives the Dock, favicon and workspace brand; a monochrome nib identifies the menu bar and the native activity panel uses the app icon. The execution engine is identified by the official omp logo (`ui/public/omp.svg`, vendored unchanged from can1357/oh-my-pi `assets/icon.svg`, MIT) on its native dark tile. Locally bundled model/provider marks distinguish OpenAI, Claude/Anthropic, DeepSeek, OpenCode, Gemini and OpenRouter. Model maker and routing provider remain separate identities.
 
 - `PRODUCT.md`: confirmed product scope and constraints.
 - `DESIGN.md` and `.impeccable/design.json`: implemented design tokens and component rules.

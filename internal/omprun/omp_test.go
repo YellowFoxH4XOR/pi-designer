@@ -24,7 +24,7 @@ func TestLiveOmpRPC(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 
-	sess, err := Start(ctx, Options{Dir: dir, Tools: []string{"read"}})
+	sess, err := Start(ctx, Options{Dir: dir})
 	if err != nil {
 		t.Fatalf("start: %v", err)
 	}

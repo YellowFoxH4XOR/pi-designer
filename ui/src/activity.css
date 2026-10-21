@@ -149,7 +149,7 @@
 .run-activity-toggle:hover {
   background: #eeedf7;
 }
-.run-activity-toggle > span:not(.agent-mark) {
+.run-activity-toggle > span {
   min-width: 0;
   flex: 1;
 }

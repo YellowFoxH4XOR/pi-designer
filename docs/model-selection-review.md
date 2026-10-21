@@ -2,7 +2,7 @@
 
 ## Changes
 
-- App and agent identities are separate. `brand.svg` is πDesigner’s design-centric artboard/Bézier/pen-nib icon. The execution engine is shown as a neutral `omp` text badge (`.agent-mark`), not a logo.
+- App and agent identities are separate. `brand.svg` is πDesigner’s design-centric artboard/Bézier/pen-nib icon. The execution engine is identified by the official omp logo (`ui/public/omp.svg`, vendored unchanged from can1357/oh-my-pi `assets/icon.svg`, MIT) on its native dark tile.
 - Native icons are generated directly from the canonical app SVG. The Dock explicitly loads the bundled icon, and the Mac bundle version is 0.1.1.
 - Home, Studio, and Settings use a shared searchable model picker.
 - The model list comes from the installed omp’s `get_available_models` RPC command, not a hard-coded provider list or a direct provider API.

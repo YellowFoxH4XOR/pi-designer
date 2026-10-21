@@ -184,25 +184,32 @@ func (r *Runner) execute(run model.Run, proj model.Project, req RunRequest, b *e
 
 	pm := project.New(proj.Dir)
 
+	renderDir := filepath.Join(r.cfg.RenderDir, proj.ID)
 	opts := omprun.Options{
 		Bin:      r.ompBin,
 		Dir:      proj.Dir,
 		Model:    req.Model,
 		Thinking: req.Thinking,
-		// A design run needs files and a shell; the extension adds the plan,
-		// render and critique tools. A fixed set keeps omp's general-purpose
-		// tools (its own todo, browser, subagents, MCP) out of design runs.
-		Tools: designTools,
 		// Runs are unattended: an approval prompt would wait for an answer
 		// nobody is asked for.
 		AutoApprove: true,
-		Env:         append(os.Environ(), "PIDESIGNER_RENDER_DIR="+filepath.Join(r.cfg.RenderDir, proj.ID)),
+		Env:         append(os.Environ(), "PIDESIGNER_RENDER_DIR="+renderDir),
+		// Every omp tool is available, but the process tree can only touch
+		// this project's directory (plus its own session and renders) and
+		// read the bundled design content. The rest of the user's files are
+		// off limits to the agent, its shell and anything it runs.
+		Confine: &omprun.Confinement{
+			Writable: []string{proj.Dir, renderDir},
+			Readable: []string{r.catalog.Root},
+		},
 	}
 	if r.cfg.Extension != "" {
 		opts.Extensions = []string{r.cfg.Extension}
+		opts.Confine.Readable = append(opts.Confine.Readable, filepath.Dir(r.cfg.Extension))
 	}
 	if r.cfg.Renderer != "" {
 		opts.Env = append(opts.Env, "PIDESIGNER_RENDERER="+r.cfg.Renderer)
+		opts.Confine.Readable = append(opts.Confine.Readable, filepath.Dir(r.cfg.Renderer))
 	}
 
 	turn := prompt.TurnInput{Prompt: req.Prompt, Viewport: req.Viewport, SkipDiscovery: req.SkipDiscovery}
@@ -213,6 +220,7 @@ func (r *Runner) execute(run model.Run, proj model.Project, req RunRequest, b *e
 	// starts carries the history from then on.
 	if req.ConversationID != "" && r.cfg.SessionDir != "" {
 		opts.SessionDir = filepath.Join(r.cfg.SessionDir, req.ConversationID)
+		opts.Confine.Writable = append(opts.Confine.Writable, opts.SessionDir)
 		if !hasSession(opts.SessionDir) {
 			turn.Transcript = r.priorTranscript(req.ConversationID)
 		}
@@ -601,9 +609,6 @@ func (r *Runner) resolveSkill(id string) *prompt.Skill {
 	}
 	return &prompt.Skill{ID: id, Name: name, Dir: dir, Mode: mode, Body: body}
 }
-
-// designTools is the built-in omp tool set of a design run.
-var designTools = []string{"read", "bash", "edit", "write", "grep", "glob"}
 
 // hasSession reports whether omp already stores a session in a
 // conversation's session directory ("<timestamp>_<uuid>.jsonl" files).

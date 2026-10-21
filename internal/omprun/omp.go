@@ -89,9 +89,10 @@ type Options struct {
 	SessionDir string
 	// Extensions are extension files loaded explicitly for this run.
 	Extensions []string
-	// Tools restricts the built-in tool set, e.g. ["read","write","edit","bash"].
-	// Extension tools stay available.
-	Tools []string
+	// Confine, when set, runs omp and everything it starts under a kernel
+	// filesystem sandbox (see Confinement). omp's own state directory and
+	// executable are granted automatically.
+	Confine *Confinement
 	// AutoApprove skips tool approval prompts. Unattended runs need it: an
 	// approval prompt would otherwise wait for a host answer.
 	AutoApprove bool
@@ -192,9 +193,6 @@ func (opts Options) args() []string {
 	for _, f := range opts.SystemPromptFiles {
 		args = append(args, "--append-system-prompt", f)
 	}
-	if len(opts.Tools) > 0 {
-		args = append(args, "--tools", strings.Join(opts.Tools, ","))
-	}
 	if opts.AutoApprove {
 		args = append(args, "--auto-approve")
 	}
@@ -209,6 +207,11 @@ func Start(ctx context.Context, opts Options) (*Session, error) {
 	}
 
 	cmd := exec.Command(bin, opts.args()...)
+	if opts.Confine != nil {
+		if cmd, err = confined(bin, opts); err != nil {
+			return nil, err
+		}
+	}
 	cmd.Dir = opts.Dir
 	cmd.Env = opts.Env
 	if cmd.Env == nil {
