@@ -35,7 +35,7 @@ export function App() {
   const [error, setError] = useState('');
   const report = useCallback((e: string) => setError(e.replace(/^Error: /, '')), []);
   const refreshProjects = useCallback(() => { api.projects().then((d) => setProjects(d.projects)).catch((e) => report(e.message)); }, [report]);
-  const { runs, monitor, activityError } = useRuns(refreshProjects);
+  const { runs, monitor, forget, activityError } = useRuns(refreshProjects);
   const projectId = route.startsWith('project/') ? route.slice('project/'.length).split('?')[0] : '';
 
   useEffect(() => {
@@ -79,13 +79,20 @@ export function App() {
     finally { setStarting(false); }
   }
   function newProject() { navigate('home'); requestAnimationFrame(() => document.getElementById('home-prompt')?.focus()); }
+  async function deleteProject(project: Project) {
+    try { await api.deleteProject(project.id); }
+    finally { refreshProjects(); } // a partial failure can still remove the project
+    setProjects((all) => all.filter((p) => p.id !== project.id));
+    forget(project.id);
+    if (projectId === project.id) navigate('projects');
+  }
   async function savePreferences(p: Preferences) {
     await saveModelPreferences(p);
   }
   const openActivity = (run: RunState) => { navigate(`project/${run.projectId}?conversation=${encodeURIComponent(run.conversationId || '')}&activity=1`); requestAnimationFrame(() => window.dispatchEvent(new Event('pidesigner:show-activity'))); };
   const activityControl = <ActivityCenter runs={runs} error={activityError} onOpen={openActivity}/>;
   const errorBanner = error && <div class="error-banner" role="alert"><span>{error}</span><IconButton icon="close" label="Dismiss message" onClick={() => setError('')}/></div>;
-  if (projectId) return <>{errorBanner}<Studio key={projectId} projectId={projectId} systems={systems} run={runs[projectId]} onMonitor={monitor} onStart={startRun} onHome={() => { refreshProjects(); navigate('home'); }} onError={report} initialFrame={frame} initialConversation={new URLSearchParams(route.split('?')[1] || '').get('conversation') || ''} activityControl={activityControl}/></>;
+  if (projectId) return <>{errorBanner}<Studio key={projectId} projectId={projectId} systems={systems} run={runs[projectId]} onMonitor={monitor} onStart={startRun} onHome={() => { refreshProjects(); navigate('home'); }} onDelete={deleteProject} onError={report} initialFrame={frame} initialConversation={new URLSearchParams(route.split('?')[1] || '').get('conversation') || ''} activityControl={activityControl}/></>;
 
   return <div class="workspace">
     <aside id="workspace-sidebar" class="sidebar" aria-label="Workspace navigation"><a class="brand" href="#home"><Logo size={35}/><span>πDesigner<small>Your local design studio</small></span></a>
@@ -96,7 +103,7 @@ export function App() {
     </aside>
     <div class="workspace-body"><header class="workspace-header"><span>{navigation.find((n) => n.id === route)?.label || 'Settings'}</span><div class="workspace-health">{activityControl}<span class={`status-dot ${!health?.ompBin ? 'offline' : ''}`}/>{loading ? 'Connecting…' : health?.ompBin ? 'omp detected' : 'omp not found'}<span class="header-rule"/><span class="local-only">Local workspace</span></div></header>
       {errorBanner}
-      <main class="workspace-canvas" id="main-content">{loading ? <div class="loading-state full">Opening your workspace…</div> : connectionError ? <Empty icon="connect" title="The workspace isn’t connected"><p>{connectionError}</p><button class="button primary" onClick={() => location.reload()}>Try again</button></Empty> : route === 'home' ? <Home systems={systems} systemId={systemId} setSystemId={setSystemId} skillId={skillId} setSkillId={setSkillId} frame={frame} setFrame={setFrame} onSystem={() => setPickingSystem(true)} onStart={createAndStart} busy={starting} projects={projects} onProject={(id) => navigate(`project/${id}`)} onProjects={() => navigate('projects')}/> : route === 'projects' ? <Projects projects={projects} runs={runs} onOpen={(id) => { const run = runs[id]; if (run && (run.status === 'running' || run.attention)) openActivity(run); else navigate(`project/${id}`); }} onNew={newProject}/> : route === 'systems' ? <DesignSystems systems={systems} onUse={(id) => { setSystemId(id); newProject(); }} onError={report}/> : route === 'skills' ? <Skills skills={skills} onUse={(id) => { setSkillId(id); newProject(); }} onError={report}/> : <Settings health={health} preferences={preferences} onSave={savePreferences} onError={report}/>}</main>
+      <main class="workspace-canvas" id="main-content">{loading ? <div class="loading-state full">Opening your workspace…</div> : connectionError ? <Empty icon="connect" title="The workspace isn’t connected"><p>{connectionError}</p><button class="button primary" onClick={() => location.reload()}>Try again</button></Empty> : route === 'home' ? <Home systems={systems} systemId={systemId} setSystemId={setSystemId} skillId={skillId} setSkillId={setSkillId} frame={frame} setFrame={setFrame} onSystem={() => setPickingSystem(true)} onStart={createAndStart} busy={starting} projects={projects} onProject={(id) => navigate(`project/${id}`)} onProjects={() => navigate('projects')}/> : route === 'projects' ? <Projects projects={projects} runs={runs} onOpen={(id) => { const run = runs[id]; if (run && (run.status === 'running' || run.attention)) openActivity(run); else navigate(`project/${id}`); }} onNew={newProject} onDelete={deleteProject}/> : route === 'systems' ? <DesignSystems systems={systems} onUse={(id) => { setSystemId(id); newProject(); }} onError={report}/> : route === 'skills' ? <Skills skills={skills} onUse={(id) => { setSkillId(id); newProject(); }} onError={report}/> : <Settings health={health} preferences={preferences} onSave={savePreferences} onError={report}/>}</main>
       <footer class="workspace-footer"><Logo size={14}/><span>Made for the way you think.</span><span>omp does the building. You make it yours.</span></footer>
     </div>
     {pickingSystem && <SystemPicker systems={systems} selected={systemId} onClose={() => setPickingSystem(false)} onSelect={(id) => { setSystemId(id); setPickingSystem(false); }}/>}
