@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/akki/pidesigner/internal/content"
-	"github.com/akki/pidesigner/internal/knowledge"
 	"github.com/akki/pidesigner/internal/model"
 	"github.com/akki/pidesigner/internal/pirun"
 	"github.com/akki/pidesigner/internal/project"
@@ -87,8 +86,7 @@ type RunRequest struct {
 	// Viewport is the preview frame the user is looking at.
 	Viewport string `json:"viewport,omitempty"`
 	// SkipDiscovery is set by clients that cannot answer question forms.
-	SkipDiscovery bool            `json:"skipDiscovery,omitempty"`
-	Route         knowledge.Route `json:"-"` // derived locally from the user's goal
+	SkipDiscovery bool `json:"skipDiscovery,omitempty"`
 }
 
 // RunHandle is a started run.
@@ -120,7 +118,6 @@ func (r *Runner) Start(ctx context.Context, req RunRequest) (*RunHandle, error) 
 	if req.DesignSystemID == "" {
 		req.DesignSystemID = proj.DesignSystemID
 	}
-	req.Route = knowledge.Recommend(proj.Name+"\n"+req.Prompt, req.DesignSystemID)
 
 	now := time.Now()
 	run := model.Run{
@@ -152,7 +149,7 @@ func (r *Runner) Start(ctx context.Context, req RunRequest) (*RunHandle, error) 
 	}
 
 	b := newRunJournal(r.store, run, proj)
-	b.publish(AgentEvent{Type: "context", RunID: run.ID, Data: modelJSON(map[string]any{"skillId": req.SkillID, "designSystemId": req.DesignSystemID, "viewport": req.Viewport, "thinking": req.Thinking, "designRoute": req.Route}), At: nowMs()})
+	b.publish(AgentEvent{Type: "context", RunID: run.ID, Data: modelJSON(map[string]string{"skillId": req.SkillID, "designSystemId": req.DesignSystemID, "viewport": req.Viewport, "thinking": req.Thinking}), At: nowMs()})
 	r.mu.Lock()
 	r.journals[run.ID] = b
 	r.mu.Unlock()
@@ -200,27 +197,22 @@ func (r *Runner) execute(run model.Run, proj model.Project, req RunRequest, b *e
 	if r.cfg.Renderer != "" {
 		opts.Env = append(opts.Env, "PIDESIGNER_RENDERER="+r.cfg.Renderer)
 	}
+	if r.catalog.Knowledge != nil {
+		opts.Env = append(opts.Env, "PIDESIGNER_RUNTIME_DISCOVERY="+filepath.Join(filepath.Dir(r.catalog.Knowledge.Dir), "runtime.json"))
+	}
 
 	turn := prompt.TurnInput{Prompt: req.Prompt, Viewport: req.Viewport, SkipDiscovery: req.SkipDiscovery}
-	var routeText strings.Builder
-	fmt.Fprintf(&routeText, "The user's goal suggests %s. This is a provisional design plan, not a decision the user must make.\n", req.Route.Intent)
-	for _, choice := range req.Route.Choices {
-		fmt.Fprintf(&routeText, "- %s: %s", choice.Name, choice.Reason)
-		if r.catalog.Knowledge != nil {
-			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-			path, status, err := r.catalog.Knowledge.Reference(ctx, choice.ID)
-			cancel()
-			if err != nil {
-				routeText.WriteString(" Guide unavailable; use bundled craft guidance instead.")
-			} else if path != "" {
-				fmt.Fprintf(&routeText, " Read %s (%s reference text) before designing when this turn builds a new interface.", path, status)
-			} else {
-				routeText.WriteString(" Browse-only: no local document was read; use the bundled guidance instead.")
+	if r.catalog.Knowledge != nil {
+		var catalog strings.Builder
+		for _, src := range r.catalog.Knowledge.Sources {
+			kind := "browse-only; not locally readable"
+			if src.DocumentURL != "" {
+				kind = "approved text reference; fetched only if selected"
 			}
+			fmt.Fprintf(&catalog, "- %s (%s): %s %s [%s; %s]\n", src.ID, src.Name, src.UseFor, src.Note, kind, src.License)
 		}
-		routeText.WriteByte('\n')
+		turn.SourceCatalog = catalog.String()
 	}
-	turn.DesignRoute = routeText.String()
 	// Each conversation is one native π session, so follow-up turns keep the
 	// agent's full context: its plan, the files it read, its renders. A
 	// conversation that predates native sessions gets its transcript replayed
@@ -350,6 +342,19 @@ func (r *Runner) execute(run model.Run, proj model.Project, req RunRequest, b *e
 				// Tool calls mutate the project; nudge preview watchers.
 				if ev.ToolName == "write" || ev.ToolName == "edit" || ev.ToolName == "multi_edit" {
 					r.hub.NotifyProjectChanged(proj.ID)
+				}
+				if ev.ToolName == "select_design_sources" && !ev.IsError {
+					var selection struct {
+						Intent  string `json:"intent"`
+						Choices []struct {
+							ID     string `json:"id"`
+							Name   string `json:"name"`
+							Reason string `json:"reason"`
+						} `json:"choices"`
+					}
+					if json.Unmarshal(ev.ToolDetails, &selection) == nil && selection.Intent != "" && len(selection.Choices) <= 2 {
+						b.publish(AgentEvent{Type: "design_route", RunID: run.ID, Data: ev.ToolDetails, At: nowMs()})
+					}
 				}
 				if ev.ToolName == "render_preview" && !ev.IsError {
 					if render, ok := parseRender(proj.ID, ev.ToolDetails); ok {

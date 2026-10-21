@@ -389,7 +389,7 @@ export function RunActivity({
               </div>
             </dl>
           </details>
-          {!!run.context?.designRoute?.choices?.length && <div class="design-route" aria-label="Suggested design sources"><strong>Design sources for this brief</strong><p>{run.context.designRoute.intent}</p><ul>{run.context.designRoute.choices.map((choice) => <li key={choice.id}><b>{choice.name}</b> — {choice.reason}</li>)}</ul><small>Suggested from your goal. π may adjust after reading the brief; only reviewed or safely cached text is available locally.</small></div>}
+          {run.context?.designRoute && <div class="design-route" aria-label="Chosen design sources"><strong>Sources chosen by π</strong><p>{run.context.designRoute.intent}</p>{run.context.designRoute.choices.length ? <ul>{run.context.designRoute.choices.map((choice) => <li key={choice.id}><b>{choice.name}</b> — {choice.reason}<small>{choice.status === 'reviewed' ? 'Reviewed guide' : choice.status === 'unreviewed cache' ? 'External text cache' : choice.status === 'browse-only' ? 'Browse only · not read' : 'Guide unavailable'}</small></li>)}</ul> : <p>Using bundled design guidance for this brief.</p>}{run.context.designRoute.tradeoff && <small>Trade-off: {run.context.designRoute.tradeoff}</small>}</div>}
           {run.request && (
             <ExtensionQuestion
               key={run.request.id}

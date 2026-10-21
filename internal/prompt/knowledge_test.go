@@ -5,10 +5,10 @@ import (
 	"testing"
 )
 
-func TestRoutingIsVisiblePerTurn(t *testing.T) {
-	turn := Turn(TurnInput{Prompt: "Build a booking dashboard", DesignRoute: "ReUI: data-heavy workflow.\n"})
-	if !strings.Contains(turn, "ReUI: data-heavy workflow.") || !strings.Contains(turn, "Never claim an unavailable or browse-only guide was inspected") {
-		t.Fatal("routing contract missing")
+func TestModelChoosesFromCatalogPerTurn(t *testing.T) {
+	turn := Turn(TurnInput{Prompt: "Build a booking dashboard", SourceCatalog: "- reui (ReUI): Dense operational layouts\n- shadcn (shadcn/ui): Accessible controls\n"})
+	if !strings.Contains(turn, "reui (ReUI)") || !strings.Contains(turn, "call select_design_sources") || strings.Contains(turn, "The user's goal suggests") {
+		t.Fatal("model selection contract missing or deterministic choice leaked")
 	}
 }
 

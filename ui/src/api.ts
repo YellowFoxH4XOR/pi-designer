@@ -92,7 +92,7 @@ function pickProject(p: Project) { return { name: p.name, designSystemId: p.desi
 export function subscribeRun(runId: string, after: number, onEvent: (event: AgentEvent) => void, onSnapshot: (a: Activity) => void, onConnection: (connected: boolean) => void) {
   const es = new EventSource(`/api/runs/${encodeURIComponent(runId)}/events?after=${after}`);
   es.onopen = () => onConnection(true); es.onerror = () => onConnection(false);
-  for (const type of ['starting', 'finishing', 'context', 'text', 'message_start', 'message_end', 'thinking', 'tool', 'tool_update', 'tool_end', 'turn', 'model', 'done', 'run_failed', 'error', 'canceled', 'stderr', 'todos', 'render', 'critique', 'retry', 'retry_end', 'compaction_start', 'compaction_end', 'attention', 'attention_resolved', 'extension_ui', 'session_update']) {
+  for (const type of ['starting', 'finishing', 'context', 'design_route', 'text', 'message_start', 'message_end', 'thinking', 'tool', 'tool_update', 'tool_end', 'turn', 'model', 'done', 'run_failed', 'error', 'canceled', 'stderr', 'todos', 'render', 'critique', 'retry', 'retry_end', 'compaction_start', 'compaction_end', 'attention', 'attention_resolved', 'extension_ui', 'session_update']) {
     es.addEventListener(type, ((e: MessageEvent) => { if (e.data) { try { onEvent(JSON.parse(e.data)); } catch { /* native transport error, not a protocol event */ } } }) as EventListener);
   }
   es.addEventListener('snapshot', ((e: MessageEvent) => { try { onSnapshot(JSON.parse(e.data)); } catch { /* reconnect retrieves a fresh projection */ } }) as EventListener);

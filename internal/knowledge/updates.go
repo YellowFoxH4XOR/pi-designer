@@ -308,7 +308,11 @@ func (m *Manager) Rollback(id string) (Entry, error) {
 func (m *Manager) Reference(ctx context.Context, id string) (path, status string, err error) {
 	m.mu.Lock()
 	src, ok := m.source(id)
-	if !ok || src.DocumentURL == "" {
+	if !ok {
+		m.mu.Unlock()
+		return "", "unavailable", errors.New("unknown source")
+	}
+	if src.DocumentURL == "" {
 		m.mu.Unlock()
 		return "", "browse-only", nil
 	}

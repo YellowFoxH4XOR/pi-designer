@@ -87,7 +87,28 @@ func (s *Server) handleKnowledgeRollback(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, 200, e)
 }
 
-// CheckForUpdates queries only the two approved text sources; it never installs them.
+// handleKnowledgeReference resolves only an approved source selected by the model.
+// Missing text is fetched into a hash-verified, unreviewed cache; never installed.
+func (s *Server) handleKnowledgeReference(w http.ResponseWriter, r *http.Request) {
+	if !sameOrigin(r) {
+		writeErr(w, http.StatusForbidden, "cross-origin request refused")
+		return
+	}
+	if s.Knowledge == nil {
+		writeErr(w, http.StatusServiceUnavailable, "design references unavailable")
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 4*time.Second)
+	defer cancel()
+	path, status, err := s.Knowledge.Reference(ctx, r.PathValue("id"))
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, "design reference unavailable")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"path": path, "status": status})
+}
+
+// CheckForUpdates queries only the approved text sources; it never installs them.
 func (s *Server) CheckForUpdates(ctx context.Context) {
 	if s.Knowledge == nil {
 		return

@@ -90,6 +90,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/knowledge/{id}/preview", s.handleKnowledgePreview)
 	mux.HandleFunc("POST /api/knowledge/{id}/apply", s.handleKnowledgeApply)
 	mux.HandleFunc("POST /api/knowledge/{id}/rollback", s.handleKnowledgeRollback)
+	mux.HandleFunc("POST /api/knowledge/{id}/reference", s.handleKnowledgeReference)
 
 	// Preview
 	mux.HandleFunc("GET /api/projects/{id}/watch", s.handleWatch)

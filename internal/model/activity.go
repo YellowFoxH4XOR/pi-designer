@@ -148,6 +148,13 @@ func (a *Activity) Apply(e AgentEvent) {
 		a.MessageText = ""
 	case "context":
 		a.Context = e.Data
+	case "design_route":
+		var fields map[string]json.RawMessage
+		if json.Unmarshal(a.Context, &fields) != nil || fields == nil {
+			fields = map[string]json.RawMessage{}
+		}
+		fields["designRoute"] = e.Data
+		a.Context, _ = json.Marshal(fields)
 	case "model":
 		a.Model = e.Text
 		var m struct {
