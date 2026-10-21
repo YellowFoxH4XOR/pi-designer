@@ -1,0 +1,118 @@
+# PiDesigner desktop redesign — finish review
+
+This records the initial desktop redesign. See `model-selection-review.md` for the subsequent real Pi identity, design-centric app icon, live model picker, and inference verification.
+
+## Scope and method
+
+The product is **macOS desktop only**. The web, mobile, and desktop controls inside Studio select prototype viewports; they are not separate clients. Final app checks used 1440×900, 1280×800, and 900×620 desktop content sizes. Earlier phone-shell experiments were removed after the user's scope clarification.
+
+The user pinned the workspace reference and PiDesk logo inspiration. This was a code-led Operate-surface redesign, not a generated visual-concept competition.
+
+**Review method: degraded single-context.** No isolated reviewer/subagent tool was available. Visual review, deterministic source evidence, and documentation were performed in-thread, with the distinction retained here. The mechanical detector was run once and returned `[]`; it was not rerun to manufacture a pass.
+
+## Critique
+
+The replacement moves the primary task from a developer console into a recognizable design workspace. Home has one creation action and three workflow choices. Catalog complexity is behind searchable libraries. Studio leaves most space to the artifact, with device scaling that preserves its real CSS viewport.
+
+Strong points:
+- The PiDesk-family identity is present in the shell and the generated app icon, without taking over the artifact.
+- State and controls correspond to local capabilities rather than copied account, credit, or sharing controls.
+- The source editor, design-system details, and editor-connection configuration use real backend data.
+
+The initial critique scored 29/40 and identified unsaved-source navigation loss plus small phone controls. The first was fixed and browser-tested; the second was removed from scope when the user confirmed Mac desktop only. Secondary text was also darkened after a calculated contrast check.
+
+Post-fix heuristic assessment:
+
+| Heuristic | Score | Evidence / limit |
+|---|---:|---|
+| Visibility of status | 3 | Detected Pi, run polling, loading/empty/error/saved states |
+| Match to real-world tasks | 3 | Familiar workspace, project, preview, code terminology |
+| User control | 3 | Escape, stop, view/navigation guards; no project-wide undo history |
+| Consistency | 3 | Shared composer, buttons, line icons, library patterns |
+| Error prevention | 3 | Empty/URL validation, read-only source during runs, draft guards |
+| Recognition over recall | 3 | Visible system selection, recents, file names, device sizes |
+| Efficiency | 3 | Command-Enter, Command-S, native menus; no command palette |
+| Minimalist hierarchy | 4 | One primary creation surface and artifact-led studio |
+| Recovery | 3 | Recoverable errors, persistent files/conversations, native restart |
+| Help and guidance | 3 | Starter briefs, skill documents, generated MCP configuration |
+| **Total** | **31/40** | Local qualitative assessment, not an independent certification |
+
+Questions skipped: fewer than three in-scope priority issues remained; fixes were authorized by the automatic workflow.
+
+## Technical audit
+
+| Dimension | Score | Finding |
+|---|---:|---|
+| Accessibility | 3/4 | Labels, focus, native dialogs, keyboard tab behavior, reduced motion; not a full VoiceOver audit |
+| Performance | 3/4 | Lean Preact bundle, bounded run replay, stylesheet hot-swap; no Instruments trace or generated-artifact FPS certification |
+| Theming | 2/4 | Real shared tokens, but some component values remain literal; light theme only by scope |
+| Desktop layouts | 3/4 | Verified at three desktop sizes; no physical-device or extreme-zoom certification |
+| Implementation integrity | 4/4 | Working controls and real catalog/files; no inert cloud/account features |
+| **Total** | **15/20** | Good; remaining items are coverage limits / future depth, not blockers to this local redesign |
+
+No P0/P1 visual or interaction finding remained in the tested redesign paths. This does not assert the entire pre-existing agent backend is production-secure or that every generated prototype meets accessibility/performance requirements.
+
+## Verified behavior
+
+The browser review exercised 23 checks against an isolated real Go daemon:
+
+- Home and Studio fit the three supported desktop sizes without document overflow.
+- Empty prompts do not submit; website-clone source URLs are validated.
+- The real design-system picker, search, detail guidelines/tokens, and component fixture load.
+- Dialog Escape returns focus; detail tabs support arrows, Home, and End.
+- True 1440px and 390px artifact viewports are retained while visually scaled.
+- Source edits save through the Go API; canceling project navigation preserves an unsaved draft.
+- Two consecutive stylesheet changes update without iframe navigation.
+- Rename and new-conversation actions persist.
+- Model/thinking preferences survive reload and are stored independently of the app's changing loopback port.
+- Reduced-motion preference is honored. No browser JavaScript exceptions were recorded.
+
+Native verification:
+
+- The actual bundled AppKit/WKWebView app rendered and captured its own content at 1440×900 and 900×620, at Retina resolution.
+- The bundle contains its generated `.icns` icon, Go sidecar, embedded UI/catalog, and MCP executable.
+- The bundled MCP executable read all 152 design systems and a skill resource through the native runtime discovery file.
+- Closing the capture app exited successfully and removed the daemon's discovery file.
+- Native quit/close draft protection is implemented; its interactive confirmation sheet was not driven by OS accessibility automation in this pass.
+- `codesign --verify --deep --strict` passed for the ad-hoc local signature. Public notarization is not included.
+
+Source/build checks: TypeScript typecheck, Vite build, Go race tests, and Go vet passed. Added tests cover native endpoint discovery across restarts, preference persistence/validation, project controls, actual catalog assets, and safe bounded event replay/closure.
+
+No new live model generation was required for this visual pass. Pi remains the sole generation engine; browser testing used an explicitly labeled preview fixture in isolated temporary data, not the user's project database.
+
+## Finish-review contract
+
+**disposition: ship — at the scope of this local Mac desktop redesign.**
+
+### persistence
+
+PRODUCT.md records the confirmed Mac-only scope. DESIGN.md and `.impeccable/design.json` document the implemented tokens/components. The surface contract and icon provenance are present.
+
+### fidelity
+
+| Element | Verdict |
+|---|---|
+| Prompt-first Home and persistent sidebar | Match to the user's workflow reference |
+| Chat-left, artifact-right studio | Match |
+| TYPE | Acceptable adaptation: Mac system UI and restrained Georgia Home display, using the supplied reference's hierarchy |
+| MATERIAL | Match: operational UI surfaces, not invented photographic or textured assets |
+| GROUND | Match to the committed light lavender-gray workspace |
+| Identity | Acceptable adaptation: PiDesk-inspired charcoal/lavender π, with a distinct pen-point terminal |
+| Phone app layouts | Intentionally removed by explicit user scope; mobile artifact preview retained |
+| Sharing/accounts/media generation | Intentionally absent under product constraints |
+
+### ceiling
+
+The tested local desktop workflow reaches the stated direction. Full independent accessibility, prolonged agent runs, performance profiling, and distribution signing remain outside this review's evidence.
+
+### material_fixes
+
+None outstanding in the evaluated desktop redesign paths. The two original concerns were respectively resolved and removed from app scope; contrast was corrected and recaptured.
+
+### keep
+
+Keep the prompt-first entry, artifact-led studio, Pi-only local execution, and separation between app chrome and prototype design systems.
+
+## Evidence
+
+Local captures and machine-readable check results live in `.impeccable/review/` (gitignored). The key captures are `desktop.png`, `studio-desktop.png`, `studio-source.png`, `system-detail.png`, `home-900.png`, `studio-900.png`, `studio-mobile-preview-900.png`, `mac-home-1440.png`, and `mac-home-900.png`.

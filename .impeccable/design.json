@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-20T21:20:32.143Z",
+  "title": "Design System: PiDesigner",
+  "extensions": {
+    "colorMeta": {
+      "primary": { "role": "primary", "displayName": "Studio Lavender", "canonical": "#5c61b6" },
+      "shell": { "role": "neutral", "displayName": "Lavender Gray", "canonical": "#eceef3" },
+      "canvas": { "role": "neutral", "displayName": "Canvas White", "canonical": "#fcfcfd" },
+      "ink": { "role": "neutral", "displayName": "Charcoal Ink", "canonical": "#23242b" }
+    },
+    "shadows": [
+      { "name": "workspace", "value": "0 2px 3px #25263904", "purpose": "Low ambient elevation under the workspace canvas." },
+      { "name": "dialog", "value": "0 18px 60px #29283d26", "purpose": "Modal selection and renaming." },
+      { "name": "prototype", "value": "0 4px 22px #2b294a12, 0 0 0 1px #d6d7e3", "purpose": "Separate the artifact from the workspace background." }
+    ],
+    "motion": [
+      { "name": "working-dots", "value": "1.4s ease-in-out infinite", "purpose": "Indicate work alongside a persistent text status; disabled for reduced motion." }
+    ],
+    "breakpoints": [
+      { "name": "wide-desktop", "value": "1600px" },
+      { "name": "compact-desktop", "value": "1190px" },
+      { "name": "minimum-desktop", "value": "900px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary action", "kind": "button", "refersTo": "button-primary",
+      "description": "The one primary action in a working region.",
+      "html": "<button class=\"ds-primary\">Use this system</button>",
+      "css": ".ds-primary{font:550 13px -apple-system,BlinkMacSystemFont,sans-serif;padding:11px 17px;border:0;border-radius:9px;background:#26262d;color:#fff;cursor:pointer}.ds-primary:hover{background:#42414f}.ds-primary:focus-visible{outline:2px solid #5c61b6;outline-offset:3px}"
+    },
+    {
+      "name": "Secondary action", "kind": "button", "refersTo": "button-secondary",
+      "description": "A secondary command that stays subordinate to the creation action.",
+      "html": "<button class=\"ds-secondary\">Copy config</button>",
+      "css": ".ds-secondary{font:550 13px -apple-system,BlinkMacSystemFont,sans-serif;padding:11px 17px;border:1px solid #d9dae3;border-radius:9px;background:#fff;color:#23242b;cursor:pointer}.ds-secondary:hover{background:#f3f3f7;border-color:#bcbecf}.ds-secondary:focus-visible{outline:2px solid #5c61b6;outline-offset:3px}"
+    },
+    {
+      "name": "Search field", "kind": "input",
+      "description": "Search scoped to the current catalog or project library.",
+      "html": "<input class=\"ds-search\" type=\"search\" aria-label=\"Search design systems\" placeholder=\"Search design systems\" />",
+      "css": ".ds-search{font:12px -apple-system,BlinkMacSystemFont,sans-serif;border:1px solid #dfe0e8;border-radius:8px;background:#fff;color:#23242b;padding:9px 10px;caret-color:#5c61b6}.ds-search::placeholder{color:#646673}.ds-search:focus-visible{outline:2px solid #5c61b6;outline-offset:2px}"
+    },
+    {
+      "name": "Selected navigation", "kind": "nav", "refersTo": "navigation-selected",
+      "description": "Persistent workspace location.",
+      "html": "<a class=\"ds-navigation\" href=\"#home\" aria-current=\"page\">Home</a>",
+      "css": ".ds-navigation{display:block;font:570 13px -apple-system,BlinkMacSystemFont,sans-serif;line-height:43px;padding:0 12px;border-radius:9px;background:#dedff0;color:#32313f;text-decoration:none}.ds-navigation:hover{background:#d6d8e9}.ds-navigation:focus-visible{outline:2px solid #5c61b6;outline-offset:3px}"
+    },
+    {
+      "name": "Workflow choice", "kind": "chip", "refersTo": "workflow-selected",
+      "description": "Select the generation methodology before starting a project.",
+      "html": "<button class=\"ds-workflow\" aria-pressed=\"true\">Prototype</button>",
+      "css": ".ds-workflow{font:11.5px -apple-system,BlinkMacSystemFont,sans-serif;border:1px solid #d4d2ed;border-radius:9px;background:#eeedfa;color:#514da0;padding:9px 12px;cursor:pointer}.ds-workflow:hover{border-color:#bcb8db;color:#23242b}.ds-workflow:focus-visible{outline:2px solid #5c61b6;outline-offset:3px}"
+    }
+    ,{
+      "name": "Pi model control", "kind": "custom",
+      "description": "Actual Pi agent identity and a selected-model button; opens the installed agent's configured models.",
+      "html": "<button class=\"ds-model\"><svg width=\"24\" height=\"24\" viewBox=\"0 0 40 40\" aria-hidden=\"true\"><path fill=\"#e48a7a\" d=\"M0 0h30v20H20V10H0z\"/><path fill=\"#4f8eb3\" d=\"M0 10h10v10h10v10H10v10H0z\"/><path fill=\"#eab65d\" d=\"M30 20h10v20H30z\"/></svg><span>Pi default</span></button>",
+      "css": ".ds-model{display:inline-flex;align-items:center;gap:7px;padding:7px;border:1px solid transparent;border-radius:8px;background:#f6f5fa;color:#545361;font:11px -apple-system,BlinkMacSystemFont,sans-serif;cursor:pointer}.ds-model:hover{background:#eeedf6;border-color:#dcdae9}.ds-model:focus-visible{outline:2px solid #5c61b6;outline-offset:3px}"
+    }
+  ],
+  "narrative": {
+    "northStar": "A place for ideas to take shape",
+    "overview": "A light, operational Mac workspace with a PiDesk-family identity. The shell uses lavender-gray tonal separation; the artifact sits on a clean canvas.",
+    "keyCharacteristics": ["Persistent navigation", "A prompt-first starting point", "Restrained typography", "An artifact-led studio"],
+    "rules": [
+      { "name": "The Artifact Boundary Rule", "body": "Workspace colors stop at the prototype iframe. A selected design system controls the artifact’s colors; it never recolors the app shell.", "section": "colors" }
+    ],
+    "dos": ["Preserve the separation between the workspace and the generated artifact.", "Use the real catalog and local run state, including empty and failure cases.", "Keep native keyboard conventions and visible focus."],
+    "donts": ["Add account, billing, publishing, or collaboration controls without working capabilities.", "Describe prototype frames as separate PiDesigner clients.", "Imply the light theme has a complete dark-mode counterpart."]
+  }
+}

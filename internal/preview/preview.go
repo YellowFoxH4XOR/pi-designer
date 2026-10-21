@@ -69,6 +69,7 @@ type watcher struct {
 	stop    chan struct{}
 	once    sync.Once
 	last    map[string]fileStamp
+	mu      sync.Mutex
 }
 
 type fileStamp struct {
@@ -113,6 +114,8 @@ func (w *watcher) loop() {
 
 // scan diffs the directory against the last known state.
 func (w *watcher) scan() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	seen := map[string]fileStamp{}
 	_ = filepath.WalkDir(w.dir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
@@ -304,21 +307,21 @@ const bridgeScript = `<script data-pidesigner-bridge>
       for (var i = 0; i < links.length; i++) {
         var href = links[i].getAttribute("href") || "";
         if (href.indexOf(f.path) !== -1 || href.split("?")[0].split("/").pop() === f.name) {
-          links[i].setAttribute("href", href.split("?")[0] + "?v=" + VERSION);
+          links[i].setAttribute("href", href.split("?")[0] + "?v=" + encodeURIComponent(f.stamp || Date.now()));
           matched = true;
         }
       }
       if (!matched) {
         var link = document.createElement("link");
         link.rel = "stylesheet";
-        link.href = f.path + "?v=" + VERSION;
+        link.href = f.path + "?v=" + encodeURIComponent(f.stamp || Date.now());
         document.head.appendChild(link);
       }
     });
   }
   window.addEventListener("message", function (ev) {
     var d = ev.data;
-    if (!d || d.source !== "pidesigner") return;
+    if (ev.source !== window.parent || !d || d.source !== "pidesigner") return;
     if (d.type === "css-update") {
       swapCSS(d.files);
     } else if (d.type === "reload") {

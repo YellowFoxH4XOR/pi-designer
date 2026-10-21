@@ -39,6 +39,7 @@ const (
 	EventSettled       = "settled"
 	EventStderr        = "stderr"
 	EventError         = "error"
+	EventModelResult   = "model_result"
 )
 
 // Event is one item from Pi's event stream.
@@ -96,6 +97,7 @@ type Session struct {
 	events chan Event
 
 	mu      sync.Mutex
+	writeMu sync.Mutex
 	pending map[string]chan *rpcResponse
 	nextID  int
 	closed  bool
@@ -150,7 +152,14 @@ func Start(ctx context.Context, opts Options) (*Session, error) {
 		args = append(args, "--session-dir", opts.SessionDir)
 	}
 	if opts.Model != "" {
-		args = append(args, "--model", opts.Model)
+		// Separate provider and model id so duplicate names across providers
+		// cannot resolve through a fuzzy CLI match.
+		parts := strings.SplitN(opts.Model, "/", 2)
+		if len(parts) == 2 {
+			args = append(args, "--provider", parts[0], "--model", parts[1])
+		} else {
+			args = append(args, "--model", opts.Model)
+		}
 	}
 	if opts.Thinking != "" {
 		args = append(args, "--thinking", opts.Thinking)
@@ -215,6 +224,13 @@ func Start(ctx context.Context, opts Options) (*Session, error) {
 
 	go s.readStdout()
 	go s.readStderr()
+	go func() {
+		select {
+		case <-ctx.Done():
+			s.CloseWith()
+		case <-s.done:
+		}
+	}()
 	go func() {
 		_ = cmd.Wait()
 		close(s.done)
@@ -349,6 +365,23 @@ func (s *Session) handleEvent(line []byte, recType string) {
 		case "thinking_delta":
 			s.emit(Event{Type: EventThinkingDelta, Text: e.AssistantMessageEvent.Delta})
 		}
+	case "message_end":
+		var e struct {
+			Message struct {
+				Role         string `json:"role"`
+				StopReason   string `json:"stopReason"`
+				ErrorMessage string `json:"errorMessage"`
+			} `json:"message"`
+		}
+		if json.Unmarshal(line, &e) == nil && e.Message.Role == "assistant" && e.Message.StopReason == "error" {
+			message := e.Message.ErrorMessage
+			if message == "" {
+				message = "The selected Pi model could not complete its request. Check its authentication and availability in Pi."
+			}
+			s.emit(Event{Type: EventError, Text: message})
+		} else if e.Message.Role == "assistant" {
+			s.emit(Event{Type: EventModelResult})
+		}
 	case "tool_execution_start":
 		var e struct {
 			ToolName string          `json:"toolName"`
@@ -427,7 +460,10 @@ func (s *Session) send(cmdType string, extra map[string]any) (string, chan *rpcR
 		return "", nil, err
 	}
 	b = append(b, '\n')
-	if _, err := s.stdin.Write(b); err != nil {
+	s.writeMu.Lock()
+	_, writeErr := s.stdin.Write(b)
+	s.writeMu.Unlock()
+	if err := writeErr; err != nil {
 		s.mu.Lock()
 		delete(s.pending, id)
 		s.mu.Unlock()

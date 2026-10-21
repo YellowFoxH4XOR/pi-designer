@@ -32,26 +32,36 @@ type AgentEvent struct {
 
 // broker fans a run's events out to any number of SSE subscribers.
 type broker struct {
-	mu     sync.Mutex
-	subs   map[chan AgentEvent]struct{}
-	closed bool
+	mu      sync.Mutex
+	subs    map[chan AgentEvent]struct{}
+	closed  bool
+	history []AgentEvent
 }
 
 func newBroker() *broker { return &broker{subs: map[chan AgentEvent]struct{}{}} }
 
 func (b *broker) subscribe() chan AgentEvent {
-	ch := make(chan AgentEvent, 256)
+	ch := make(chan AgentEvent, 2048)
 	b.mu.Lock()
-	b.subs[ch] = struct{}{}
-	b.mu.Unlock()
+	defer b.mu.Unlock()
+	for _, e := range b.history {
+		ch <- e
+	}
+	if b.closed {
+		close(ch)
+	} else {
+		b.subs[ch] = struct{}{}
+	}
 	return ch
 }
 
 func (b *broker) unsubscribe(ch chan AgentEvent) {
 	b.mu.Lock()
-	delete(b.subs, ch)
-	b.mu.Unlock()
-	close(ch)
+	defer b.mu.Unlock()
+	if _, ok := b.subs[ch]; ok {
+		delete(b.subs, ch)
+		close(ch)
+	}
 }
 
 func (b *broker) publish(e AgentEvent) {
@@ -59,6 +69,10 @@ func (b *broker) publish(e AgentEvent) {
 	defer b.mu.Unlock()
 	if b.closed {
 		return
+	}
+	b.history = append(b.history, e)
+	if len(b.history) > 1024 {
+		b.history = b.history[len(b.history)-1024:]
 	}
 	for ch := range b.subs {
 		select {
@@ -90,6 +104,7 @@ type Runner struct {
 	mu       sync.Mutex
 	sessions map[string]*pirun.Session
 	brokers  map[string]*broker
+	active   map[string]string
 	hub      FileChangeNotifier
 }
 
@@ -106,6 +121,7 @@ func NewRunner(st *store.Store, cat *content.Catalog, piBin string, hub FileChan
 		piBin:    piBin,
 		sessions: map[string]*pirun.Session{},
 		brokers:  map[string]*broker{},
+		active:   map[string]string{},
 		hub:      hub,
 	}
 }
@@ -137,6 +153,18 @@ func (r *Runner) Start(ctx context.Context, req RunRequest) (*RunHandle, error) 
 	if strings.TrimSpace(req.Prompt) == "" {
 		return nil, fmt.Errorf("prompt is empty")
 	}
+	if err := pirun.ValidateRef(req.Model); err != nil {
+		return nil, err
+	}
+	if req.ConversationID != "" {
+		conv, err := r.store.GetConversation(req.ConversationID)
+		if err != nil || conv.ProjectID != proj.ID {
+			return nil, fmt.Errorf("conversation does not belong to this project")
+		}
+	}
+	if req.SkillID == "" {
+		req.SkillID = proj.SkillID
+	}
 
 	now := time.Now()
 	run := model.Run{
@@ -147,7 +175,17 @@ func (r *Runner) Start(ctx context.Context, req RunRequest) (*RunHandle, error) 
 		Prompt:         req.Prompt,
 		StartedAt:      now,
 	}
+	r.mu.Lock()
+	if r.active[proj.ID] != "" {
+		r.mu.Unlock()
+		return nil, fmt.Errorf("Pi is already working in this project")
+	}
+	r.active[proj.ID] = run.ID
+	r.mu.Unlock()
 	if err := r.store.CreateRun(run); err != nil {
+		r.mu.Lock()
+		delete(r.active, proj.ID)
+		r.mu.Unlock()
 		return nil, err
 	}
 
@@ -174,6 +212,7 @@ func (r *Runner) execute(run model.Run, proj model.Project, req RunRequest, b *b
 		b.close()
 		r.mu.Lock()
 		delete(r.brokers, run.ID)
+		delete(r.active, proj.ID)
 		r.mu.Unlock()
 	}()
 
@@ -186,6 +225,26 @@ func (r *Runner) execute(run model.Run, proj model.Project, req RunRequest, b *b
 		Thinking: req.Thinking,
 		// Automated runs cannot answer Pi's project-trust prompt over RPC.
 		Approve: true,
+	}
+
+	// Runs use Pi's own process and authentication. Carry recent conversation
+	// context explicitly between ephemeral invocations for follow-up edits.
+	if req.ConversationID != "" {
+		if messages, err := r.store.ListMessages(req.ConversationID); err == nil {
+			if len(messages) > 0 && messages[len(messages)-1].Role == model.RoleUser {
+				messages = messages[:len(messages)-1]
+			}
+			if len(messages) > 12 {
+				messages = messages[len(messages)-12:]
+			}
+			var history strings.Builder
+			for _, message := range messages {
+				fmt.Fprintf(&history, "\n\n[%s]\n%s", message.Role, message.Content)
+			}
+			if history.Len() > 0 {
+				opts.SystemPromptText = "Recent conversation for context. Continue refining the existing project; the new user prompt follows separately." + history.String()
+			}
+		}
 	}
 
 	// Load the selected skill so the agent picks up its methodology.
@@ -229,11 +288,30 @@ func (r *Runner) execute(run model.Run, proj model.Project, req RunRequest, b *b
 		sess.Close()
 	}()
 
+	// Confirm the installed Pi selected the exact requested provider/model.
+	// CLI argument parsing must never silently substitute a similarly named one.
+	checkCtx, checkCancel := context.WithTimeout(ctx, 30*time.Second)
+	state, stateErr := sess.State(checkCtx)
+	checkCancel()
+	if stateErr == nil && state.Model == nil {
+		stateErr = fmt.Errorf("Pi has no model selected. Open Pi to configure a model first")
+	}
+	if stateErr == nil && req.Model != "" && state.Model.Ref() != req.Model {
+		stateErr = fmt.Errorf("Pi selected %s instead of %s. Choose a model from the available list", state.Model.Ref(), req.Model)
+	}
+	if stateErr != nil {
+		r.store.FinishRun(run.ID, model.RunFailed, stateErr.Error())
+		b.publish(AgentEvent{Type: "error", RunID: run.ID, Text: stateErr.Error(), At: nowMs()})
+		return
+	}
+	b.publish(AgentEvent{Type: "model", RunID: run.ID, Text: state.Model.Name + " · " + state.Model.Provider, At: nowMs()})
+
 	// Subscribe before prompting so a fast completion is not missed.
 	events := sess.Events()
 	settled := make(chan bool, 1)
 	processGone := make(chan struct{})
 	var assistantText strings.Builder
+	var providerFailure string
 
 	go func() {
 		defer close(processGone)
@@ -259,13 +337,15 @@ func (r *Runner) execute(run model.Run, proj model.Project, req RunRequest, b *b
 				}
 			case pirun.EventStderr:
 				b.publish(AgentEvent{Type: "stderr", RunID: run.ID, Text: ev.Text, At: nowMs()})
+			case pirun.EventModelResult:
+				// A successful retry clears a previous transient provider error.
+				providerFailure = ""
 			case pirun.EventError:
+				providerFailure = ev.Text
 				b.publish(AgentEvent{Type: "error", RunID: run.ID, Text: ev.Text, At: nowMs()})
 			case pirun.EventSettled:
-				select {
-				case settled <- ev.Aborted:
-				default:
-				}
+				settled <- ev.Aborted
+				return
 			}
 		}
 	}()
@@ -298,20 +378,21 @@ func (r *Runner) execute(run model.Run, proj model.Project, req RunRequest, b *b
 		case aborted = <-settled:
 		case <-processGone:
 			// Pi exited without emitting agent_settled -- surface diagnostics.
-			failure = "pi exited before completing the run"
-			if tail := strings.TrimSpace(sess.StderrTail()); tail != "" {
-				failure += ": " + tail
+			select {
+			case aborted = <-settled:
+			default:
+				failure = "Pi exited before completing the run"
+				if tail := strings.TrimSpace(sess.StderrTail()); tail != "" {
+					failure += ": " + tail
+				}
 			}
 		case <-time.After(2 * time.Hour):
 			failure = "timeout"
 		}
 	}
 
-	if failure != "" {
-		r.store.FinishRun(run.ID, model.RunFailed, failure)
-		b.publish(AgentEvent{Type: "error", RunID: run.ID, Text: failure, At: nowMs()})
-	} else {
-		finishRun(r, run, b, aborted)
+	if failure == "" && !aborted {
+		failure = providerFailure
 	}
 
 	// Persist the assistant turn.
@@ -328,6 +409,14 @@ func (r *Runner) execute(run model.Run, proj model.Project, req RunRequest, b *b
 		_ = r.store.UpdateProject(proj)
 	}
 	r.hub.NotifyProjectChanged(proj.ID)
+	// Publish completion only after the transcript and entry metadata are
+	// durable, so a reconnect sees the same result as the streaming client.
+	if failure != "" {
+		r.store.FinishRun(run.ID, model.RunFailed, failure)
+		b.publish(AgentEvent{Type: "error", RunID: run.ID, Text: failure, At: nowMs()})
+	} else {
+		finishRun(r, run, b, aborted)
+	}
 }
 
 // Shutdown cancels every in-flight run so agent processes are reaped before

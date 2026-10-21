@@ -49,16 +49,18 @@ type rpcResponse struct {
 }
 
 type server struct {
-	daemon string
-	http   *http.Client
-	out    *bufio.Writer
+	daemon    string
+	discovery string
+	http      *http.Client
+	out       *bufio.Writer
 }
 
 func main() {
 	var (
-		daemon = flag.String("daemon", envOr("PIDESIGNER_DAEMON", defaultDaemonURL), "daemon base URL")
-		print  = flag.Bool("print-config", false, "print an MCP client config snippet and exit")
-		client = flag.String("client", "generic", "client to print a config for (generic|claude|cursor|codex|pi)")
+		daemon    = flag.String("daemon", envOr("PIDESIGNER_DAEMON", defaultDaemonURL), "daemon base URL")
+		discovery = flag.String("discovery", "", "runtime discovery file written by the native app")
+		print     = flag.Bool("print-config", false, "print an MCP client config snippet and exit")
+		client    = flag.String("client", "generic", "client to print a config for (generic|claude|cursor|codex|pi)")
 	)
 	flag.Parse()
 
@@ -68,9 +70,10 @@ func main() {
 	}
 
 	s := &server{
-		daemon: strings.TrimRight(*daemon, "/"),
-		http:   &http.Client{Timeout: 120 * time.Second},
-		out:    bufio.NewWriter(os.Stdout),
+		daemon:    strings.TrimRight(*daemon, "/"),
+		discovery: *discovery,
+		http:      &http.Client{Timeout: 120 * time.Second},
+		out:       bufio.NewWriter(os.Stdout),
 	}
 	if err := s.serve(context.Background()); err != nil {
 		fmt.Fprintln(os.Stderr, "pidesigner-mcp:", err)
@@ -250,6 +253,11 @@ func toolDefinitions() []toolDef {
 			}),
 		},
 		{
+			Name:        "list_models",
+			Description: "List models configured in the installed Pi, including exact provider/id values. Credentials remain with Pi.",
+			InputSchema: objectSchema(nil),
+		},
+		{
 			Name:        "list_skills",
 			Description: "List the available design skills (prototype, motion design, website clone, ...).",
 			InputSchema: objectSchema(nil),
@@ -268,7 +276,7 @@ func toolDefinitions() []toolDef {
 				"conversationId": map[string]any{"type": "string", "description": "Conversation to append the turn to."},
 				"designSystemId": map[string]any{"type": "string", "description": "Design system to apply."},
 				"skillId":        map[string]any{"type": "string", "description": "Skill to load (web-artifacts-builder, motion-design, web-clone, ...)."},
-				"model":          map[string]any{"type": "string", "description": "Model pattern, e.g. anthropic/claude-sonnet-4-5."},
+				"model":          map[string]any{"type": "string", "description": "Exact provider/model id from list_models. Omit to use the model saved in PiDesigner."},
 			}),
 		},
 		{
@@ -333,6 +341,8 @@ func (s *server) callTool(ctx context.Context, req rpcRequest) {
 		})
 	case "delete_file":
 		s.proxy(ctx, req, http.MethodDelete, "/api/projects/"+argStr(args, "project")+"/file?path="+argStr(args, "path"), nil)
+	case "list_models":
+		s.proxy(ctx, req, http.MethodGet, "/api/models", nil)
 	case "list_skills":
 		s.proxy(ctx, req, http.MethodGet, "/api/skills", nil)
 	case "list_design_systems":
@@ -365,7 +375,7 @@ func (s *server) proxy(ctx context.Context, req rpcRequest, method, path string,
 		}
 		reader = bytes.NewReader(b)
 	}
-	httpReq, err := http.NewRequestWithContext(ctx, method, s.daemon+path, reader)
+	httpReq, err := http.NewRequestWithContext(ctx, method, s.baseURL()+path, reader)
 	if err != nil {
 		s.respond(req, toolError(err.Error()))
 		return
@@ -375,7 +385,7 @@ func (s *server) proxy(ctx context.Context, req rpcRequest, method, path string,
 	}
 	resp, err := s.http.Do(httpReq)
 	if err != nil {
-		s.respond(req, toolError("daemon unreachable at "+s.daemon+": "+err.Error()))
+		s.respond(req, toolError("daemon unreachable at "+s.baseURL()+": "+err.Error()))
 		return
 	}
 	defer resp.Body.Close()
@@ -411,7 +421,7 @@ func argStr(args map[string]any, key string) string {
 
 func (s *server) resources(ctx context.Context) []map[string]any {
 	var out []map[string]any
-	resp, err := s.http.Get(s.daemon + "/api/design-systems")
+	resp, err := s.http.Get(s.baseURL() + "/api/design-systems")
 	if err == nil {
 		defer resp.Body.Close()
 		var payload struct {
@@ -431,7 +441,7 @@ func (s *server) resources(ctx context.Context) []map[string]any {
 			}
 		}
 	}
-	resp2, err := s.http.Get(s.daemon + "/api/skills")
+	resp2, err := s.http.Get(s.baseURL() + "/api/skills")
 	if err == nil {
 		defer resp2.Body.Close()
 		var payload struct {
@@ -467,7 +477,7 @@ func (s *server) readResource(ctx context.Context, req rpcRequest) {
 	switch {
 	case strings.HasPrefix(p.URI, "od://design-systems/") && strings.HasSuffix(p.URI, "/DESIGN.md"):
 		id := strings.TrimSuffix(strings.TrimPrefix(p.URI, "od://design-systems/"), "/DESIGN.md")
-		resp, err := s.http.Get(s.daemon + "/api/design-systems/" + id + "/context")
+		resp, err := s.http.Get(s.baseURL() + "/api/design-systems/" + id + "/context")
 		if err == nil {
 			defer resp.Body.Close()
 			var ctxPayload struct {
@@ -479,17 +489,15 @@ func (s *server) readResource(ctx context.Context, req rpcRequest) {
 		}
 	case strings.HasPrefix(p.URI, "od://skills/"):
 		id := strings.TrimSuffix(strings.TrimPrefix(p.URI, "od://skills/"), "/SKILL.md")
-		resp, err := s.http.Get(s.daemon + "/api/skills")
+		resp, err := s.http.Get(s.baseURL() + "/api/skills/" + id + "/document")
 		if err == nil {
 			defer resp.Body.Close()
 			var payload struct {
-				Skills []struct {
-					ID   string `json:"id"`
-					Path string `json:"path"`
-				} `json:"skills"`
+				Content string `json:"content"`
 			}
-			_ = json.NewDecoder(resp.Body).Decode(&payload)
-			_ = id
+			if resp.StatusCode == http.StatusOK && json.NewDecoder(resp.Body).Decode(&payload) == nil {
+				text = payload.Content
+			}
 		}
 	}
 	if text == "" {

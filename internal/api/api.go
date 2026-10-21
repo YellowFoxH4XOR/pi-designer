@@ -15,6 +15,7 @@ import (
 
 	"github.com/akki/pidesigner/internal/content"
 	"github.com/akki/pidesigner/internal/model"
+	"github.com/akki/pidesigner/internal/pirun"
 	"github.com/akki/pidesigner/internal/preview"
 	"github.com/akki/pidesigner/internal/project"
 	"github.com/akki/pidesigner/internal/store"
@@ -28,6 +29,7 @@ type Server struct {
 	Hub         *preview.Hub
 	ProjectRoot string
 	PiBin       string
+	Models      *pirun.Catalog
 }
 
 // Routes builds the HTTP mux.
@@ -35,11 +37,17 @@ func (s *Server) Routes() http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /api/health", s.handleHealth)
+	mux.HandleFunc("GET /api/models", s.handleModels)
+	mux.HandleFunc("GET /api/models/thinking", s.handleThinkingLevels)
+	mux.HandleFunc("GET /api/connection", s.handleConnection)
+	mux.HandleFunc("GET /api/preferences", s.handlePreferences)
+	mux.HandleFunc("PUT /api/preferences", s.handlePreferences)
 
 	// Projects
 	mux.HandleFunc("GET /api/projects", s.handleListProjects)
 	mux.HandleFunc("POST /api/projects", s.handleCreateProject)
 	mux.HandleFunc("GET /api/projects/{id}", s.handleGetProject)
+	mux.HandleFunc("PATCH /api/projects/{id}", s.handleUpdateProject)
 	mux.HandleFunc("DELETE /api/projects/{id}", s.handleDeleteProject)
 
 	// Files
@@ -58,14 +66,17 @@ func (s *Server) Routes() http.Handler {
 	// Runs
 	mux.HandleFunc("POST /api/projects/{id}/chat", s.handleChat)
 	mux.HandleFunc("GET /api/runs/{id}", s.handleGetRun)
+	mux.HandleFunc("GET /api/projects/{id}/runs", s.handleRuns)
 	mux.HandleFunc("POST /api/runs/{id}/cancel", s.handleCancelRun)
 	mux.HandleFunc("GET /api/runs/{id}/events", s.handleRunEvents)
 
 	// Catalog
 	mux.HandleFunc("GET /api/skills", s.handleSkills)
+	mux.HandleFunc("GET /api/skills/{id}/document", s.handleSkillDocument)
 	mux.HandleFunc("GET /api/templates", s.handleTemplates)
 	mux.HandleFunc("GET /api/design-systems", s.handleDesignSystems)
 	mux.HandleFunc("GET /api/design-systems/{id}/context", s.handleDesignSystemContext)
+	mux.HandleFunc("GET /api/design-systems/{id}/preview/{path...}", s.handleSystemPreview)
 	mux.HandleFunc("GET /api/craft", s.handleCraft)
 
 	// Preview
@@ -419,6 +430,13 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.ProjectID = proj.ID
+	defaults := s.loadPreferences()
+	if req.Model == "" {
+		req.Model = defaults.Model
+	}
+	if req.Thinking == "" {
+		req.Thinking = defaults.Thinking
+	}
 
 	handle, err := s.Runner.Start(r.Context(), req)
 	if err != nil {
@@ -499,6 +517,10 @@ func (s *Server) handleDesignSystems(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDesignSystemContext(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.Catalog.DesignSystem(r.PathValue("id")); !ok {
+		writeErr(w, http.StatusNotFound, "Design system not found")
+		return
+	}
 	ds, err := s.Catalog.DesignSystemContext(r.PathValue("id"))
 	if err != nil {
 		writeErr(w, http.StatusNotFound, err.Error())
