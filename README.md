@@ -53,7 +53,7 @@ Slide decks (`simple-deck`) additionally get deck discipline: keep the seed's na
 
 Each conversation is a persistent omp session, so follow-ups keep the agent's full context. Conversations that only have legacy π sessions replay their transcript once into a new omp session.
 
-The prompt lives in `internal/prompt` (stable instructions per project, per-turn context separately so provider prompt caches survive). The πDesigner tools live in `internal/agentext/pidesigner.ts`, installed into the data directory at startup and loaded with `omp --extension`. Runs launch `omp --mode rpc` with every omp tool and `--auto-approve` (runs are unattended), inside a macOS Seatbelt sandbox (`sandbox-exec`): the agent, its shell and everything they start can write only the project directory (plus that conversation's session and renders, omp's `~/.omp` state and temp files) and cannot read anything else in your home directory except the bundled design content and the extension. System locations outside your home (`/usr`, `/opt/homebrew`, …) stay readable so shells and toolchains work. MCP servers or tools that need other home-directory paths fail inside the sandbox.
+The prompt lives in `internal/prompt` (stable instructions per project, per-turn context separately so provider prompt caches survive). The πDesigner tools live in `internal/agentext/pidesigner.ts`, installed into the data directory at startup and loaded with `omp --extension`. Runs launch `omp --mode rpc` with every omp tool and `--auto-approve` (runs are unattended). omp runs in the project directory with your normal omp configuration; there is no extra filesystem sandbox.
 
 ## Observable work and Mac activity
 

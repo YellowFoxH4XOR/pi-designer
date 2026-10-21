@@ -89,10 +89,6 @@ type Options struct {
 	SessionDir string
 	// Extensions are extension files loaded explicitly for this run.
 	Extensions []string
-	// Confine, when set, runs omp and everything it starts under a kernel
-	// filesystem sandbox (see Confinement). omp's own state directory and
-	// executable are granted automatically.
-	Confine *Confinement
 	// AutoApprove skips tool approval prompts. Unattended runs need it: an
 	// approval prompt would otherwise wait for a host answer.
 	AutoApprove bool
@@ -207,11 +203,6 @@ func Start(ctx context.Context, opts Options) (*Session, error) {
 	}
 
 	cmd := exec.Command(bin, opts.args()...)
-	if opts.Confine != nil {
-		if cmd, err = confined(bin, opts); err != nil {
-			return nil, err
-		}
-	}
 	cmd.Dir = opts.Dir
 	cmd.Env = opts.Env
 	if cmd.Env == nil {
