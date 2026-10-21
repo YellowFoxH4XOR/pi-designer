@@ -9,6 +9,30 @@ import (
 	"github.com/akki/pidesigner/internal/model"
 )
 
+// handleActiveProject records Studio's current selection for MCP defaults.
+// Empty selection clears it; IDs are checked before becoming active.
+func (s *Server) handleActiveProject(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		ProjectID string `json:"projectId"`
+	}
+	if err := decodeBody(r, &body); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if body.ProjectID != "" {
+		p, err := s.Store.GetProject(body.ProjectID)
+		if err != nil {
+			writeErr(w, http.StatusNotFound, "Project not found")
+			return
+		}
+		body.ProjectID = p.ID
+	}
+	s.activeMu.Lock()
+	s.activeProject = body.ProjectID
+	s.activeMu.Unlock()
+	writeJSON(w, http.StatusOK, map[string]string{"projectId": body.ProjectID})
+}
+
 // Catalog documents and fixtures let the UI browse the actual bundled brand
 // packages, rather than displaying made-up swatches or placeholder thumbnails.
 func (s *Server) handleSystemPreview(w http.ResponseWriter, r *http.Request) {

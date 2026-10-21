@@ -239,19 +239,42 @@ func (c *Catalog) scanSkills() ([]model.Skill, map[string]model.Skill) {
 	return out, byID
 }
 
-// Skills lists the catalog.
+// Skills lists every runnable SKILL.md, including design-template workflows.
+// This is the same catalog Skill resolves for generation and document reads.
 func (c *Catalog) Skills() []model.Skill {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	return append([]model.Skill(nil), c.skills...)
+	out := append([]model.Skill(nil), c.skills...)
+	for _, t := range c.templates {
+		if _, duplicate := c.skillsByID[t.ID]; duplicate {
+			continue
+		}
+		if _, runnable := c.templatesByK[t.ID]; !runnable {
+			continue
+		}
+		out = append(out, templateSkill(t))
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
 }
 
-// Skill looks one up by id.
+// Skill looks up any runnable workflow by id.
 func (c *Catalog) Skill(id string) (model.Skill, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	s, ok := c.skillsByID[id]
-	return s, ok
+	if s, ok := c.skillsByID[id]; ok {
+		return s, true
+	}
+	if t, ok := c.templatesByK[id]; ok {
+		return templateSkill(t), true
+	}
+	return model.Skill{}, false
+}
+
+func templateSkill(t Template) model.Skill {
+	return model.Skill{ID: t.ID, Name: t.Name, Description: t.Description,
+		Triggers: t.Triggers, Mode: t.Mode, Scenario: t.Scenario, Path: t.Path,
+		HasScripts: dirExists(filepath.Join(t.Path, "scripts"))}
 }
 
 func (c *Catalog) scanTemplates() ([]Template, map[string]Template) {

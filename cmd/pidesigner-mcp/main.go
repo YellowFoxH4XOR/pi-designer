@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -322,25 +323,30 @@ func (s *server) callTool(ctx context.Context, req rpcRequest) {
 		_ = json.Unmarshal(p.Arguments, &args)
 	}
 
+	projectRef := strings.TrimSpace(argStr(args, "project"))
+	if projectRef == "" {
+		projectRef = "@active"
+	}
+	projectURL := "/api/projects/" + url.PathEscape(projectRef)
 	switch p.Name {
 	case "list_projects":
 		s.proxy(ctx, req, http.MethodGet, "/api/projects", nil)
 	case "get_project":
-		s.proxy(ctx, req, http.MethodGet, "/api/projects/"+argStr(args, "project"), nil)
+		s.proxy(ctx, req, http.MethodGet, projectURL, nil)
 	case "list_files":
-		s.proxy(ctx, req, http.MethodGet, "/api/projects/"+argStr(args, "project")+"/files", nil)
+		s.proxy(ctx, req, http.MethodGet, projectURL+"/files", nil)
 	case "get_file":
-		s.proxy(ctx, req, http.MethodGet, "/api/projects/"+argStr(args, "project")+"/file?path="+argStr(args, "path"), nil)
+		s.proxy(ctx, req, http.MethodGet, projectURL+"/file?path="+url.QueryEscape(argStr(args, "path")), nil)
 	case "get_artifact":
-		s.proxy(ctx, req, http.MethodGet, "/api/projects/"+argStr(args, "project")+"/artifact?entry="+argStr(args, "entry"), nil)
+		s.proxy(ctx, req, http.MethodGet, projectURL+"/artifact?entry="+url.QueryEscape(argStr(args, "entry")), nil)
 	case "search_files":
-		s.proxy(ctx, req, http.MethodGet, "/api/projects/"+argStr(args, "project")+"/search?q="+argStr(args, "query"), nil)
+		s.proxy(ctx, req, http.MethodGet, projectURL+"/search?q="+url.QueryEscape(argStr(args, "query")), nil)
 	case "write_file":
-		s.proxy(ctx, req, http.MethodPut, "/api/projects/"+argStr(args, "project")+"/file", map[string]any{
+		s.proxy(ctx, req, http.MethodPut, projectURL+"/file", map[string]any{
 			"path": argStr(args, "path"), "content": argStr(args, "content"),
 		})
 	case "delete_file":
-		s.proxy(ctx, req, http.MethodDelete, "/api/projects/"+argStr(args, "project")+"/file?path="+argStr(args, "path"), nil)
+		s.proxy(ctx, req, http.MethodDelete, projectURL+"/file?path="+url.QueryEscape(argStr(args, "path")), nil)
 	case "list_models":
 		s.proxy(ctx, req, http.MethodGet, "/api/models", nil)
 	case "list_skills":
@@ -348,7 +354,7 @@ func (s *server) callTool(ctx context.Context, req rpcRequest) {
 	case "list_design_systems":
 		s.proxy(ctx, req, http.MethodGet, "/api/design-systems", nil)
 	case "start_run":
-		s.proxy(ctx, req, http.MethodPost, "/api/projects/"+argStr(args, "project")+"/chat", map[string]any{
+		s.proxy(ctx, req, http.MethodPost, projectURL+"/chat", map[string]any{
 			"prompt":         argStr(args, "prompt"),
 			"conversationId": argStr(args, "conversationId"),
 			"designSystemId": argStr(args, "designSystemId"),
