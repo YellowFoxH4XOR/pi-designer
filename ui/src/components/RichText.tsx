@@ -4,7 +4,8 @@ import type { ComponentChildren } from 'preact';
 // markup. Keeping it as JSX text prevents it from executing inside the app.
 function inline(text: string): ComponentChildren[] {
   return text.split(/(\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\(https?:\/\/[^\s)]+\))/g).map((part, i) => {
-    if (part.startsWith('**')) return <strong key={i}>{part.slice(2, -2)}</strong>;
+    // Bold commonly wraps code or links (**`index.html`**): render its inner markup too.
+    if (part.startsWith('**')) return <strong key={i}>{inline(part.slice(2, -2))}</strong>;
     if (part.startsWith('`')) return <code key={i}>{part.slice(1, -1)}</code>;
     const link = part.match(/^\[([^\]]+)\]\((https?:\/\/[^)]+)\)$/);
     if (link) return <a key={i} href={link[2]} target="_blank" rel="noreferrer">{link[1]}</a>;
@@ -12,7 +13,8 @@ function inline(text: string): ComponentChildren[] {
   });
 }
 export function RichText({ text, class: className = '' }: { text: string; class?: string }) {
-  const lines = text.replace(/\r/g, '').split('\n');
+  // Even partial protocol tags must never reach the page as raw text.
+  const lines = text.replace(/<\/?(?:question-form|pd-next|pd-done)\b[^>]*>/gi, '').replace(/\r/g, '').split('\n');
   const blocks: ComponentChildren[] = [];
   let paragraph: string[] = [];
   const flush = () => {

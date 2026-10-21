@@ -47,7 +47,7 @@ export function Home({ systems, systemId, setSystemId, skillId, setSkillId, fram
 
     <section class="starter-section" ref={examplesRef} aria-label="Example briefs">
       <div class="section-heading"><h2>A few places to start</h2><span>Make it your own</span></div>
-      <div class="starter-list">{starters.map((s) => <button key={s.type} class="starter-row" onClick={() => { setPrompt(s.prompt); setSkillId(s.type === 'motion' ? 'motion-design' : 'web-artifacts-builder'); setFrame(s.type === 'mobile' ? 'mobile' : 'web'); document.getElementById('home-prompt')?.focus(); }}>
+      <div class="starter-list">{starters.map((s) => <button key={s.type} class="starter-row" onClick={() => { setPrompt(s.prompt); setSkillId(s.type === 'motion' ? 'motion-design' : 'web-prototype'); setFrame(s.type === 'mobile' ? 'mobile' : 'web'); document.getElementById('home-prompt')?.focus(); }}>
         <StarterPreview type={s.type}/><span class="starter-copy"><strong>{s.title}</strong><small>{s.description}</small></span><Icon name="plus" size={18}/>
       </button>)}</div>
     </section>

@@ -26,6 +26,7 @@ func main() {
 		uiDir      = flag.String("ui", defaultUIDir(), "built UI directory to serve")
 		ready      = flag.Bool("print-url", false, "print the serving URL to stdout as soon as it is bound")
 		exitOnEOF  = flag.Bool("exit-on-stdin-close", false, "exit when stdin closes (parent-death guard for app shells)")
+		renderer   = flag.String("renderer", "", "path to pidesigner-render (default: beside this executable)")
 	)
 	flag.Parse()
 
@@ -38,6 +39,7 @@ func main() {
 		ContentDir: *contentDir,
 		PiBin:      *piBin,
 		UIDir:      *uiDir,
+		Renderer:   *renderer,
 	})
 	if err != nil {
 		log.Fatal(err)

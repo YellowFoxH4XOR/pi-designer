@@ -6,6 +6,7 @@ package store
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -97,7 +98,41 @@ func (s *Store) migrate() error {
 			return fmt.Errorf("migrate: %w", err)
 		}
 	}
+	// The last plan and preview renders of a run, as JSON arrays.
+	for _, col := range []string{"todos", "renders"} {
+		if err := s.addColumn("runs", col, "TEXT"); err != nil {
+			return fmt.Errorf("migrate: %w", err)
+		}
+	}
+	// web-artifacts-builder is a catalogue stub without a workflow; the
+	// Prototype workflow is the web-prototype skill.
+	if _, err := s.db.Exec(`UPDATE projects SET skill_id='web-prototype' WHERE skill_id='web-artifacts-builder'`); err != nil {
+		return fmt.Errorf("migrate: %w", err)
+	}
 	return nil
+}
+
+// addColumn adds a column unless the table already has it.
+func (s *Store) addColumn(table, column, typ string) error {
+	rows, err := s.db.Query(`SELECT name FROM pragma_table_info(?)`, table)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return err
+		}
+		if name == column {
+			return nil
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	_, err = s.db.Exec(fmt.Sprintf(`ALTER TABLE %s ADD COLUMN %s %s`, table, column, typ))
+	return err
 }
 
 // ---------------------------------------------------------------- projects
@@ -341,19 +376,31 @@ func (s *Store) FinishRun(id, status, errMsg string) error {
 	return err
 }
 
-// GetRun loads one run.
-func (s *Store) GetRun(id string) (model.Run, error) {
+// SaveRunWork records a run's latest plan and its preview renders.
+func (s *Store) SaveRunWork(id string, todos []model.Todo, renders []model.Render) error {
+	t, err := json.Marshal(todos)
+	if err != nil {
+		return err
+	}
+	r, err := json.Marshal(renders)
+	if err != nil {
+		return err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	row := s.db.QueryRow(`SELECT id,project_id,COALESCE(conversation_id,''),status,COALESCE(prompt,''),
-		COALESCE(error,''),started_at,ended_at FROM runs WHERE id=?`, id)
+	_, err = s.db.Exec(`UPDATE runs SET todos=?, renders=? WHERE id=?`, string(t), string(r), id)
+	return err
+}
+
+const runColumns = `id,project_id,COALESCE(conversation_id,''),status,COALESCE(prompt,''),
+		COALESCE(error,''),started_at,ended_at,COALESCE(todos,''),COALESCE(renders,'')`
+
+func scanRun(scan func(...any) error) (model.Run, error) {
 	var r model.Run
 	var started int64
 	var ended sql.NullInt64
-	if err := row.Scan(&r.ID, &r.ProjectID, &r.ConversationID, &r.Status, &r.Prompt, &r.Error, &started, &ended); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return r, ErrNotFound
-		}
+	var todos, renders string
+	if err := scan(&r.ID, &r.ProjectID, &r.ConversationID, &r.Status, &r.Prompt, &r.Error, &started, &ended, &todos, &renders); err != nil {
 		return r, err
 	}
 	r.StartedAt = time.UnixMilli(started)
@@ -361,7 +408,25 @@ func (s *Store) GetRun(id string) (model.Run, error) {
 		t := time.UnixMilli(ended.Int64)
 		r.EndedAt = &t
 	}
+	// Rows written before these columns existed have no work recorded.
+	if todos != "" {
+		_ = json.Unmarshal([]byte(todos), &r.Todos)
+	}
+	if renders != "" {
+		_ = json.Unmarshal([]byte(renders), &r.Renders)
+	}
 	return r, nil
+}
+
+// GetRun loads one run.
+func (s *Store) GetRun(id string) (model.Run, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	r, err := scanRun(s.db.QueryRow(`SELECT `+runColumns+` FROM runs WHERE id=?`, id).Scan)
+	if errors.Is(err, sql.ErrNoRows) {
+		return r, ErrNotFound
+	}
+	return r, err
 }
 
 // FailStaleRuns marks runs that were still marked running as failed. A daemon
@@ -384,24 +449,16 @@ func (s *Store) FailStaleRuns() (int64, error) {
 func (s *Store) ListRuns(projectID string) ([]model.Run, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	rows, err := s.db.Query(`SELECT id,project_id,COALESCE(conversation_id,''),status,COALESCE(prompt,''),
-		COALESCE(error,''),started_at,ended_at FROM runs WHERE project_id=? ORDER BY started_at DESC`, projectID)
+	rows, err := s.db.Query(`SELECT `+runColumns+` FROM runs WHERE project_id=? ORDER BY started_at DESC`, projectID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	var out []model.Run
 	for rows.Next() {
-		var r model.Run
-		var started int64
-		var ended sql.NullInt64
-		if err := rows.Scan(&r.ID, &r.ProjectID, &r.ConversationID, &r.Status, &r.Prompt, &r.Error, &started, &ended); err != nil {
+		r, err := scanRun(rows.Scan)
+		if err != nil {
 			return nil, err
-		}
-		r.StartedAt = time.UnixMilli(started)
-		if ended.Valid {
-			t := time.UnixMilli(ended.Int64)
-			r.EndedAt = &t
 		}
 		out = append(out, r)
 	}

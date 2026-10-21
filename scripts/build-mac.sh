@@ -39,10 +39,22 @@ swiftc \
   -o "${BUNDLE}/Contents/MacOS/pidesigner-app" \
   mac/Sources/main.swift
 
+echo "==> compiling renderer CLI"
+# Offscreen WKWebView renderer used by the render_preview Pi tool. Built for
+# the app bundle and copied to bin/ so dev runs can use the same binary.
+swiftc \
+  -O \
+  -target arm64-apple-macos13.0 \
+  -framework Cocoa \
+  -framework WebKit \
+  -o bin/pidesigner-render \
+  mac/Render/main.swift
+
 echo "==> assembling bundle"
 cp mac/Info.plist "${BUNDLE}/Contents/Info.plist"
 cp bin/pidesigner "${BUNDLE}/Contents/MacOS/pidesigner"
 cp bin/pidesigner-mcp "${BUNDLE}/Contents/MacOS/pidesigner-mcp"
+cp bin/pidesigner-render "${BUNDLE}/Contents/MacOS/pidesigner-render"
 
 # Content catalog: the canonical trio plus components and previews.
 rsync -a --exclude 'source/' --exclude 'DESIGN-*.md' --exclude '.DS_Store' \

@@ -37,12 +37,30 @@ Prototype preview sizes are 1440×900 (web), 1280×800 (desktop), and 390×844 (
 
 The Mac app supports desktop content windows from 900×620 upward. There is no phone/tablet application or hosted browser product.
 
+## How the design agent works
+
+Each run follows the clarify → plan → design → verify → refine loop used by Open Design and Claude's design tooling (research notes: `docs/research/`).
+
+1. **Clarify only when it matters.** A thin brief gets one short `<question-form>` rendered as an interactive form with recommended defaults; the agent stops until you answer. Specific briefs, local edits, and editor (MCP) runs skip it.
+2. **Plan visibly.** The agent's first tool call is `todo_write`; the studio shows it as a live plan card. Unfinished plans offer **Continue remaining tasks**.
+3. **Design plan, reviewed.** Before code, it writes a palette, type roles, an ASCII wireframe, and principles, then revises anything that reads like a generic default (Anthropic's `frontend-design` skill, always on).
+4. **Build from real resources.** The design system's DESIGN.md and `tokens.css` are bound verbatim; the workflow skill's seed, layouts, and checklist are read before writing.
+5. **Look at the result.** `render_preview` renders the artifact in WebKit at the Web/Desktop/Mobile frames and returns the screenshot plus measured overflow, script errors, and broken images. Renders appear in the conversation. Budget: four per run.
+6. **Deliver.** Working notes collapse under **Design notes**; the summary follows, with up to three follow-up suggestions.
+
+Each conversation is a persistent Pi session, so follow-ups keep the agent's full context. Conversations created before sessions existed replay their transcript once.
+
+The prompt lives in `internal/prompt` (stable instructions per project, per-turn context separately so provider prompt caches survive). The Pi tools live in `internal/agentext/pidesigner.ts`, installed into the data directory at startup and loaded with `pi --extension`.
+
 ## Local data and execution
 
 ```text
 ~/Library/Application Support/PiDesigner/
-  pidesigner.db       projects, conversations, messages, runs
+  pidesigner.db       projects, conversations, messages, runs (with plans and renders)
   projects/          actual project files
+  sessions/          one Pi session per conversation
+  renders/           previews the agent rendered, per project
+  agent/             PiDesigner's Pi extension (rewritten at startup)
   preferences.json   model and thinking choices
   runtime.json       current private loopback endpoint for MCP discovery
 ```
@@ -100,10 +118,12 @@ build/PiDesigner.app/Contents/MacOS/pidesigner-app \
 mac/                     native AppKit/WKWebView shell and bundle metadata
 cmd/pidesigner/          internal Go daemon executable
 cmd/pidesigner-mcp/      stateless stdio MCP bridge
+mac/Render/              pidesigner-render: offscreen WebKit renderer for render_preview
 internal/app/            daemon lifecycle and native runtime discovery
 internal/api/            project/catalog APIs and run orchestration
+internal/prompt/         design-agent prompt: charter, workflow protocol, craft rules
+internal/agentext/       Pi extension providing todo_write and render_preview
 internal/pirun/          installed Pi JSONL RPC integration
-internal/preview/        artifact serving, change watching, CSS hot-swap
 internal/store/          SQLite persistence
 internal/content/        design-system and skill catalog
 internal/project/        project file manager
@@ -114,4 +134,4 @@ scripts/                 local builds, icon generation, review helpers
 
 ## Content provenance
 
-`content/` is vendored from the local reference checkout. Package manifests retain source information; upstream licenses on individual skills are retained. Design-system names and brands belong to their respective owners. This repository’s local usage does not imply their endorsement or grant trademark rights.
+`content/` is vendored from the local reference checkout. Package manifests retain source information; upstream licenses on individual skills are retained. `content/skills/frontend-design` is Anthropic's Apache-2.0 skill from `claude-plugins-official`, kept verbatim with its `LICENSE.txt`. The protocol text in `internal/prompt` adapts Open Design's design charter (Apache-2.0). Design-system names and brands belong to their respective owners. This repository’s local usage does not imply their endorsement or grant trademark rights.

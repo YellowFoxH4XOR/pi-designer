@@ -13,15 +13,25 @@ export interface SystemContext {
 export interface Skill { id: string; name: string; description?: string; mode?: string; hasScripts: boolean }
 export interface Message { id: string; conversationId: string; role: string; content: string; createdAt: string }
 export interface Conversation { id: string; title: string; projectId: string }
+export type TodoStatus = 'pending' | 'in_progress' | 'completed';
+export interface Todo { content: string; status: TodoStatus }
+export interface Render {
+  viewport: 'web' | 'desktop' | 'mobile' | string; path?: string; image: string;
+  overflowX?: boolean; errors?: number;
+}
 export interface Run {
   id: string; projectId: string; conversationId?: string;
   status: 'running' | 'succeeded' | 'failed' | 'canceled'; error?: string; startedAt: string;
+  todos?: Todo[]; renders?: Render[];
 }
 export interface Health { ok: boolean; piBin: string; projectRoot: string; designSystems: number; skills: number }
 export interface PiModel { id: string; provider: string; name: string; reasoning: boolean; contextWindow?: number }
 export interface ModelCatalog { models: PiModel[]; current?: PiModel; thinkingLevels: string[] }
 export interface Connection { available: boolean; config: Record<string, unknown> }
-export interface AgentEvent { type: string; text?: string; tool?: string; args?: Record<string, unknown>; isError?: boolean }
+export interface AgentEvent {
+  type: string; text?: string; tool?: string; args?: Record<string, unknown>; isError?: boolean;
+  todos?: Todo[]; render?: Render;
+}
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, { ...init, headers: { 'Content-Type': 'application/json', ...init?.headers } });
@@ -66,7 +76,7 @@ function pickProject(p: Project) { return { name: p.name, designSystemId: p.desi
 // fast run cannot strand the UI in a permanent "working" state.
 export function subscribeRun(runId: string, onEvent: (event: AgentEvent) => void) {
   const es = new EventSource(`/api/runs/${encodeURIComponent(runId)}/events`);
-  for (const type of ['text', 'tool', 'tool_end', 'turn', 'model', 'done', 'error', 'canceled', 'stderr']) {
+  for (const type of ['text', 'tool', 'tool_end', 'turn', 'model', 'done', 'error', 'canceled', 'stderr', 'todos', 'render']) {
     es.addEventListener(type, ((e: MessageEvent) => {
       if (!e.data) return; // browser transport errors are not agent errors
       try { onEvent(JSON.parse(e.data)); } catch { /* ignore incomplete transport frames */ }

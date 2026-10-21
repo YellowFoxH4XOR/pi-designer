@@ -80,7 +80,7 @@ const metaPath = process.env.PIDESIGNER_REVIEW_META || '/tmp/pidesigner-design-r
     record('Projects has an actionable empty state');
 
     // Real Go API project, explicitly labeled as a review fixture.
-    const p = await api('/api/projects', { name: 'Workspace review fixture', designSystemId: 'linear-app', skillId: 'web-artifacts-builder' });
+    const p = await api('/api/projects', { name: 'Workspace review fixture', designSystemId: 'linear-app', skillId: 'web-prototype' });
     meta.projectId = p.project.id;
     await fs.writeFile(metaPath, JSON.stringify(meta));
     const fixture = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="style.css"><title>Preview verification</title></head><body><nav>FORM / STUDIO<span>Independent design practice</span></nav><main><h1>Less noise.<br>More intention.</h1><p>A local preview fixture for checking the studio canvas, responsive layout, and live stylesheet updates.</p><button>Explore the work</button><section><article>Digital experiences</article><article>Thoughtful interfaces</article></section></main></body></html>`;

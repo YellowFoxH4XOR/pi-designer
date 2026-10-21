@@ -42,10 +42,16 @@ type Template struct {
 	Triggers    []string `json:"triggers,omitempty"`
 }
 
-// Open builds a catalog rooted at the given content directory.
+// Open builds a catalog rooted at the given content directory. The root is
+// made absolute: the agent runs inside a project directory, so every path
+// the catalog hands it must resolve from anywhere.
 func Open(root string) (*Catalog, error) {
+	abs, err := filepath.Abs(root)
+	if err != nil {
+		return nil, err
+	}
 	c := &Catalog{
-		Root:         root,
+		Root:         abs,
 		systemsByID:  map[string]model.DesignSystem{},
 		skillsByID:   map[string]model.Skill{},
 		templatesByK: map[string]Template{},

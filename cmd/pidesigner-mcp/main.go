@@ -275,7 +275,7 @@ func toolDefinitions() []toolDef {
 				"prompt":         map[string]any{"type": "string", "description": "The design brief."},
 				"conversationId": map[string]any{"type": "string", "description": "Conversation to append the turn to."},
 				"designSystemId": map[string]any{"type": "string", "description": "Design system to apply."},
-				"skillId":        map[string]any{"type": "string", "description": "Skill to load (web-artifacts-builder, motion-design, web-clone, ...)."},
+				"skillId":        map[string]any{"type": "string", "description": "Skill to load (web-prototype, motion-design, web-clone, ...)."},
 				"model":          map[string]any{"type": "string", "description": "Exact provider/model id from list_models. Omit to use the model saved in PiDesigner."},
 			}),
 		},
@@ -354,6 +354,8 @@ func (s *server) callTool(ctx context.Context, req rpcRequest) {
 			"designSystemId": argStr(args, "designSystemId"),
 			"skillId":        argStr(args, "skillId"),
 			"model":          argStr(args, "model"),
+			// Editors cannot answer PiDesigner's question forms.
+			"skipDiscovery": true,
 		})
 	case "get_run":
 		s.proxy(ctx, req, http.MethodGet, "/api/runs/"+argStr(args, "runId"), nil)

@@ -60,6 +60,26 @@ type Run struct {
 	Error          string     `json:"error,omitempty"`
 	StartedAt      time.Time  `json:"startedAt"`
 	EndedAt        *time.Time `json:"endedAt,omitempty"`
+	// Todos is the agent's latest plan snapshot.
+	Todos []Todo `json:"todos,omitempty"`
+	// Renders are the previews the agent rendered to inspect its work.
+	Renders []Render `json:"renders,omitempty"`
+}
+
+// Todo is one step of the agent's plan.
+type Todo struct {
+	Content string `json:"content"`
+	Status  string `json:"status"` // pending | in_progress | completed
+}
+
+// Render is one preview the agent rendered and inspected.
+type Render struct {
+	Viewport  string `json:"viewport"`
+	Path      string `json:"path"`
+	Image     string `json:"image"` // daemon URL of the PNG
+	FullPage  bool   `json:"fullPage,omitempty"`
+	OverflowX bool   `json:"overflowX"`
+	Errors    int    `json:"errors"`
 }
 
 // File is a project file entry as reported to clients.

@@ -69,6 +69,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/projects/{id}/runs", s.handleRuns)
 	mux.HandleFunc("POST /api/runs/{id}/cancel", s.handleCancelRun)
 	mux.HandleFunc("GET /api/runs/{id}/events", s.handleRunEvents)
+	mux.HandleFunc("GET /api/projects/{id}/renders/{name}", s.handleRender)
 
 	// Catalog
 	mux.HandleFunc("GET /api/skills", s.handleSkills)
@@ -502,6 +503,21 @@ func (s *Server) handleRunEvents(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+}
+
+// handleRender serves a preview render the agent took of a project.
+func (s *Server) handleRender(w http.ResponseWriter, r *http.Request) {
+	proj, _, ok := s.resolveProject(w, r)
+	if !ok {
+		return
+	}
+	path := s.Runner.RenderFile(proj.ID, r.PathValue("name"))
+	if path == "" {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Cache-Control", "private, max-age=31536000, immutable")
+	http.ServeFile(w, r, path)
 }
 
 func (s *Server) handleSkills(w http.ResponseWriter, r *http.Request) {

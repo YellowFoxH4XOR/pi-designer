@@ -19,7 +19,6 @@ DEST="$ROOT/content"
 SKILLS=(
   web-clone
   motion-design
-  web-artifacts-builder
   emilkowalski-motion
   web-design-guidelines
   agent-browser
@@ -57,7 +56,9 @@ done
 
 echo "==> skills"
 mkdir -p "$DEST/skills"
-rm -rf "$DEST/skills"/*
+# frontend-design is Anthropic's always-on design skill, vendored separately
+# from claude-plugins-official; it is not part of the OpenDesign checkout.
+find "$DEST/skills" -mindepth 1 -maxdepth 1 ! -name frontend-design -exec rm -rf {} +
 for s in "${SKILLS[@]}"; do
   [ -d "$UP/skills/$s" ] || { echo "  skip (missing): $s"; continue; }
   cp -R "$UP/skills/$s" "$DEST/skills/$s"

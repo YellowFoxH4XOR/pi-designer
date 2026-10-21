@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/akki/pidesigner/internal/agentext"
 	"github.com/akki/pidesigner/internal/api"
 	"github.com/akki/pidesigner/internal/content"
 	"github.com/akki/pidesigner/internal/pirun"
@@ -35,6 +36,9 @@ type Options struct {
 	PiBin      string // pi executable, empty resolves automatically
 	UIDir      string // built UI directory, empty disables static serving
 	Quiet      bool   // suppress request logging
+	// Renderer is the pidesigner-render executable. Empty looks beside the
+	// daemon executable; render_preview is disabled when none is found.
+	Renderer string
 }
 
 // App is a running daemon.
@@ -89,7 +93,21 @@ func Start(opts Options) (*App, error) {
 	}
 
 	hub := preview.NewHub()
-	runner := api.NewRunner(st, cat, opts.PiBin, hub)
+	extension, err := agentext.Install(filepath.Join(opts.DataDir, "agent"))
+	if err != nil {
+		st.Close()
+		return nil, fmt.Errorf("install agent extension: %w", err)
+	}
+	renderer := resolveRenderer(opts.Renderer)
+	if renderer == "" {
+		log.Printf("warning: pidesigner-render not found; the agent will verify designs without rendering them")
+	}
+	runner := api.NewRunner(st, cat, opts.PiBin, hub, api.RunnerConfig{
+		SessionDir: filepath.Join(opts.DataDir, "sessions"),
+		RenderDir:  filepath.Join(opts.DataDir, "renders"),
+		Extension:  extension,
+		Renderer:   renderer,
+	})
 	srv := &api.Server{
 		Store:       st,
 		Catalog:     cat,
@@ -201,4 +219,29 @@ func withStatic(next http.Handler, dir string) http.Handler {
 		}
 		fs.ServeHTTP(w, r)
 	})
+}
+
+// rendererName is the bundled WebKit renderer, installed beside the daemon.
+const rendererName = "pidesigner-render"
+
+// resolveRenderer returns an executable renderer path, or "".
+func resolveRenderer(explicit string) string {
+	candidates := []string{explicit}
+	if explicit == "" {
+		if exe, err := os.Executable(); err == nil {
+			if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+				exe = resolved
+			}
+			candidates = []string{filepath.Join(filepath.Dir(exe), rendererName)}
+		}
+	}
+	for _, c := range candidates {
+		if c == "" {
+			continue
+		}
+		if info, err := os.Stat(c); err == nil && !info.IsDir() && info.Mode()&0o111 != 0 {
+			return c
+		}
+	}
+	return ""
 }

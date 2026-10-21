@@ -15,6 +15,7 @@ import (
 	"github.com/akki/pidesigner/internal/model"
 	"github.com/akki/pidesigner/internal/pirun"
 	"github.com/akki/pidesigner/internal/project"
+	"github.com/akki/pidesigner/internal/prompt"
 	"github.com/akki/pidesigner/internal/store"
 )
 
@@ -27,6 +28,8 @@ type AgentEvent struct {
 	Args    json.RawMessage `json:"args,omitempty"`
 	IsError bool            `json:"isError,omitempty"`
 	Aborted bool            `json:"aborted,omitempty"`
+	Todos   []model.Todo    `json:"todos,omitempty"`
+	Render  *model.Render   `json:"render,omitempty"`
 	At      int64           `json:"at"`
 }
 
@@ -100,6 +103,7 @@ type Runner struct {
 	store   *store.Store
 	catalog *content.Catalog
 	piBin   string
+	cfg     RunnerConfig
 
 	mu       sync.Mutex
 	sessions map[string]*pirun.Session
@@ -108,17 +112,31 @@ type Runner struct {
 	hub      FileChangeNotifier
 }
 
+// RunnerConfig locates the agent's persistent state and design tools.
+type RunnerConfig struct {
+	// SessionDir stores one native Pi session per conversation.
+	SessionDir string
+	// RenderDir stores preview renders, one subdirectory per project.
+	RenderDir string
+	// Extension is PiDesigner's Pi extension (todo_write, render_preview).
+	Extension string
+	// Renderer is the pidesigner-render executable; empty disables
+	// render_preview.
+	Renderer string
+}
+
 // FileChangeNotifier is notified when a run mutates project files.
 type FileChangeNotifier interface {
 	NotifyProjectChanged(projectID string)
 }
 
 // NewRunner creates a Runner.
-func NewRunner(st *store.Store, cat *content.Catalog, piBin string, hub FileChangeNotifier) *Runner {
+func NewRunner(st *store.Store, cat *content.Catalog, piBin string, hub FileChangeNotifier, cfg RunnerConfig) *Runner {
 	return &Runner{
 		store:    st,
 		catalog:  cat,
 		piBin:    piBin,
+		cfg:      cfg,
 		sessions: map[string]*pirun.Session{},
 		brokers:  map[string]*broker{},
 		active:   map[string]string{},
@@ -136,6 +154,10 @@ type RunRequest struct {
 	TemplateID     string `json:"templateId,omitempty"`
 	Model          string `json:"model,omitempty"`
 	Thinking       string `json:"thinking,omitempty"`
+	// Viewport is the preview frame the user is looking at.
+	Viewport string `json:"viewport,omitempty"`
+	// SkipDiscovery is set by clients that cannot answer question forms.
+	SkipDiscovery bool `json:"skipDiscovery,omitempty"`
 }
 
 // RunHandle is a started run.
@@ -225,49 +247,37 @@ func (r *Runner) execute(run model.Run, proj model.Project, req RunRequest, b *b
 		Thinking: req.Thinking,
 		// Automated runs cannot answer Pi's project-trust prompt over RPC.
 		Approve: true,
+		Env:     append(os.Environ(), "PIDESIGNER_RENDER_DIR="+filepath.Join(r.cfg.RenderDir, proj.ID)),
+	}
+	if r.cfg.Extension != "" {
+		opts.Extensions = []string{r.cfg.Extension}
+	}
+	if r.cfg.Renderer != "" {
+		opts.Env = append(opts.Env, "PIDESIGNER_RENDERER="+r.cfg.Renderer)
 	}
 
-	// Runs use Pi's own process and authentication. Carry recent conversation
-	// context explicitly between ephemeral invocations for follow-up edits.
-	if req.ConversationID != "" {
-		if messages, err := r.store.ListMessages(req.ConversationID); err == nil {
-			if len(messages) > 0 && messages[len(messages)-1].Role == model.RoleUser {
-				messages = messages[:len(messages)-1]
-			}
-			if len(messages) > 12 {
-				messages = messages[len(messages)-12:]
-			}
-			var history strings.Builder
-			for _, message := range messages {
-				fmt.Fprintf(&history, "\n\n[%s]\n%s", message.Role, message.Content)
-			}
-			if history.Len() > 0 {
-				opts.SystemPromptText = "Recent conversation for context. Continue refining the existing project; the new user prompt follows separately." + history.String()
-			}
+	turn := prompt.TurnInput{Prompt: req.Prompt, Viewport: req.Viewport, SkipDiscovery: req.SkipDiscovery}
+	// Each conversation is one native Pi session, so follow-up turns keep the
+	// agent's full context: its plan, the files it read, its renders. A
+	// conversation that predates native sessions gets its transcript replayed
+	// once; the session it starts carries the history from then on.
+	if req.ConversationID != "" && r.cfg.SessionDir != "" {
+		opts.Session = true
+		opts.SessionDir = r.cfg.SessionDir
+		opts.SessionID = req.ConversationID
+		if !r.hasSession(req.ConversationID) {
+			turn.Transcript = r.priorTranscript(req.ConversationID)
 		}
 	}
 
-	// Load the selected skill so the agent picks up its methodology.
-	if req.SkillID != "" {
-		if sk, ok := r.catalog.Skill(req.SkillID); ok {
-			opts.SkillPaths = append(opts.SkillPaths, sk.Path)
-		}
-	} else if req.TemplateID != "" {
-		if t, ok := r.catalog.Template(req.TemplateID); ok {
-			opts.SkillPaths = append(opts.SkillPaths, t.Path)
-		}
+	systemFile, cleanup, err := r.writeSystemPrompt(proj, req)
+	if err != nil {
+		r.store.FinishRun(run.ID, model.RunFailed, err.Error())
+		b.publish(AgentEvent{Type: "error", RunID: run.ID, Text: err.Error(), At: nowMs()})
+		return
 	}
-
-	// Compose the brand contract + working instructions into a temp file so
-	// the context is appended to Pi's system prompt without argv limits.
-	dsID := req.DesignSystemID
-	if dsID == "" {
-		dsID = proj.DesignSystemID
-	}
-	if ctxFile, cleanup, err := r.composeSystemContext(proj, dsID, req.TemplateID); err == nil {
-		opts.SystemPromptFiles = append(opts.SystemPromptFiles, ctxFile)
-		defer cleanup()
-	}
+	defer cleanup()
+	opts.SystemPromptFiles = []string{systemFile}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -312,6 +322,7 @@ func (r *Runner) execute(run model.Run, proj model.Project, req RunRequest, b *b
 	processGone := make(chan struct{})
 	var assistantText strings.Builder
 	var providerFailure string
+	work := &runWork{}
 
 	go func() {
 		defer close(processGone)
@@ -320,26 +331,40 @@ func (r *Runner) execute(run model.Run, proj model.Project, req RunRequest, b *b
 			case pirun.EventTextDelta:
 				assistantText.WriteString(ev.Text)
 				b.publish(AgentEvent{Type: "text", RunID: run.ID, Text: ev.Text, At: nowMs()})
-			case pirun.EventAgentEnd:
-				// A run spans several assistant turns. Separate them so the
-				// transcript reads as paragraphs instead of running together.
+			case pirun.EventAgentEnd, pirun.EventModelResult:
+				if ev.Type == pirun.EventModelResult {
+					// A successful retry clears a previous transient provider error.
+					providerFailure = ""
+				}
+				// A run spans several assistant messages separated by tool
+				// calls. Separate them so the transcript reads as paragraphs
+				// instead of running together mid-sentence.
 				if s := assistantText.String(); s != "" && !strings.HasSuffix(s, "\n\n") {
 					assistantText.WriteString("\n\n")
+					b.publish(AgentEvent{Type: "turn", RunID: run.ID, At: nowMs()})
 				}
-				b.publish(AgentEvent{Type: "turn", RunID: run.ID, At: nowMs()})
 			case pirun.EventToolStart:
 				b.publish(AgentEvent{Type: "tool", RunID: run.ID, Tool: ev.ToolName, Args: ev.ToolArgs, At: nowMs()})
+				if ev.ToolName == "todo_write" {
+					if todos, ok := parseTodos(ev.ToolArgs); ok {
+						work.setTodos(todos)
+						b.publish(AgentEvent{Type: "todos", RunID: run.ID, Todos: todos, At: nowMs()})
+					}
+				}
 			case pirun.EventToolEnd:
 				b.publish(AgentEvent{Type: "tool_end", RunID: run.ID, Tool: ev.ToolName, IsError: ev.IsError, At: nowMs()})
 				// Tool calls mutate the project; nudge preview watchers.
 				if ev.ToolName == "write" || ev.ToolName == "edit" || ev.ToolName == "multi_edit" {
 					r.hub.NotifyProjectChanged(proj.ID)
 				}
+				if ev.ToolName == "render_preview" && !ev.IsError {
+					if render, ok := parseRender(proj.ID, ev.ToolDetails); ok {
+						work.addRender(render)
+						b.publish(AgentEvent{Type: "render", RunID: run.ID, Render: &render, At: nowMs()})
+					}
+				}
 			case pirun.EventStderr:
 				b.publish(AgentEvent{Type: "stderr", RunID: run.ID, Text: ev.Text, At: nowMs()})
-			case pirun.EventModelResult:
-				// A successful retry clears a previous transient provider error.
-				providerFailure = ""
 			case pirun.EventError:
 				providerFailure = ev.Text
 				b.publish(AgentEvent{Type: "error", RunID: run.ID, Text: ev.Text, At: nowMs()})
@@ -350,7 +375,7 @@ func (r *Runner) execute(run model.Run, proj model.Project, req RunRequest, b *b
 		}
 	}()
 
-	disposition, err := sess.Prompt(ctx, req.Prompt)
+	disposition, err := sess.Prompt(ctx, prompt.Turn(turn))
 	if err != nil {
 		r.store.FinishRun(run.ID, model.RunFailed, err.Error())
 		b.publish(AgentEvent{Type: "error", RunID: run.ID, Text: err.Error(), At: nowMs()})
@@ -395,7 +420,9 @@ func (r *Runner) execute(run model.Run, proj model.Project, req RunRequest, b *b
 		failure = providerFailure
 	}
 
-	// Persist the assistant turn.
+	// Persist the plan, the renders, and the assistant turn.
+	todos, renders := work.snapshot()
+	_ = r.store.SaveRunWork(run.ID, todos, renders)
 	if txt := strings.TrimSpace(assistantText.String()); txt != "" && run.ConversationID != "" {
 		_ = r.store.AppendMessage(model.Message{
 			ID: newID("msg"), ConversationID: run.ConversationID,
@@ -469,91 +496,204 @@ func finishRun(r *Runner, run model.Run, b *broker, aborted bool) {
 	b.publish(AgentEvent{Type: "done", RunID: run.ID, At: nowMs()})
 }
 
-// composeSystemContext writes the brand contract and working instructions to a
-// temporary file that Pi appends to its system prompt.
-func (r *Runner) composeSystemContext(proj model.Project, dsID, templateID string) (string, func(), error) {
-	var b strings.Builder
+// writeSystemPrompt composes the project's stable design instructions into a
+// temporary file that Pi appends to its system prompt (no argv limits).
+func (r *Runner) writeSystemPrompt(proj model.Project, req RunRequest) (string, func(), error) {
+	in := prompt.Input{
+		ProjectDir:     proj.Dir,
+		FrontendDesign: readFile(filepath.Join(r.catalog.Root, "skills", prompt.FrontendDesignSkillID, "SKILL.md")),
+		CraftDir:       filepath.Join(r.catalog.Root, "craft"),
+		CraftDocs:      r.catalog.CraftIndex(),
+		RenderPreview:  r.cfg.Renderer != "" && r.cfg.Extension != "",
+	}
 
-	b.WriteString("# Working context for this design task\n\n")
-	fmt.Fprintf(&b, "Project directory: %s\n", proj.Dir)
-	b.WriteString("You are working inside a design project directory. Write the artifact files there.\n")
-	b.WriteString("Deliverables: a self-contained HTML artifact (entry `index.html` unless told otherwise) ")
-	b.WriteString("that renders in a sandboxed preview, with CSS and assets alongside it.\n")
-	b.WriteString("Use the design system's tokens and typography. Do not invent a new palette.\n")
-	b.WriteString("Prefer transform/opacity for animation so the preview stays at 60fps.\n")
-	b.WriteString("Do not search the filesystem for reference material -- every path you need is listed below.\n\n")
-
-	// The preview renders the artifact in three fixed device frames. Naming the
-	// exact viewports is the difference between a design that looks finished in
-	// the app and one that overflows its frame.
-	b.WriteString("## Viewports this design is rendered in\n\n")
-	b.WriteString("The preview shows the artifact in three fixed frames. It must work at all of them:\n\n")
-	b.WriteString("- Web: 1440 x 900\n")
-	b.WriteString("- Desktop: 1280 x 800\n")
-	b.WriteString("- Mobile: 390 x 844\n\n")
-	b.WriteString("390px is a hard requirement, not an afterthought. The page must not overflow ")
-	b.WriteString("horizontally at 390px: no fixed-width containers wider than the viewport, no long ")
-	b.WriteString("unbreakable strings, and no content that depends on a 500px+ breakpoint. Verify the ")
-	b.WriteString("390px layout before you finish.\n\n")
-
+	dsID := req.DesignSystemID
+	if dsID == "" {
+		dsID = proj.DesignSystemID
+	}
 	if dsID != "" {
-		dsDir := filepath.Join(r.catalog.Root, "design-systems", dsID)
-		if ds, err := r.catalog.DesignSystemContext(dsID); err == nil {
-			fmt.Fprintf(&b, "## Design system: %s\n\n", ds.Name)
-			fmt.Fprintf(&b, "Package directory: %s\n\n", dsDir)
-			if ds.UsageMD != "" {
-				b.WriteString("### Usage guide\n\n")
-				b.WriteString(ds.UsageMD)
-				b.WriteString("\n\n")
-			}
-			b.WriteString("### DESIGN.md (brand contract)\n\n")
-			b.WriteString(ds.DesignMD)
-			b.WriteString("\n\n")
-			if ds.TokensCSS != "" {
-				b.WriteString("### tokens.css (canonical semantic tokens)\n\n")
-				b.WriteString("```css\n")
-				b.WriteString(ds.TokensCSS)
-				b.WriteString("\n```\n\n")
-			}
-			if ds.ComponentHx != "" {
-				b.WriteString("### Component reference\n\n")
-				b.WriteString(ds.ComponentHx)
-				b.WriteString("\n\n")
-			}
+		ctx, err := r.catalog.DesignSystemContext(dsID)
+		if err != nil {
+			return "", nil, fmt.Errorf("design system: %w", err)
+		}
+		name := ctx.Name
+		if ds, ok := r.catalog.DesignSystem(dsID); ok && ds.Name != "" {
+			name = ds.Name
+		}
+		in.DesignSystem = &prompt.DesignSystem{
+			Name:           name,
+			Dir:            filepath.Join(r.catalog.Root, "design-systems", dsID),
+			DesignMD:       ctx.DesignMD,
+			TokensCSS:      ctx.TokensCSS,
+			UsageMD:        ctx.UsageMD,
+			ComponentsHTML: ctx.ComponentHx,
 		}
 	}
 
-	if templateID != "" {
-		if t, ok := r.catalog.Template(templateID); ok {
-			fmt.Fprintf(&b, "## Template: %s\n\n", t.Name)
-			fmt.Fprintf(&b, "Template directory: %s\n", t.Path)
-			b.WriteString("Read the template's SKILL.md and follow its structure.\n\n")
-		}
+	skillID := req.SkillID
+	if skillID == "" {
+		skillID = req.TemplateID
+	}
+	if skillID != "" {
+		in.Skill = r.resolveSkill(skillID)
 	}
 
-	// Craft laws: the shared design discipline applied to every artifact.
-	craftDir := filepath.Join(r.catalog.Root, "craft")
-	if laws := r.catalog.CraftIndex(); len(laws) > 0 {
-		b.WriteString("## Design laws\n\n")
-		fmt.Fprintf(&b, "Directory: %s\n\n", craftDir)
-		b.WriteString("Read the ones that matter for this task before writing code:\n")
-		for _, l := range laws {
-			fmt.Fprintf(&b, "- %s\n", filepath.Join(craftDir, l))
-		}
-		b.WriteString("\n")
-	}
-
-	f, err := os.CreateTemp("", "pidesigner-context-*.md")
+	f, err := os.CreateTemp("", "pidesigner-system-*.md")
 	if err != nil {
-		return "", func() {}, err
+		return "", nil, err
 	}
 	path := f.Name()
-	if _, err := f.WriteString(b.String()); err != nil {
+	if _, err := f.WriteString(prompt.System(in)); err != nil {
 		_ = f.Close()
-		return "", func() {}, err
+		_ = os.Remove(path)
+		return "", nil, err
 	}
-	_ = f.Close()
+	if err := f.Close(); err != nil {
+		_ = os.Remove(path)
+		return "", nil, err
+	}
 	return path, func() { _ = os.Remove(path) }, nil
+}
+
+// resolveSkill finds a workflow skill among skills and design templates;
+// both are directories with a SKILL.md.
+func (r *Runner) resolveSkill(id string) *prompt.Skill {
+	name, dir := "", ""
+	if sk, ok := r.catalog.Skill(id); ok {
+		name, dir = sk.Name, sk.Path
+	} else if t, ok := r.catalog.Template(id); ok {
+		name, dir = t.Name, t.Path
+	} else {
+		return nil
+	}
+	body := readFile(filepath.Join(dir, "SKILL.md"))
+	if body == "" {
+		return nil
+	}
+	return &prompt.Skill{ID: id, Name: name, Dir: dir, Body: body}
+}
+
+// hasSession reports whether Pi already stores a session for a conversation.
+// Pi names session files "<timestamp>_<session id>.jsonl".
+func (r *Runner) hasSession(conversationID string) bool {
+	matches, _ := filepath.Glob(filepath.Join(r.cfg.SessionDir, "*_"+conversationID+".jsonl"))
+	return len(matches) > 0
+}
+
+// maxReplayMessages bounds the transcript replayed into a new session.
+const maxReplayMessages = 24
+
+// priorTranscript returns the conversation before the current user turn.
+func (r *Runner) priorTranscript(conversationID string) []prompt.Message {
+	messages, err := r.store.ListMessages(conversationID)
+	if err != nil {
+		return nil
+	}
+	// Start appended the current prompt; it is sent separately.
+	if n := len(messages); n > 0 && messages[n-1].Role == model.RoleUser {
+		messages = messages[:n-1]
+	}
+	if len(messages) > maxReplayMessages {
+		messages = messages[len(messages)-maxReplayMessages:]
+	}
+	out := make([]prompt.Message, 0, len(messages))
+	for _, m := range messages {
+		if m.Role == model.RoleUser || m.Role == model.RoleAssistant {
+			out = append(out, prompt.Message{Role: m.Role, Content: m.Content})
+		}
+	}
+	return out
+}
+
+// runWork accumulates the plan and renders of a run.
+type runWork struct {
+	mu      sync.Mutex
+	todos   []model.Todo
+	renders []model.Render
+}
+
+func (w *runWork) setTodos(t []model.Todo) {
+	w.mu.Lock()
+	w.todos = t
+	w.mu.Unlock()
+}
+
+func (w *runWork) addRender(r model.Render) {
+	w.mu.Lock()
+	w.renders = append(w.renders, r)
+	w.mu.Unlock()
+}
+
+func (w *runWork) snapshot() ([]model.Todo, []model.Render) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return append([]model.Todo(nil), w.todos...), append([]model.Render(nil), w.renders...)
+}
+
+// parseTodos reads a todo_write call's arguments.
+func parseTodos(args json.RawMessage) ([]model.Todo, bool) {
+	var in struct {
+		Todos []model.Todo `json:"todos"`
+	}
+	if json.Unmarshal(args, &in) != nil || in.Todos == nil {
+		return nil, false
+	}
+	todos := make([]model.Todo, 0, len(in.Todos))
+	for _, t := range in.Todos {
+		if strings.TrimSpace(t.Content) == "" {
+			continue
+		}
+		switch t.Status {
+		case "pending", "in_progress", "completed":
+		default:
+			t.Status = "pending"
+		}
+		todos = append(todos, t)
+	}
+	return todos, true
+}
+
+// renderFileName matches the PNG names the extension writes.
+var renderFileName = regexp.MustCompile(`^[0-9]+-(web|desktop|mobile)(-full)?\.png$`)
+
+// parseRender reads a finished render_preview call's details.
+func parseRender(projectID string, details json.RawMessage) (model.Render, bool) {
+	var d struct {
+		Viewport  string `json:"viewport"`
+		Path      string `json:"path"`
+		File      string `json:"file"`
+		FullPage  bool   `json:"fullPage"`
+		OverflowX bool   `json:"overflowX"`
+		Errors    int    `json:"errors"`
+	}
+	if json.Unmarshal(details, &d) != nil || !renderFileName.MatchString(d.File) {
+		return model.Render{}, false
+	}
+	return model.Render{
+		Viewport:  d.Viewport,
+		Path:      d.Path,
+		Image:     "/api/projects/" + projectID + "/renders/" + d.File,
+		FullPage:  d.FullPage,
+		OverflowX: d.OverflowX,
+		Errors:    d.Errors,
+	}, true
+}
+
+// RenderFile resolves a render image of a project, or "" when the name is not
+// a render the extension could have written.
+func (r *Runner) RenderFile(projectID, name string) string {
+	if !renderFileName.MatchString(name) || r.cfg.RenderDir == "" {
+		return ""
+	}
+	return filepath.Join(r.cfg.RenderDir, projectID, name)
+}
+
+func readFile(path string) string {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	return string(b)
 }
 
 // ArtifactBundle is the full set of files an artifact needs.

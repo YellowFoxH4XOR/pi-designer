@@ -57,7 +57,7 @@ function SystemDetail({ system, onBack, onUse, onError }: { system: DesignSystem
 }
 
 const skillDescriptions: Record<string, string> = {
-  'web-artifacts-builder': 'Build interactive web, mobile, and desktop prototypes from a brief.',
+  'frontend-design': 'Always on: plan a distinctive direction, review it against generic defaults, then critique the build.',
   'motion-design': 'Shape animation, timing, typography, and visual continuity.',
   'web-clone': 'Inspect a reference website and rebuild its structure and interactions.',
   'emilkowalski-motion': 'Refine the feel of interface transitions and micro-interactions.',

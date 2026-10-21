@@ -14,7 +14,7 @@ j() { python3 -c "import json,sys; d=json.load(sys.stdin); print($1)"; }
 
 echo "==> creating project"
 PROJ=$(curl -s -X POST "$BASE/api/projects" -H 'Content-Type: application/json' \
-  -d '{"name":"Flux Hero","designSystemId":"agentic","skillId":"web-artifacts-builder"}')
+  -d '{"name":"Flux Hero","designSystemId":"agentic","skillId":"web-prototype"}')
 PID=$(echo "$PROJ" | j "d['project']['id']")
 CID=$(echo "$PROJ" | j "d['conversationId']")
 echo "project=$PID conversation=$CID"

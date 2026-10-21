@@ -48,9 +48,11 @@ type Event struct {
 	Text     string          `json:"text,omitempty"`
 	ToolName string          `json:"toolName,omitempty"`
 	ToolArgs json.RawMessage `json:"toolArgs,omitempty"`
-	IsError  bool            `json:"isError,omitempty"`
-	Aborted  bool            `json:"aborted,omitempty"`
-	Raw      json.RawMessage `json:"-"`
+	// ToolDetails is a finished tool's structured result details.
+	ToolDetails json.RawMessage `json:"toolDetails,omitempty"`
+	IsError     bool            `json:"isError,omitempty"`
+	Aborted     bool            `json:"aborted,omitempty"`
+	Raw         json.RawMessage `json:"-"`
 }
 
 // Options configure a Pi invocation.
@@ -77,6 +79,11 @@ type Options struct {
 	Session bool
 	// SessionDir is where sessions are persisted when Session is true.
 	SessionDir string
+	// SessionID opens or creates the exact session with this id. Requires
+	// Session.
+	SessionID string
+	// Extensions are extension files loaded explicitly for this run.
+	Extensions []string
 	// AllowTools restricts the tool set, e.g. ["read","write","edit","bash"].
 	AllowTools []string
 	// Approve grants a one-time project-trust decision for the run. Automated
@@ -148,8 +155,13 @@ func Start(ctx context.Context, opts Options) (*Session, error) {
 	args := []string{"--mode", "rpc"}
 	if !opts.Session {
 		args = append(args, "--no-session")
-	} else if opts.SessionDir != "" {
-		args = append(args, "--session-dir", opts.SessionDir)
+	} else {
+		if opts.SessionDir != "" {
+			args = append(args, "--session-dir", opts.SessionDir)
+		}
+		if opts.SessionID != "" {
+			args = append(args, "--session-id", opts.SessionID)
+		}
 	}
 	if opts.Model != "" {
 		// Separate provider and model id so duplicate names across providers
@@ -166,6 +178,9 @@ func Start(ctx context.Context, opts Options) (*Session, error) {
 	}
 	for _, s := range opts.SkillPaths {
 		args = append(args, "--skill", s)
+	}
+	for _, e := range opts.Extensions {
+		args = append(args, "--extension", e)
 	}
 	for _, f := range opts.SystemPromptFiles {
 		args = append(args, "--append-system-prompt", f)
@@ -393,9 +408,12 @@ func (s *Session) handleEvent(line []byte, recType string) {
 		var e struct {
 			ToolName string `json:"toolName"`
 			IsError  bool   `json:"isError"`
+			Result   struct {
+				Details json.RawMessage `json:"details"`
+			} `json:"result"`
 		}
 		_ = json.Unmarshal(line, &e)
-		s.emit(Event{Type: EventToolEnd, ToolName: e.ToolName, IsError: e.IsError})
+		s.emit(Event{Type: EventToolEnd, ToolName: e.ToolName, IsError: e.IsError, ToolDetails: e.Result.Details})
 	}
 }
 

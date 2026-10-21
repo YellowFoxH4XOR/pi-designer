@@ -22,7 +22,7 @@ export function App() {
   const [health, setHealth] = useState<Health | null>(null);
   const { preferences, ready: preferencesReady, save: saveModelPreferences } = useModels();
   const [systemId, setSystemId] = useState('');
-  const [skillId, setSkillId] = useState('web-artifacts-builder');
+  const [skillId, setSkillId] = useState('web-prototype');
   const [frame, setFrame] = useState<Frame>('web');
   const [pickingSystem, setPickingSystem] = useState(false);
   const [starting, setStarting] = useState(false);
@@ -48,10 +48,10 @@ export function App() {
     document.title = `${title} — PiDesigner`;
   }, [route, projects]);
 
-  async function startRun(project: Project, conversationId: string, prompt: string) {
+  async function startRun(project: Project, conversationId: string, prompt: string, viewport: Frame) {
     if (!preferencesReady) throw new Error('Pi model preferences are still loading. Try again in a moment.');
     if (runs[project.id]?.status === 'running') throw new Error('Pi is already working in this project. Stop that run before starting another.');
-    const { runId } = await api.chat(project.id, { prompt, conversationId, designSystemId: project.designSystemId, skillId: project.skillId, model: preferences.model, thinking: preferences.thinking });
+    const { runId } = await api.chat(project.id, { prompt, conversationId, viewport, designSystemId: project.designSystemId, skillId: project.skillId, model: preferences.model, thinking: preferences.thinking });
     monitor({ id: runId, projectId: project.id, conversationId, status: 'running', startedAt: new Date().toISOString() });
   }
   async function createAndStart(prompt: string) {
@@ -63,7 +63,7 @@ export function App() {
       const { project, conversationId } = await api.createProject({ name: name.charAt(0).toUpperCase() + name.slice(1), designSystemId: systemId, skillId });
       setProjects((all) => [project, ...all]);
       navigate(`project/${project.id}`);
-      try { await startRun(project, conversationId, `${prompt}\n\nPrimary preview: ${frame}. Keep it responsive at all three supported device sizes.`); }
+      try { await startRun(project, conversationId, prompt, frame); }
       catch (e) { report(`The project was created, but Pi couldn’t start. ${String(e).replace(/^Error: /, '')}`); }
     } catch (e) { report(String(e)); }
     finally { setStarting(false); }
