@@ -1,5 +1,5 @@
 import type { ComponentChildren } from 'preact';
-import { RunActivity } from '../components/Activity';
+import { RunActivity, RunProgress } from '../components/Activity';
 import { fromActivity, type RunState as ActivityRun } from '../activity';
 import { ModelIcon } from '../components/ModelIcon';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
@@ -8,7 +8,7 @@ import { AgentMessage } from '../components/AgentMessage';
 import { Composer } from '../components/Composer';
 import { CritiqueCard } from '../components/CritiqueCard';
 import { Dialog, Empty, IconButton } from '../components/common';
-import { Icon, Logo, PiLogo } from '../components/Icon';
+import { AgentMark, Icon, Logo } from '../components/Icon';
 import { RenderDialogBody, RenderStrip, renderLabel } from '../components/RenderStrip';
 import { RichText } from '../components/RichText';
 import { PreviewPane, type FileChange } from '../components/PreviewPane';
@@ -107,7 +107,7 @@ export function Studio({ projectId, systems, run, onMonitor, onStart, onHome, on
   useEffect(() => {
     const el = messagesPane.current;
     if (follow.current && el) el.scrollTop = el.scrollHeight;
-  }, [messages, run?.text, run?.tools.length, run?.todos.length, run?.renders.length, run?.critiques.length]);
+  }, [messages, run?.phase, run?.text, run?.tools.length, run?.todos.length, run?.renders.length, run?.critiques.length]);
 
   // Every user turn goes through here: the composer, question forms and
   // next-step chips all submit the same way.
@@ -203,22 +203,23 @@ export function Studio({ projectId, systems, run, onMonitor, onStart, onHome, on
             return <article key={message.id} class="message message-user"><div class="message-byline"><span>You</span></div><RichText text={message.content}/></article>;
           }
           return <article key={message.id} class="message message-assistant">
-            <div class="message-byline"><PiLogo size={20}/><strong>π agent</strong></div>
+            <div class="message-byline"><AgentMark size={20}/><strong>omp agent</strong></div>
             <AgentMessage text={message.content} interactive={index === latestAssistantIndex && !busy && !connecting} answered={answeredFormsFor(index)} onSend={sendText}/>
           </article>;
         })}
-        {showLive && <article class="message message-assistant live-message"><div class="message-byline"><PiLogo size={20}/><strong>π agent</strong><span class="generating-label">Working<span class="working-indicator"><i/><i/><i/></span></span></div>{run.text ? <AgentMessage text={run.text} live/> : <p class="thinking-label">Reading your brief and planning the design…</p>}</article>}
+        {showLive && <article class="message message-assistant live-message"><div class="message-byline"><AgentMark size={20}/><strong>omp agent</strong><span class="generating-label">Working<span class="working-indicator"><i/><i/><i/></span></span></div>{run.text && <AgentMessage text={run.text} live/>}</article>}
         {run?.model && run.conversationId === conversationId && <p class="run-model"><ModelIcon id={run.modelId} provider={run.provider} size={16}/>Using {run.model}</p>}
         {planTodos.length > 0 && <TodoCard todos={planTodos} live={showLive}/>}
         {planRenders.length > 0 && <RenderStrip renders={planRenders} onOpen={setPreview}/>}
         {planCritiques.length > 0 && <CritiqueCard critiques={planCritiques} live={showLive}/>}
+        {showLive && <RunProgress run={run}/>}
 
         {canContinue && <div class="continue-tasks"><button class="button secondary" onClick={() => void sendText(continueMessage(planTodos))} disabled={connecting}><Icon name="refresh" size={15}/>Continue remaining tasks<span class="continue-count">{openTodos.length}</span></button></div>}
-        {run?.status === 'failed' && <div class="inline-error" role="alert"><strong>π couldn’t finish this run.</strong><p>{run.error || 'Check your π model configuration, then try again.'}</p></div>}
-        {run?.status === 'canceled' && <p class="run-status">Generation stopped. Your existing files are unchanged unless π saved an edit before stopping.</p>}
+        {run?.status === 'failed' && <div class="inline-error" role="alert"><strong>omp couldn’t finish this run.</strong><p>{run.error || 'Check your omp model configuration, then try again.'}</p></div>}
+        {run?.status === 'canceled' && <p class="run-status">Generation stopped. Your existing files are unchanged unless omp saved an edit before stopping.</p>}
         {run?.status === 'succeeded' && !run.attention && <p class="run-status"><Icon name="check" size={15}/>{files.some((file) => /\.html?$/i.test(file.path)) ? 'Finished. Your design is ready to explore.' : 'Finished. Response saved to this conversation.'}</p>}
       </div>
-      <div class="studio-composer"><Composer compact value={prompt} onChange={setPrompt} onSubmit={send} busy={busy} disabled={connecting} onStop={() => { if (run) api.cancelRun(run.id).catch((e) => onError(e.message)); }} systemName={system?.name} onSystem={() => setPickingSystem(true)} frame={frame} onFrame={setFrame}/><p>π can edit project files and run commands on your Mac.</p></div>
+      <div class="studio-composer"><Composer compact value={prompt} onChange={setPrompt} onSubmit={send} busy={busy} disabled={connecting} onStop={() => { if (run) api.cancelRun(run.id).catch((e) => onError(e.message)); }} systemName={system?.name} onSystem={() => setPickingSystem(true)} frame={frame} onFrame={setFrame}/><p>omp can edit project files and run commands on your Mac.</p></div>
     </section><PreviewPane project={project} files={files} frame={frame} onFrame={setFrame} changes={changes} busy={busy} activityLabel={displayedActivity?.label} onError={onError}/></div>
     {pickingSystem && <SystemPicker systems={systems} selected={project.designSystemId || ''} onClose={() => setPickingSystem(false)} onSelect={async (id) => { try { const d = await api.updateProject({ ...project, designSystemId: id }); setProject(d.project); setPickingSystem(false); } catch (e) { onError(String(e)); } }}/>}
     {preview && <Dialog title={`${renderLabel(preview)} render`} onClose={() => setPreview(null)} class="render-dialog"><RenderDialogBody render={preview}/></Dialog>}

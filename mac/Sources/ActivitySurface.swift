@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct ActivitySurface: View {
     @ObservedObject var model: ActivityViewModel
@@ -12,7 +13,7 @@ struct ActivitySurface: View {
         VStack(spacing: 0) {
             Button(action: notch ? toggle : { open(nil) }) {
                 HStack(spacing: 10) {
-                    Text("π").font(.system(size: 27, weight: .semibold)).foregroundColor(Color(red: 0.72, green: 0.74, blue: 1))
+                    Image(nsImage: NSApp.applicationIconImage).resizable().interpolation(.high).frame(width: 32, height: 32).accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: 3) {
                         Text(notch && model.expanded ? "Workspace activity" : model.items.first(where: { $0.active })?.projectName ?? "πDesigner").font(.system(size: 12, weight: .semibold)).lineLimit(1)
                         Text(model.disconnected ? "Activity disconnected · reconnecting" : model.items.first(where: { $0.active })?.label ?? "No active tasks").font(.system(size: 11)).foregroundColor(.secondary).lineLimit(1)
@@ -34,7 +35,7 @@ struct ActivitySurface: View {
                                         Text(item.projectName).font(.system(size: 12, weight: .semibold)).lineLimit(1)
                                         Label(item.label, systemImage: item.attention ? "bubble.left.and.exclamationmark.bubble.right" : item.status == "running" ? "waveform.path" : item.status == "failed" ? "exclamationmark.triangle" : item.status == "canceled" ? "stop.circle" : "checkmark.circle")
                                             .font(.system(size: 11)).foregroundColor(item.attention ? .orange : .secondary).lineLimit(2)
-                                        Text("\(item.elapsed(at: model.now)) · \(item.model ?? "π agent")").font(.system(size: 10)).foregroundColor(.secondary).lineLimit(1)
+                                        Text("\(item.elapsed(at: model.now)) · \(item.model ?? "omp agent")").font(.system(size: 10)).foregroundColor(.secondary).lineLimit(1)
                                     }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
                                 }.buttonStyle(.plain).accessibilityLabel("Open \(item.projectName). \(item.label)")
                                 if item.status == "running" { Button("Stop task", role: .destructive) { stop(item) }.font(.system(size: 11)).buttonStyle(.borderless) }

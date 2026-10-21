@@ -2,8 +2,8 @@
 
 ## Ownership
 
-- `internal/pirun/pi.go`: process lifetime, strict LF-only JSONL framing, command correlation and shutdown. Backpressure replaces silently dropping events. Metadata-only sessions explicitly drain their startup events.
-- `internal/pirun/events.go`: protocol decoding. Preserves tool-call IDs, latest tool result snapshots, durations, final messages and text-block indices. Exposes only a thinking-state marker, not private thinking content; binary/image tool content stays out of text logs.
+- `internal/omprun/omp.go`: omp process lifetime, strict LF-only JSONL framing, command correlation and shutdown. Backpressure replaces silently dropping events. Metadata-only sessions explicitly drain their startup events.
+- `internal/omprun/events.go`: protocol decoding. Preserves tool-call IDs, latest tool result snapshots, durations, final messages and text-block indices. Exposes only a thinking-state marker, not private thinking content; binary/image tool content stays out of text logs.
 - `internal/model/activity.go`: version-1 event contract and materialized activity projection. Execution status and attention are distinct; a completed turn may still need an answer.
 - `internal/store/activity.go`: atomic journal/projection commits in SQLite, replay cursors, per-project discovery. Project deletion cascades into its journal. Legacy runs have no retroactive tool log.
 - `internal/api/activity_journal.go`: serialized journal ownership, no lossy subscriber buffers.
@@ -24,9 +24,9 @@
 - `GET /api/runs/:id/activity`: complete materialized state for one run.
 - `GET /api/runs/:id/log?after=<seq>`: at most 500 ordered events per page.
 - `GET /api/runs/:id/events?after=<seq>`: SSE with durable `id` fields and `Last-Event-ID` resumption. Completed runs remain readable. A terminal snapshot and `stream_end` close the connection, including legacy/interrupted runs.
-- `POST /api/runs/:id/ui-response`: validates the still-pending request ID and select options before sending a supported extension response to π.
+- `POST /api/runs/:id/ui-response`: validates the still-pending request ID and select options before sending a supported extension response to omp.
 
-Text events are coalesced over 60 ms without crossing content-block boundaries or dropping text. Output previews are limited to 16 KB per tool; tool partial results replace their previous preview instead of duplicating cumulative output. Tools correlate by ID, never by name or presumed order. Final assistant messages replace streamed drafts. Lifecycle waits for `agent_settled`, not `agent_end`.
+Text events are coalesced over 60 ms without crossing content-block boundaries or dropping text. Output previews are limited to 16 KB per tool; tool partial results replace their previous preview instead of duplicating cumulative output. Tools correlate by ID, never by name or presumed order. Final assistant messages replace streamed drafts. Lifecycle waits for omp's `session_settled` (or a `prompt_result` that reports a settled session), not `agent_end`; `prompt_result.status` is the authoritative completed/aborted/error outcome. Records larger than 1 MiB arrive losslessly through negotiated RPC protocol v2 `rpc_chunk` reassembly.
 
 SSE reads durable pages every 250 ms with keepalives. Workspace discovery polls every 1.5 seconds; the native controller polls summaries every second independently of WKWebView. These are bounded observation delays, not separate execution state machines. Connection failures are labeled as disconnected/reconnecting rather than inventing progress.
 

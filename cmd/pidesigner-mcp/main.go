@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -60,7 +61,7 @@ func main() {
 		daemon    = flag.String("daemon", envOr("PIDESIGNER_DAEMON", defaultDaemonURL), "daemon base URL")
 		discovery = flag.String("discovery", "", "runtime discovery file written by the native app")
 		print     = flag.Bool("print-config", false, "print an MCP client config snippet and exit")
-		client    = flag.String("client", "generic", "client to print a config for (generic|claude|cursor|codex|pi)")
+		client    = flag.String("client", "generic", "client to print a config for (generic|claude|cursor|codex|omp)")
 	)
 	flag.Parse()
 
@@ -143,7 +144,7 @@ func (s *server) handle(ctx context.Context, line []byte) {
 			"serverInfo": map[string]any{"name": serverName, "version": serverVersion},
 			"instructions": "pidesigner exposes a local-first design workspace. " +
 				"Use list_design_systems + the design-system resources for brand context, " +
-				"write_file for surgical edits, and start_run to delegate a full design to the π agent.",
+				"write_file for surgical edits, and start_run to delegate a full design to the omp agent.",
 		})
 	case "notifications/initialized", "notifications/cancelled":
 		// No response for notifications.
@@ -254,7 +255,7 @@ func toolDefinitions() []toolDef {
 		},
 		{
 			Name:        "list_models",
-			Description: "List models configured in the installed π, including exact provider/id values. Credentials remain with π.",
+			Description: "List models configured in the installed omp, including exact provider/id values. Credentials remain with omp.",
 			InputSchema: objectSchema(nil),
 		},
 		{
@@ -269,7 +270,7 @@ func toolDefinitions() []toolDef {
 		},
 		{
 			Name:        "start_run",
-			Description: "Delegate a design task to the π agent running in the project directory. Returns a run id; poll get_run. Prefer this for full generation.",
+			Description: "Delegate a design task to the omp agent running in the project directory. Returns a run id; poll get_run. Prefer this for full generation.",
 			InputSchema: objectSchema(map[string]any{
 				"project":        projArg,
 				"prompt":         map[string]any{"type": "string", "description": "The design brief."},
@@ -322,25 +323,30 @@ func (s *server) callTool(ctx context.Context, req rpcRequest) {
 		_ = json.Unmarshal(p.Arguments, &args)
 	}
 
+	projectRef := strings.TrimSpace(argStr(args, "project"))
+	if projectRef == "" {
+		projectRef = "@active"
+	}
+	projectURL := "/api/projects/" + url.PathEscape(projectRef)
 	switch p.Name {
 	case "list_projects":
 		s.proxy(ctx, req, http.MethodGet, "/api/projects", nil)
 	case "get_project":
-		s.proxy(ctx, req, http.MethodGet, "/api/projects/"+argStr(args, "project"), nil)
+		s.proxy(ctx, req, http.MethodGet, projectURL, nil)
 	case "list_files":
-		s.proxy(ctx, req, http.MethodGet, "/api/projects/"+argStr(args, "project")+"/files", nil)
+		s.proxy(ctx, req, http.MethodGet, projectURL+"/files", nil)
 	case "get_file":
-		s.proxy(ctx, req, http.MethodGet, "/api/projects/"+argStr(args, "project")+"/file?path="+argStr(args, "path"), nil)
+		s.proxy(ctx, req, http.MethodGet, projectURL+"/file?path="+url.QueryEscape(argStr(args, "path")), nil)
 	case "get_artifact":
-		s.proxy(ctx, req, http.MethodGet, "/api/projects/"+argStr(args, "project")+"/artifact?entry="+argStr(args, "entry"), nil)
+		s.proxy(ctx, req, http.MethodGet, projectURL+"/artifact?entry="+url.QueryEscape(argStr(args, "entry")), nil)
 	case "search_files":
-		s.proxy(ctx, req, http.MethodGet, "/api/projects/"+argStr(args, "project")+"/search?q="+argStr(args, "query"), nil)
+		s.proxy(ctx, req, http.MethodGet, projectURL+"/search?q="+url.QueryEscape(argStr(args, "query")), nil)
 	case "write_file":
-		s.proxy(ctx, req, http.MethodPut, "/api/projects/"+argStr(args, "project")+"/file", map[string]any{
+		s.proxy(ctx, req, http.MethodPut, projectURL+"/file", map[string]any{
 			"path": argStr(args, "path"), "content": argStr(args, "content"),
 		})
 	case "delete_file":
-		s.proxy(ctx, req, http.MethodDelete, "/api/projects/"+argStr(args, "project")+"/file?path="+argStr(args, "path"), nil)
+		s.proxy(ctx, req, http.MethodDelete, projectURL+"/file?path="+url.QueryEscape(argStr(args, "path")), nil)
 	case "list_models":
 		s.proxy(ctx, req, http.MethodGet, "/api/models", nil)
 	case "list_skills":
@@ -348,7 +354,7 @@ func (s *server) callTool(ctx context.Context, req rpcRequest) {
 	case "list_design_systems":
 		s.proxy(ctx, req, http.MethodGet, "/api/design-systems", nil)
 	case "start_run":
-		s.proxy(ctx, req, http.MethodPost, "/api/projects/"+argStr(args, "project")+"/chat", map[string]any{
+		s.proxy(ctx, req, http.MethodPost, projectURL+"/chat", map[string]any{
 			"prompt":         argStr(args, "prompt"),
 			"conversationId": argStr(args, "conversationId"),
 			"designSystemId": argStr(args, "designSystemId"),
@@ -530,8 +536,8 @@ func configSnippet(client, daemon string) string {
 		})
 	case "codex":
 		return "Add to ~/.codex/config.toml:\n\n[mcp_servers.pidesigner]\ncommand = \"" + cmd + "\"\nargs = [\"--daemon\", \"" + daemon + "\"]\n"
-	case "pi":
-		return "Add to ~/.pi/agent/mcp.json:\n\n" + prettyJSON(map[string]any{
+	case "omp":
+		return "Add to ~/.omp/agent/mcp.json:\n\n" + prettyJSON(map[string]any{
 			"mcpServers": map[string]any{"pidesigner": entry},
 		})
 	default:

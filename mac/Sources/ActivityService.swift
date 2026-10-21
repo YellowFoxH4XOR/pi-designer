@@ -34,8 +34,14 @@ final class NativeActivityController: NSObject, UNUserNotificationCenterDelegate
         super.init()
         UNUserNotificationCenter.current().delegate = self
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        item.button?.title = "π"
-        item.button?.font = .systemFont(ofSize: 18, weight: .semibold)
+        let symbolURL = Bundle.main.resourceURL?.appendingPathComponent("BrandTemplate.svg")
+        let symbol = symbolURL.flatMap { NSImage(contentsOf: $0) } ?? NSImage(systemSymbolName: "pencil.tip", accessibilityDescription: nil)
+        symbol?.size = NSSize(width: 18, height: 18)
+        symbol?.isTemplate = true
+        item.button?.image = symbol
+        item.button?.imagePosition = .imageLeading
+        item.button?.title = ""
+        item.button?.font = .systemFont(ofSize: 13, weight: .medium)
         item.button?.target = self
         item.button?.action = #selector(togglePopover)
         item.button?.setAccessibilityLabel("πDesigner activity")
@@ -81,7 +87,7 @@ final class NativeActivityController: NSObject, UNUserNotificationCenterDelegate
                 guard error == nil, (response as? HTTPURLResponse)?.statusCode == 200,
                       let data, let result = try? JSONDecoder().decode(Envelope.self, from: data) else {
                     self.model.disconnected = true
-                    self.statusItem?.button?.title = "π !"
+                    self.statusItem?.button?.title = " !"
                     self.statusItem?.button?.toolTip = "Activity disconnected. Reconnecting…"
                     return
                 }
@@ -97,7 +103,7 @@ final class NativeActivityController: NSObject, UNUserNotificationCenterDelegate
                 self.outcomeCursor = result.cursor
                 self.initialized = true
                 let active = result.activities.filter { $0.active }
-                self.statusItem?.button?.title = active.isEmpty ? "π" : "π \(active.count)"
+                self.statusItem?.button?.title = active.isEmpty ? "" : " \(active.count)"
                 self.statusItem?.button?.toolTip = active.first.map { "\($0.projectName) — \($0.label)" } ?? "πDesigner — no active tasks"
                 self.updateVisibility()
             }
@@ -120,7 +126,7 @@ final class NativeActivityController: NSObject, UNUserNotificationCenterDelegate
         let category = activity.attention ? "attention" : activity.status == "failed" ? "failure" : "completed"
         guard preferences[category] else { return }
         let content = UNMutableNotificationContent()
-        content.title = activity.attention ? "π needs your attention" : activity.status == "failed" ? "π couldn’t finish" : "π finished your task"
+        content.title = activity.attention ? "omp needs your attention" : activity.status == "failed" ? "omp couldn’t finish" : "omp finished your task"
         content.body = preferences["previews"] ? "\(activity.projectName) — \(activity.label)" : "Open πDesigner to view the project."
         content.threadIdentifier = activity.projectId
         content.userInfo = ["projectId": activity.projectId, "conversationId": activity.conversationId ?? ""]

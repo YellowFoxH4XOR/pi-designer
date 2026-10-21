@@ -30,9 +30,9 @@ export interface Run {
   status: 'running' | 'succeeded' | 'failed' | 'canceled'; error?: string; startedAt: string;
   todos?: Todo[]; renders?: Render[]; critiques?: Critique[];
 }
-export interface Health { ok: boolean; piBin: string; projectRoot: string; designSystems: number; skills: number }
-export interface PiModel { id: string; provider: string; name: string; reasoning: boolean; contextWindow?: number }
-export interface ModelCatalog { models: PiModel[]; current?: PiModel; thinkingLevels: string[] }
+export interface Health { ok: boolean; ompBin: string; projectRoot: string; designSystems: number; skills: number }
+export interface AgentModel { id: string; provider: string; name: string; reasoning: boolean; contextWindow?: number }
+export interface ModelCatalog { models: AgentModel[]; current?: AgentModel; thinkingLevels: string[] }
 export interface Connection { available: boolean; config: Record<string, unknown> }
 export interface KnowledgeSource { id: string; name: string; url: string; documentUrl?: string; note: string; group?: string; useFor?: string; license?: string; installedHash?: string; previousHash?: string; availableHash?: string; checkedAt?: string; updated: boolean; error?: string }
 export interface AgentEvent {
@@ -68,6 +68,7 @@ export const api = {
   models: (refresh = false) => req<ModelCatalog>(`/api/models${refresh ? '?refresh=1' : ''}`),
   thinkingLevels: (model: string) => req<{ levels: string[] }>(`/api/models/thinking?model=${encodeURIComponent(model)}`),
   projects: () => req<{ projects: Project[] }>('/api/projects'),
+  selectProject: (projectId: string) => req<{ projectId: string }>('/api/active-project', json({ projectId }, 'PUT')),
   createProject: (body: { name: string; designSystemId?: string; skillId?: string }) =>
     req<{ project: Project; conversationId: string }>('/api/projects', json(body)),
   project: (id: string) => req<{ project: Project; conversations: Conversation[] }>(projectPath(id)),

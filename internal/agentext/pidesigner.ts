@@ -1,5 +1,5 @@
 /**
- * πDesigner's π extension: the design-agent tools a design run needs.
+ * πDesigner's omp extension: the design-agent tools a design run needs.
  *
  * - todo_write: the live plan πDesigner renders as a plan card.
  * - select_design_sources: records the model's source choice and resolves only approved references.
@@ -8,6 +8,11 @@
  *   model, so it can critique what it actually built.
  * - submit_critique: records one round of the expert panel critique, scores
  *   it, and decides whether the design ships or must be revised.
+ *
+ * Every tool is registered with loadMode "essential" so the model calls it by
+ * name. omp otherwise mounts new extension tools as discoverable xd:// devices,
+ * which hides the tool name πDesigner keys its plan, render and critique
+ * cards on.
  *
  * Configuration comes from the environment πDesigner sets for the run:
  *   PIDESIGNER_RENDERER    absolute path of pidesigner-render (optional)
@@ -20,8 +25,7 @@ import { execFile } from "node:child_process";
 import { mkdir, readFile, realpath, stat, unlink } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { Type } from "typebox";
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 
 const VIEWPORTS = {
 	web: { label: "Web", width: 1440, height: 900 },
@@ -56,11 +60,6 @@ interface RenderReport {
 	title?: string;
 }
 
-const TodoItem = Type.Object({
-	content: Type.String({ description: "Short imperative step, e.g. 'Build the pricing section'." }),
-	status: Type.Union([Type.Literal("pending"), Type.Literal("in_progress"), Type.Literal("completed")]),
-});
-
 function run(file: string, args: string[], signal?: AbortSignal): Promise<string> {
 	const { promise, resolve, reject } = Promise.withResolvers<string>();
 	execFile(file, args, { timeout: 45_000, signal, maxBuffer: 4 * 1024 * 1024 }, (error, stdout) => {
@@ -92,11 +91,19 @@ async function modelImage(png: string, signal?: AbortSignal): Promise<{ data: st
 }
 
 export default function pidesigner(pi: ExtensionAPI) {
+	const { Type } = pi.typebox;
 	let renders = 0;
+
+	const TodoItem = Type.Object({
+		content: Type.String({ description: "Short imperative step, e.g. 'Build the pricing section'." }),
+		status: Type.Union([Type.Literal("pending"), Type.Literal("in_progress"), Type.Literal("completed")]),
+	});
 
 	pi.registerTool({
 		name: "todo_write",
 		label: "Plan",
+		loadMode: "essential",
+		approval: "read",
 		description:
 			"Create or update the design plan shown to the user as a live plan card. Always send the complete list: " +
 			"every item with its current status. Mark an item in_progress before starting it and completed as soon as it is done.",
@@ -113,6 +120,8 @@ export default function pidesigner(pi: ExtensionAPI) {
 	pi.registerTool({
 		name: "select_design_sources",
 		label: "Choose design sources",
+		loadMode: "essential",
+		approval: "read",
 		description: "Choose up to two approved design references based on the user's goal, audience, platform and desired experience. YOU make the selection, not a keyword router. Call after todo_write and before designing a new interface; use zero sources when none fits. Explain the trade-off. This tool validates source IDs and resolves verified local guidance when available; it never installs components or executes upstream code.",
 		parameters: Type.Object({
 			intent: Type.String({ minLength: 4, maxLength: 140, description: "The user outcome and kind of interface, in plain words." }),
@@ -165,6 +174,8 @@ export default function pidesigner(pi: ExtensionAPI) {
 	pi.registerTool({
 		name: "submit_critique",
 		label: "Critique",
+		loadMode: "essential",
+		approval: "read",
 		description:
 			"Record one round of the expert panel critique of the built design and get the ship/revise decision. " +
 			"The designer states the intent; the critic (hierarchy, type, contrast, rhythm, space), brand (fidelity to the design system or design plan), " +
@@ -233,6 +244,7 @@ export default function pidesigner(pi: ExtensionAPI) {
 	pi.registerTool({
 		name: "render_preview",
 		label: "Render preview",
+		loadMode: "essential",
 		description:
 			"Render a project HTML file in WebKit at one of πDesigner's preview frames (web 1440×900, desktop 1280×800, mobile 390×844) " +
 			"and return a screenshot plus measured facts: horizontal overflow, script errors, broken images, page height. " +

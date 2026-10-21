@@ -8,10 +8,10 @@ Ready for PR review as a local Mac build. The activity pipeline, background life
 
 - `go test -race ./...` and `go vet ./...`.
 - Frontend typecheck, production build, and five reducer/model-identity tests.
-- Metadata-only discovery against the installed π: 70 configured models; exact provider/model selection and supported thinking levels verified without inference or changing the default.
+- Metadata-only discovery against the installed omp: 70 configured models; exact provider/model selection and supported thinking levels verified without inference or changing the default.
 - Twelve browser/native-renderer integration checks against an isolated real daemon/SQLite/SSE, using deterministic fixture RPC: branding/icons, live parallel tools/output, offline/reload recovery, diagnostics, external-run discovery, supported extension questions, question-only completion, provider errors/cancellation, superseded-attention recovery, minimum-window layout, long-conversation scroll containment, variable-height error banners, and native WebKit root-height checks. No browser runtime errors.
 - Eight native integration checks in the actual built app with isolated data/preferences: main-frame native preferences bridge, close continuation, notch expansion, minimize continuation, completion while minimized, menu-bar access after completion, rapid-outcome notification-ledger recovery, and attention independent of foreground WebKit.
-- Ten native DTO/preferences assertions, including distinct attention/completion/failure/cancellation outcomes and private/quiet notification defaults.
+- Ten native DTO/preferences assertions, including distinct attention/completion/failure/cancellation outcomes and private/quiet notification defaults, plus ten designer-logo raster/alpha-template assertions (20 native assertions total).
 - Ad-hoc bundle signing and `codesign --verify --deep --strict build/πDesigner.app`.
 - Mechanical UI detector over `ui/src`: exit 0, no findings.
 - Visual inspection of the working Studio, model picker, 900×620 Studio and native notch panel. Tool status uses explicit words rather than color alone; native current action is exposed to accessibility.
@@ -24,6 +24,14 @@ Browser and native evidence is generated under ignored `.impeccable/review/` by 
 A 60-step plan plus a long conversation and critique reproduced a 3,826px root document inside a 900px window. Absolutely positioned `.sr-only` labels had an unbounded static position outside the conversation's scroll container. The fix explicitly anchors hidden labels, makes the conversation a containing block, bounds the app shell to its viewport, and confines scroll chaining to the appropriate inner panels. Hidden status text remains in the accessibility tree.
 
 The regression verifies root scroll height/window scroll position, independent conversation scrolling, pinned header/composer, large error banners, and native WebKit at 1440×900, 900×620, and a reduced 900×480 CSS viewport (zoom stress). Root CSS minimums are removed; AppKit still enforces the physical window minimum. Expanded activity details can shrink to preserve the composer when an error banner takes space. The existing live app/task was not restarted by these tests.
+
+## Inline live activity
+
+The live conversation now exposes current action, elapsed time, last-event age, recent tool targets and running tool durations without expanding the persistent activity strip. The existing integration review checks visible file/command targets while that strip is collapsed, expands streaming output inline, and opens the full history through **View all activity**. All twelve integration checks passed, including offline/reload recovery, attention, cancellation, minimum-window containment and native WebKit rendering. The five frontend tests, TypeScript check, production build and mechanical UI detector also passed. The updated Mac bundle built and passed its ad-hoc signature verification.
+
+A direct rendered smoke check at 900×620 with a live 60-step plan verified that the latest activity remained inside the visible conversation (183–422px within a 158–442px pane), the document stayed 900×620, the running tool timer advanced, and the last-event age increased during a quiet command. Screenshots were inspected at 1440×900 and 900×620. Verification used isolated data and deterministic RPC; no model request or installed-app replacement was performed.
+
+The combined todo/activity view was also exercised with a live 60-step plan at 900×620: the summary reported 20/60 completed and the actual in-progress step, expanding displayed all 60 todo rows inside a 180px scrolling list, and the document remained 620px high. The activity integration suite, five frontend tests, TypeScript check, mechanical UI detector and rebuilt signed Mac bundle passed after this change.
 
 ## Manual checks / known limits
 

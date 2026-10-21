@@ -6,7 +6,7 @@ Mode: Operate. Code-led implementation, using the user's pinned reference rather
 
 THESIS: A familiar prompt-first design workspace. Replace the developer-console arrangement with Home, Projects, Design systems, Skills, Settings, and an artifact-led Studio.
 
-OWN-WORLD: Light lavender-gray shell, off-white canvas, charcoal ink, PiDesk-family lavender palette with a π-led app identity. The standalone Greek π identifies execution, while model/provider marks identify the selected model. Neutral system UI type; a restrained Georgia heading on Home echoes the supplied reference. Soft corners on the workspace and composer, fine rules, no glow.
+OWN-WORLD: Light lavender-gray shell, off-white canvas and charcoal ink retain the existing workspace. The distinct app mark is a vermilion tile with an ivory artboard, Bézier curve and ink pen nib; a monochrome nib identifies the native menu bar. The execution engine is identified by the official omp logo (`ui/public/omp.svg`, vendored unchanged from can1357/oh-my-pi `assets/icon.svg`, MIT) on its native dark tile. Neutral system UI type and the restrained Georgia Home heading remain unchanged. Soft corners, fine rules, no glow.
 
 STORY: Choose a workflow and design system, write a brief, then enter a studio with the conversation left and the actual preview right. Browse real existing projects and the complete system catalog.
 
@@ -20,4 +20,4 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 
 ## Constraints
 
-Preserve Go and π-only execution, existing data and MCP. No cloud, media-generation, sharing, or account buttons. All navigation and tools must perform their named action. Accessible keyboard operation, readable empty/error/loading states, reduced motion, usable Mac desktop window layouts down to 900×620, and a macOS icon in the built app. macOS desktop is the only app target; web/mobile/desktop frames are artifact-preview targets, not separate clients.
+Preserve Go and omp-only execution, existing data and MCP. No cloud, media-generation, sharing, or account buttons. All navigation and tools must perform their named action. Accessible keyboard operation, readable empty/error/loading states, reduced motion, usable Mac desktop window layouts down to 900×620, and a macOS icon in the built app. macOS desktop is the only app target; web/mobile/desktop frames are artifact-preview targets, not separate clients.

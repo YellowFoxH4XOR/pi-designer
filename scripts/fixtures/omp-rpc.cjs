@@ -1,6 +1,8 @@
 #!/usr/bin/env node
-// Deterministic RPC fixture, never a model provider. Exercises the real daemon,
-// store, stream, web UI and native sidecar without spending inference credits.
+// Deterministic omp RPC fixture, never a model provider. Exercises the real
+// daemon, store, stream, web UI and native sidecar without spending inference
+// credits. Speaks the omp `--mode rpc` protocol: ready frame, prompt
+// admission response, prompt_result and session_settled.
 const fs = require('node:fs');
 const path = require('node:path');
 const readline = require('node:readline');
@@ -12,23 +14,31 @@ const models = [
   { id: 'deepseek-fixture', provider: 'opencode-go', name: 'DeepSeek fixture', reasoning: true },
   { id: 'custom-fixture', provider: 'opencode-go', name: 'OpenCode fixture', reasoning: false },
 ];
-if (argv.includes('--version')) { console.log('fixture 1.0'); process.exit(0); }
-const provider = arg('--provider', 'openai'); const id = arg('--model', 'gpt-fixture');
-const model = models.find(m => m.id === id && m.provider === provider) || models[0];
-const sessionDir = arg('--session-dir'); const sessionId = arg('--session-id');
-if (sessionDir && sessionId) { fs.mkdirSync(sessionDir, { recursive: true }); fs.writeFileSync(path.join(sessionDir, `fixture_${sessionId}.jsonl`), ''); }
+if (argv.includes('--version')) { console.log('omp fixture 1.0'); process.exit(0); }
+const ref = arg('--model', 'openai/gpt-fixture');
+const model = models.find(m => `${m.provider}/${m.id}` === ref) || models[0];
+const sessionDir = arg('--session-dir');
+if (sessionDir) { fs.mkdirSync(sessionDir, { recursive: true }); fs.writeFileSync(path.join(sessionDir, 'fixture_session.jsonl'), ''); }
 const send = obj => process.stdout.write(JSON.stringify(obj) + '\n');
-const response = (req, data = {}) => send({ type: 'response', command: req.type, id: req.id, success: true, data });
-let aborted = false; let active = false; let resolveUI;
+const response = (req, data) => send({ type: 'response', command: req.type, id: req.id, success: true, ...(data === undefined ? {} : { data }) });
+let aborted = false; let active = false; let resolveUI; let promptId;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const message = text => {
   send({ type: 'message_start', message: { role: 'assistant' } });
-  send({ type: 'message_update', assistantMessageEvent: { type: 'text_delta', delta: text } });
+  send({ type: 'message_update', assistantMessageEvent: { type: 'text_delta', contentIndex: 0, delta: text } });
   send({ type: 'message_end', message: { role: 'assistant', stopReason: 'stop', content: [{ type: 'text', text }] } });
+};
+const finish = (status, error) => {
+  send({ type: 'agent_end', messages: [] });
+  send({ type: 'prompt_result', id: promptId, agentInvoked: true, status, ...(error ? { error: { message: error, retryable: false } } : {}), sessionSettled: true });
+  send({ type: 'session_settled' });
+  active = false;
 };
 async function run(text) {
   active = true; aborted = false;
   send({ type: 'agent_start' });
+  // omp terminal presentation state the daemon must ignore.
+  send({ type: 'extension_ui_request', id: 'fixture-widget', method: 'setWidget', widgetKey: 'fixture' });
   if (text.includes('ASK_EXTENSION')) {
     send({ type: 'extension_ui_request', id: 'fixture-confirm', method: 'confirm', title: 'Continue the fixture design?', message: 'This is a deterministic test request.' });
     await new Promise(resolve => { resolveUI = resolve; });
@@ -36,11 +46,21 @@ async function run(text) {
   if (aborted) return;
   if (text.includes('ASK_FORM')) {
     message('<question-form id="fixture-question" title="Choose a direction">{"questions":[{"id":"direction","label":"Visual direction","type":"radio","options":["Quiet","Expressive"],"default":"Quiet"}]}</question-form>');
-    send({ type: 'agent_end' }); send({ type: 'agent_settled', aborted: false }); active = false; return;
+    finish('completed'); return;
   }
   if (text.includes('FAIL_RUN')) {
     send({ type: 'message_end', message: { role: 'assistant', stopReason: 'error', errorMessage: 'Fixture provider failed', content: [] } });
-    send({ type: 'agent_end' }); send({ type: 'agent_settled', aborted: false }); active = false; return;
+    finish('error', 'Fixture provider failed'); return;
+  }
+  if (text.includes('THINKING_TASK')) {
+    send({type:'message_start',message:{role:'assistant'}});
+    send({type:'message_update',assistantMessageEvent:{type:'thinking_start'}});
+    for (let i=0;i<10;i++) {
+      await sleep(600);
+      if (aborted) return;
+      send({type:'message_update',assistantMessageEvent:{type:'thinking_delta',delta:'Private fixture reasoning'}});
+    }
+    send({type:'message_end',message:{role:'assistant',content:[]}});
   }
   message('Reading the project and building a focused interface.');
   if (text.includes('SCROLL_STRESS')) {
@@ -54,7 +74,7 @@ async function run(text) {
   }
   send({ type: 'auto_retry_start', attempt: 1, maxAttempts: 3, delayMs: 20, errorMessage: 'Fixture transient error' });
   await sleep(20); send({ type: 'auto_retry_end', success: true, attempt: 1 });
-  send({ type: 'compaction_start', reason: 'threshold' }); send({ type: 'compaction_end', reason: 'threshold', aborted: false });
+  send({ type: 'auto_compaction_start', reason: 'threshold' }); send({ type: 'auto_compaction_end', reason: 'threshold', aborted: false });
   send({ type: 'tool_execution_start', toolCallId: 'read-1', toolName: 'read', args: { path: 'index.html' } });
   send({ type: 'tool_execution_start', toolCallId: 'bash-1', toolName: 'bash', args: { command: 'printf "Checking design"' } });
   send({ type: 'tool_execution_update', toolCallId: 'bash-1', toolName: 'bash', partialResult: { content: [{ type: 'text', text: 'Checking…' }] } });
@@ -70,15 +90,22 @@ async function run(text) {
   send({ type: 'tool_execution_end', toolCallId: 'write-1', toolName: 'write', result: { content: [{ type: 'text', text: 'Saved index.html' }] }, durationMs: 12, isError: false });
   process.stderr.write('Fixture diagnostic: preview files saved\n');
   message('<pd-done/>Fixture complete. The design is ready to explore.<pd-next>Refine the typography</pd-next>');
-  send({ type: 'agent_end' }); send({ type: 'agent_settled', aborted: false }); active = false;
+  finish('completed');
 }
+send({ type: 'ready', protocolVersion: 1, supportedProtocolVersions: [1, 2], maxFrameBytes: 1048576, maxReassembledFrameBytes: 67108864 });
 readline.createInterface({ input: process.stdin }).on('line', line => {
   let req; try { req = JSON.parse(line); } catch { return; }
-  if (req.type === 'get_state') response(req, { model, isStreaming: active, thinkingLevel: 'medium' });
+  if (req.type === 'negotiate_protocol') response(req, { protocolVersion: 2 });
+  else if (req.type === 'get_state') response(req, { model, isStreaming: active, thinkingLevel: 'medium' });
   else if (req.type === 'get_available_models') response(req, { models });
   else if (req.type === 'get_available_thinking_levels') response(req, { levels: model.reasoning ? ['off', 'medium', 'high'] : ['off'] });
-  else if (req.type === 'prompt') { response(req, { disposition: 'started' }); void run(req.message); }
-  else if (req.type === 'abort') { aborted = true; active = false; resolveUI?.(); send({ type: 'agent_settled', aborted: true }); response(req); }
+  else if (req.type === 'prompt') { promptId = req.id; response(req); void run(req.message); }
+  else if (req.type === 'abort') {
+    const wasActive = active;
+    aborted = true; active = false; resolveUI?.(); resolveUI = undefined;
+    if (wasActive) { send({ type: 'agent_end', messages: [] }); response(req); send({ type: 'prompt_result', id: promptId, agentInvoked: true, status: 'aborted', sessionSettled: true }); send({ type: 'session_settled' }); }
+    else response(req);
+  }
   else if (req.type === 'extension_ui_response') { resolveUI?.(); resolveUI = undefined; }
   else response(req);
 }).on('close', () => process.exit(0));

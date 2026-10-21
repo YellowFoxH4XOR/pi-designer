@@ -37,7 +37,7 @@ export function NativePreferences() {
   const labels: [keyof Omit<Preferences, "authorization">, string][] = [
     ["notch", "Show notch activity when the workspace is in the background"],
     ["completed", "Notify when a task finishes"],
-    ["attention", "Notify when π needs my answer"],
+    ["attention", "Notify when omp needs my answer"],
     ["failure", "Notify when a run fails"],
     ["sound", "Play notification sounds"],
     ["previews", "Include project names in notifications"],

@@ -4,7 +4,7 @@ const { mkdtempSync, rmSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 const { execFileSync } = require("node:child_process");
-const dir = mkdtempSync(join(tmpdir(), "pi-activity-tests-"));
+const dir = mkdtempSync(join(tmpdir(), "omp-activity-tests-"));
 execFileSync(process.execPath, [
   "node_modules/typescript/bin/tsc",
   "src/activity.ts",
@@ -29,7 +29,7 @@ const initial = () =>
     projectName: "Test",
     status: "running",
     phase: "starting",
-    label: "Starting π",
+    label: "Starting omp",
     startedAt: 1,
     updatedAt: 1,
     seq: 0,
