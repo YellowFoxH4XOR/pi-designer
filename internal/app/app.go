@@ -22,6 +22,7 @@ import (
 	"github.com/akki/pidesigner/internal/agentext"
 	"github.com/akki/pidesigner/internal/api"
 	"github.com/akki/pidesigner/internal/content"
+	"github.com/akki/pidesigner/internal/knowledge"
 	"github.com/akki/pidesigner/internal/pirun"
 	"github.com/akki/pidesigner/internal/preview"
 	"github.com/akki/pidesigner/internal/store"
@@ -53,6 +54,7 @@ type App struct {
 	listener      net.Listener
 	piBin         string
 	discoveryPath string
+	stopUpdates   context.CancelFunc
 }
 
 // PiBin reports the resolved pi executable path, or empty when unresolved.
@@ -86,6 +88,12 @@ func Start(opts Options) (*App, error) {
 		return nil, fmt.Errorf("open content catalog: %w", err)
 	}
 	cat.Scan()
+	updates, err := knowledge.Open(filepath.Join(opts.DataDir, "knowledge"))
+	if err != nil {
+		st.Close()
+		return nil, fmt.Errorf("open design references: %w", err)
+	}
+	cat.Knowledge = updates
 
 	resolvedPi, piErr := pirun.ResolveBin(opts.PiBin)
 	if piErr != nil {
@@ -111,6 +119,7 @@ func Start(opts Options) (*App, error) {
 	srv := &api.Server{
 		Store:       st,
 		Catalog:     cat,
+		Knowledge:   updates,
 		Runner:      runner,
 		Hub:         hub,
 		ProjectRoot: projectRoot,
@@ -169,6 +178,20 @@ func Start(opts Options) (*App, error) {
 		return nil, fmt.Errorf("write runtime discovery: %w", err)
 	}
 
+	updateCtx, stopUpdates := context.WithCancel(context.Background())
+	a.stopUpdates = stopUpdates
+	go func() {
+		ticker := time.NewTicker(24 * time.Hour)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-updateCtx.Done():
+				return
+			case <-ticker.C:
+				srv.CheckForUpdates(updateCtx)
+			}
+		}
+	}()
 	go func() {
 		if err := httpSrv.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Printf("server error: %v", err)
@@ -180,6 +203,9 @@ func Start(opts Options) (*App, error) {
 
 // Shutdown reaps agent processes, then drains HTTP.
 func (a *App) Shutdown(ctx context.Context) error {
+	if a.stopUpdates != nil {
+		a.stopUpdates()
+	}
 	if b, err := os.ReadFile(a.discoveryPath); err == nil {
 		var v struct {
 			URL string `json:"url"`

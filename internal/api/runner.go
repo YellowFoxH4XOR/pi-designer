@@ -530,6 +530,11 @@ func (r *Runner) writeSystemPrompt(proj model.Project, req RunRequest) (string, 
 		RenderPreview:  r.cfg.Renderer != "" && r.cfg.Extension != "",
 	}
 
+	if r.catalog.Knowledge != nil {
+		in.KnowledgeDir = r.catalog.Knowledge.Dir
+		in.KnowledgeDocs = r.catalog.Knowledge.Docs()
+	}
+
 	dsID := req.DesignSystemID
 	if dsID == "" {
 		dsID = proj.DesignSystemID

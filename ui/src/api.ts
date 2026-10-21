@@ -34,6 +34,7 @@ export interface Health { ok: boolean; piBin: string; projectRoot: string; desig
 export interface PiModel { id: string; provider: string; name: string; reasoning: boolean; contextWindow?: number }
 export interface ModelCatalog { models: PiModel[]; current?: PiModel; thinkingLevels: string[] }
 export interface Connection { available: boolean; config: Record<string, unknown> }
+export interface KnowledgeSource { id: string; name: string; url: string; documentUrl?: string; note: string; installedHash?: string; previousHash?: string; availableHash?: string; checkedAt?: string; updated: boolean; error?: string }
 export interface AgentEvent {
   version?: number; contentIndex?: number; seq: number; runId: string; at: number; type: string; text?: string; tool?: string; toolCallId?: string; args?: Record<string, unknown>; isError?: boolean;
   output?: string; durationMs?: number; data?: any;
@@ -57,6 +58,11 @@ export const api = {
   runActivity: (id: string) => req<{ activity: Activity }>(`/api/runs/${encodeURIComponent(id)}/activity`),
   respondUI: (id: string, body: { id: string; value?: string; confirmed?: boolean; cancelled?: boolean }) => req(`/api/runs/${encodeURIComponent(id)}/ui-response`, json(body)),
   connection: () => req<Connection>('/api/connection'),
+  knowledge: () => req<{ sources: KnowledgeSource[] }>('/api/knowledge'),
+  checkKnowledge: (id: string) => req<KnowledgeSource>(`/api/knowledge/${encodeURIComponent(id)}/check`, { method: 'POST' }),
+  previewKnowledge: (id: string) => req<{ content: string }>(`/api/knowledge/${encodeURIComponent(id)}/preview`),
+  applyKnowledge: (id: string) => req<KnowledgeSource>(`/api/knowledge/${encodeURIComponent(id)}/apply`, { method: 'POST' }),
+  rollbackKnowledge: (id: string) => req<KnowledgeSource>(`/api/knowledge/${encodeURIComponent(id)}/rollback`, { method: 'POST' }),
   preferences: () => req<{ model: string; thinking: string }>('/api/preferences'),
   savePreferences: (p: { model: string; thinking: string }) => req<{ model: string; thinking: string }>('/api/preferences', json(p, 'PUT')),
   models: (refresh = false) => req<ModelCatalog>(`/api/models${refresh ? '?refresh=1' : ''}`),

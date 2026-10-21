@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/akki/pidesigner/internal/content"
+	"github.com/akki/pidesigner/internal/knowledge"
 	"github.com/akki/pidesigner/internal/model"
 	"github.com/akki/pidesigner/internal/pirun"
 	"github.com/akki/pidesigner/internal/preview"
@@ -25,6 +26,7 @@ import (
 type Server struct {
 	Store       *store.Store
 	Catalog     *content.Catalog
+	Knowledge   *knowledge.Manager
 	Runner      *Runner
 	Hub         *preview.Hub
 	ProjectRoot string
@@ -83,6 +85,11 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/design-systems/{id}/context", s.handleDesignSystemContext)
 	mux.HandleFunc("GET /api/design-systems/{id}/preview/{path...}", s.handleSystemPreview)
 	mux.HandleFunc("GET /api/craft", s.handleCraft)
+	mux.HandleFunc("GET /api/knowledge", s.handleKnowledge)
+	mux.HandleFunc("POST /api/knowledge/{id}/check", s.handleKnowledgeCheck)
+	mux.HandleFunc("GET /api/knowledge/{id}/preview", s.handleKnowledgePreview)
+	mux.HandleFunc("POST /api/knowledge/{id}/apply", s.handleKnowledgeApply)
+	mux.HandleFunc("POST /api/knowledge/{id}/rollback", s.handleKnowledgeRollback)
 
 	// Preview
 	mux.HandleFunc("GET /api/projects/{id}/watch", s.handleWatch)

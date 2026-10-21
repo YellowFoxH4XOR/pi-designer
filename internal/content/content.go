@@ -14,13 +14,15 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/akki/pidesigner/internal/knowledge"
 	"github.com/akki/pidesigner/internal/model"
 	"gopkg.in/yaml.v3"
 )
 
 // Catalog indexes the content directories.
 type Catalog struct {
-	Root string
+	Root      string
+	Knowledge *knowledge.Manager // optional reviewed references in user data
 
 	mu           sync.RWMutex
 	systems      []model.DesignSystem
