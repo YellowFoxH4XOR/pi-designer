@@ -42,7 +42,7 @@ swiftc \
   mac/Sources/*.swift
 
 echo "==> compiling renderer CLI"
-# Offscreen WKWebView renderer used by the render_preview Pi tool. Built for
+# Offscreen WKWebView renderer used by the render_preview omp tool. Built for
 # the app bundle and copied to bin/ so dev runs can use the same binary.
 swiftc \
   -O \

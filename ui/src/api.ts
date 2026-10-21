@@ -30,9 +30,9 @@ export interface Run {
   status: 'running' | 'succeeded' | 'failed' | 'canceled'; error?: string; startedAt: string;
   todos?: Todo[]; renders?: Render[]; critiques?: Critique[];
 }
-export interface Health { ok: boolean; piBin: string; projectRoot: string; designSystems: number; skills: number }
-export interface PiModel { id: string; provider: string; name: string; reasoning: boolean; contextWindow?: number }
-export interface ModelCatalog { models: PiModel[]; current?: PiModel; thinkingLevels: string[] }
+export interface Health { ok: boolean; ompBin: string; projectRoot: string; designSystems: number; skills: number }
+export interface AgentModel { id: string; provider: string; name: string; reasoning: boolean; contextWindow?: number }
+export interface ModelCatalog { models: AgentModel[]; current?: AgentModel; thinkingLevels: string[] }
 export interface Connection { available: boolean; config: Record<string, unknown> }
 export interface AgentEvent {
   version?: number; contentIndex?: number; seq: number; runId: string; at: number; type: string; text?: string; tool?: string; toolCallId?: string; args?: Record<string, unknown>; isError?: boolean;

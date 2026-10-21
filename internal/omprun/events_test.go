@@ -1,7 +1,8 @@
-package pirun
+package omprun
 
 import (
 	"bufio"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"strings"
@@ -89,13 +90,102 @@ func TestAuthoritativeTextAndThinkingPrivacy(t *testing.T) {
 }
 func TestRetryCompactionAndExtensionRequests(t *testing.T) {
 	s := &Session{events: make(chan Event, 8)}
-	for _, kind := range []string{"auto_retry_start", "auto_retry_end", "compaction_start", "compaction_end", "extension_ui_request"} {
+	s.handleRecord([]byte(`{"type":"extension_ui_request","id":"w","method":"setWidget","widgetKey":"autoresearch"}`))
+	for _, kind := range []string{"auto_retry_start", "auto_retry_end", "auto_compaction_start", "auto_compaction_end", "extension_ui_request"} {
 		s.handleRecord([]byte(`{"type":"` + kind + `","id":"req","method":"confirm"}`))
 	}
+	// The setWidget presentation update is not forwarded; the confirm dialog is.
 	for _, kind := range []string{"retry", "retry_end", "compaction_start", "compaction_end", "extension_ui"} {
 		e := <-s.events
 		if e.Type != kind || !json.Valid(e.Data) {
-			t.Fatal(e)
+			t.Fatal(kind, e)
+		}
+	}
+	if len(s.events) != 0 {
+		t.Fatal("unexpected extra event", <-s.events)
+	}
+}
+
+func TestSettlesOncePerStretchAndCarriesAbort(t *testing.T) {
+	s := &Session{events: make(chan Event, 8)}
+	// Background work still pending at the yield: wait for session_settled.
+	s.handleRecord([]byte(`{"type":"agent_start"}`))
+	s.handleRecord([]byte(`{"type":"prompt_result","id":"r1","agentInvoked":true,"status":"aborted","sessionSettled":false}`))
+	if e := <-s.events; e.Type != EventAgentStart {
+		t.Fatal(e)
+	}
+	if len(s.events) != 0 {
+		t.Fatal("settled before the session was quiet", <-s.events)
+	}
+	s.handleRecord([]byte(`{"type":"session_settled"}`))
+	if e := <-s.events; e.Type != EventSettled || !e.Aborted {
+		t.Fatal("abort status lost", e)
+	}
+	// Already quiet at the yield: settle immediately and ignore the trailing
+	// session_settled frame.
+	s.handleRecord([]byte(`{"type":"agent_start"}`))
+	<-s.events
+	s.handleRecord([]byte(`{"type":"prompt_result","id":"r2","agentInvoked":true,"status":"completed","sessionSettled":true}`))
+	s.handleRecord([]byte(`{"type":"session_settled"}`))
+	if e := <-s.events; e.Type != EventSettled || e.Aborted {
+		t.Fatal(e)
+	}
+	if len(s.events) != 0 {
+		t.Fatal("settled twice", <-s.events)
+	}
+}
+
+func chunkFrames(t *testing.T, id string, record string, size int) []string {
+	t.Helper()
+	var parts []string
+	for i := 0; i < len(record); i += size {
+		parts = append(parts, record[i:min(i+size, len(record))])
+	}
+	frames := make([]string, len(parts))
+	for i, p := range parts {
+		b, _ := json.Marshal(chunkFrame{ChunkID: id, Index: i, Count: len(parts), ByteLength: len(record), Data: base64.StdEncoding.EncodeToString([]byte(p))})
+		frames[i] = strings.Replace(string(b), "{", `{"type":"rpc_chunk",`, 1)
+	}
+	return frames
+}
+
+func TestChunkedRecordsReassembleAndRejectInterleaving(t *testing.T) {
+	s := &Session{events: make(chan Event, 8), pending: map[string]chan *rpcResponse{}}
+	reply := make(chan *rpcResponse, 1)
+	s.pending["r1"] = reply
+	models := `{"type":"response","id":"r1","command":"get_available_models","success":true,"data":{"models":[{"provider":"p","id":"` + strings.Repeat("é", 3000) + `"}]}}`
+	for _, f := range chunkFrames(t, "c1", models, 1000) {
+		s.handleFrame([]byte(f))
+	}
+	select {
+	case r := <-reply:
+		if !r.Success || !strings.Contains(string(r.Data), "éé") {
+			t.Fatal("reassembled response corrupted")
+		}
+	default:
+		t.Fatal("chunked response was not delivered")
+	}
+
+	// An ordinary frame inside a sequence drops the partial record, reports
+	// it, and is itself still processed.
+	frames := chunkFrames(t, "c2", `{"type":"agent_end","messages":[]}`, 10)
+	s.handleFrame([]byte(frames[0]))
+	s.handleFrame([]byte(`{"type":"agent_start"}`))
+	for _, f := range frames[1:] {
+		s.handleFrame([]byte(f))
+	}
+	if e := <-s.events; e.Type != "diagnostic" {
+		t.Fatal("interleaving not reported", e)
+	}
+	if e := <-s.events; e.Type != EventAgentStart {
+		t.Fatal("interrupting frame lost", e)
+	}
+	if e := <-s.events; e.Type != "diagnostic" {
+		t.Fatal("orphaned continuation chunk not rejected", e)
+	}
+	for len(s.events) > 0 {
+		if e := <-s.events; e.Type == EventAgentEnd {
+			t.Fatal("corrupt sequence produced a record")
 		}
 	}
 }
@@ -125,5 +215,21 @@ func TestEventBackpressureDoesNotDropAndCloseUnblocks(t *testing.T) {
 	case <-blocked:
 	case <-time.After(time.Second):
 		t.Fatal("blocked reader did not stop")
+	}
+}
+
+func TestLocalMCPServersFollowOmpTransportInference(t *testing.T) {
+	cfg := `{"mcpServers":{
+		"kite":{"type":"stdio","command":"npx"},
+		"serper":{"command":"npx"},
+		"tinyfish":{"type":"http","url":"https://agent.tinyfish.ai/mcp"},
+		"bare-url":{"url":"https://example.com/mcp"},
+		"legacy":{"type":"sse","url":"https://example.com/sse"},
+		"off":{"command":"npx","enabled":false},
+		"denied":{"command":"npx"}
+	},"disabledServers":["denied"]}`
+	got, err := parseLocalMCP([]byte(cfg))
+	if err != nil || strings.Join(got, ",") != "kite,serper" {
+		t.Fatalf("local servers = %v, %v", got, err)
 	}
 }

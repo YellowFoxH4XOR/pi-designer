@@ -75,7 +75,7 @@ type Activity struct {
 }
 
 func NewActivity(r Run, p Project) Activity {
-	return Activity{RunID: r.ID, ProjectID: r.ProjectID, ProjectName: p.Name, ConversationID: r.ConversationID, Status: r.Status, Phase: "starting", Label: "Starting π", Prompt: r.Prompt, StartedAt: r.StartedAt.UnixMilli(), UpdatedAt: r.StartedAt.UnixMilli(), Tools: []ToolActivity{}}
+	return Activity{RunID: r.ID, ProjectID: r.ProjectID, ProjectName: p.Name, ConversationID: r.ConversationID, Status: r.Status, Phase: "starting", Label: "Starting omp", Prompt: r.Prompt, StartedAt: r.StartedAt.UnixMilli(), UpdatedAt: r.StartedAt.UnixMilli(), Tools: []ToolActivity{}}
 }
 
 // ToolLabel is descriptive, not a claim about what a command will accomplish.

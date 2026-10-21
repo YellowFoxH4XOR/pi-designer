@@ -13,7 +13,7 @@ import (
 
 	"github.com/akki/pidesigner/internal/content"
 	"github.com/akki/pidesigner/internal/model"
-	"github.com/akki/pidesigner/internal/pirun"
+	"github.com/akki/pidesigner/internal/omprun"
 	"github.com/akki/pidesigner/internal/project"
 	"github.com/akki/pidesigner/internal/prompt"
 	"github.com/akki/pidesigner/internal/store"
@@ -26,14 +26,14 @@ type AgentEvent = model.AgentEvent
 type Runner struct {
 	store   *store.Store
 	catalog *content.Catalog
-	piBin   string
+	ompBin  string
 	cfg     RunnerConfig
 
 	uiMu            sync.Mutex
 	mu              sync.Mutex
 	wg              sync.WaitGroup
 	shuttingDown    bool
-	sessions        map[string]*pirun.Session
+	sessions        map[string]*omprun.Session
 	journals        map[string]*eventJournal
 	active          map[string]string
 	cancelRequested map[string]bool
@@ -42,11 +42,13 @@ type Runner struct {
 
 // RunnerConfig locates the agent's persistent state and design tools.
 type RunnerConfig struct {
-	// SessionDir stores one native π session per conversation.
+	// SessionDir holds one omp session directory per conversation:
+	// SessionDir/<conversation id>/.
 	SessionDir string
 	// RenderDir stores preview renders, one subdirectory per project.
 	RenderDir string
-	// Extension is πDesigner's π extension (todo_write, render_preview).
+	// Extension is πDesigner's omp extension (todo_write, render_preview,
+	// submit_critique).
 	Extension string
 	// Renderer is the pidesigner-render executable; empty disables
 	// render_preview.
@@ -59,13 +61,13 @@ type FileChangeNotifier interface {
 }
 
 // NewRunner creates a Runner.
-func NewRunner(st *store.Store, cat *content.Catalog, piBin string, hub FileChangeNotifier, cfg RunnerConfig) *Runner {
+func NewRunner(st *store.Store, cat *content.Catalog, ompBin string, hub FileChangeNotifier, cfg RunnerConfig) *Runner {
 	return &Runner{
 		store:           st,
 		catalog:         cat,
-		piBin:           piBin,
+		ompBin:          ompBin,
 		cfg:             cfg,
-		sessions:        map[string]*pirun.Session{},
+		sessions:        map[string]*omprun.Session{},
 		journals:        map[string]*eventJournal{},
 		active:          map[string]string{},
 		cancelRequested: map[string]bool{},
@@ -103,7 +105,7 @@ func (r *Runner) Start(ctx context.Context, req RunRequest) (*RunHandle, error) 
 	if strings.TrimSpace(req.Prompt) == "" {
 		return nil, fmt.Errorf("prompt is empty")
 	}
-	if err := pirun.ValidateRef(req.Model); err != nil {
+	if err := omprun.ValidateRef(req.Model); err != nil {
 		return nil, err
 	}
 	if req.ConversationID != "" {
@@ -135,7 +137,7 @@ func (r *Runner) Start(ctx context.Context, req RunRequest) (*RunHandle, error) 
 	}
 	if r.active[proj.ID] != "" {
 		r.mu.Unlock()
-		return nil, fmt.Errorf("π is already working in this project")
+		return nil, fmt.Errorf("omp is already working in this project")
 	}
 	r.active[proj.ID] = run.ID
 	r.wg.Add(1)
@@ -182,14 +184,16 @@ func (r *Runner) execute(run model.Run, proj model.Project, req RunRequest, b *e
 
 	pm := project.New(proj.Dir)
 
-	opts := pirun.Options{
-		Bin:      r.piBin,
+	renderDir := filepath.Join(r.cfg.RenderDir, proj.ID)
+	opts := omprun.Options{
+		Bin:      r.ompBin,
 		Dir:      proj.Dir,
 		Model:    req.Model,
 		Thinking: req.Thinking,
-		// Automated runs cannot answer π's project-trust prompt over RPC.
-		Approve: true,
-		Env:     append(os.Environ(), "PIDESIGNER_RENDER_DIR="+filepath.Join(r.cfg.RenderDir, proj.ID)),
+		// Runs are unattended: an approval prompt would wait for an answer
+		// nobody is asked for.
+		AutoApprove: true,
+		Env:         append(os.Environ(), "PIDESIGNER_RENDER_DIR="+renderDir),
 	}
 	if r.cfg.Extension != "" {
 		opts.Extensions = []string{r.cfg.Extension}
@@ -199,17 +203,23 @@ func (r *Runner) execute(run model.Run, proj model.Project, req RunRequest, b *e
 	}
 
 	turn := prompt.TurnInput{Prompt: req.Prompt, Viewport: req.Viewport, SkipDiscovery: req.SkipDiscovery}
-	// Each conversation is one native π session, so follow-up turns keep the
-	// agent's full context: its plan, the files it read, its renders. A
-	// conversation that predates native sessions gets its transcript replayed
-	// once; the session it starts carries the history from then on.
+	// Each conversation is one persistent omp session, so follow-up turns keep
+	// the agent's full context: its plan, the files it read, its renders. A
+	// conversation without an omp session yet (new, or created under the
+	// former π harness) gets its transcript replayed once; the session it
+	// starts carries the history from then on.
 	if req.ConversationID != "" && r.cfg.SessionDir != "" {
-		opts.Session = true
-		opts.SessionDir = r.cfg.SessionDir
-		opts.SessionID = req.ConversationID
-		if !r.hasSession(req.ConversationID) {
+		opts.SessionDir = filepath.Join(r.cfg.SessionDir, req.ConversationID)
+		if !hasSession(opts.SessionDir) {
 			turn.Transcript = r.priorTranscript(req.ConversationID)
 		}
+	}
+
+	// Only remote MCP servers run: local ones are disabled for this project
+	// through omp's project-level MCP config.
+	if err := omprun.WriteLocalMCPPolicy(proj.Dir); err != nil {
+		r.completeRun(run, b, model.RunFailed, "Could not keep local MCP servers out of this run: "+err.Error())
+		return
 	}
 
 	systemFile, cleanup, err := r.writeSystemPrompt(proj, req)
@@ -223,7 +233,7 @@ func (r *Runner) execute(run model.Run, proj model.Project, req RunRequest, b *e
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	sess, err := pirun.Start(ctx, opts)
+	sess, err := omprun.Start(ctx, opts)
 	if err != nil {
 		r.completeRun(run, b, model.RunFailed, err.Error())
 		return
@@ -268,7 +278,7 @@ func (r *Runner) execute(run model.Run, proj model.Project, req RunRequest, b *e
 		}
 		defer flush()
 		for {
-			var ev pirun.Event
+			var ev omprun.Event
 			select {
 			case <-ticker.C:
 				flush()
@@ -279,7 +289,7 @@ func (r *Runner) execute(run model.Run, proj model.Project, req RunRequest, b *e
 				}
 				ev = next
 			}
-			if ev.Type != pirun.EventTextDelta || ev.ContentIndex != pendingIndex {
+			if ev.Type != omprun.EventTextDelta || ev.ContentIndex != pendingIndex {
 				flush()
 			}
 			switch ev.Type {
@@ -294,15 +304,15 @@ func (r *Runner) execute(run model.Run, proj model.Project, req RunRequest, b *e
 				messageText.Reset()
 				messageText.WriteString(ev.Text)
 				b.publish(AgentEvent{Type: "message_end", RunID: run.ID, Text: ev.Text, At: nowMs()})
-			case pirun.EventThinkingDelta:
+			case omprun.EventThinkingDelta:
 				b.publish(AgentEvent{Type: "thinking", RunID: run.ID, At: nowMs()})
-			case pirun.EventTextDelta:
+			case omprun.EventTextDelta:
 				messageText.WriteString(ev.Text)
 				assistantText.WriteString(ev.Text)
 				pendingIndex = ev.ContentIndex
 				pending.WriteString(ev.Text)
-			case pirun.EventAgentEnd, pirun.EventModelResult:
-				if ev.Type == pirun.EventModelResult {
+			case omprun.EventAgentEnd, omprun.EventModelResult:
+				if ev.Type == omprun.EventModelResult {
 					// A successful retry clears a previous transient provider error.
 					providerFailure = ""
 				}
@@ -313,7 +323,7 @@ func (r *Runner) execute(run model.Run, proj model.Project, req RunRequest, b *e
 					assistantText.WriteString("\n\n")
 					b.publish(AgentEvent{Type: "turn", RunID: run.ID, At: nowMs()})
 				}
-			case pirun.EventToolStart:
+			case omprun.EventToolStart:
 				b.publish(AgentEvent{Type: "tool", RunID: run.ID, Tool: ev.ToolName, ToolCallID: ev.ToolCallID, Args: ev.ToolArgs, At: nowMs()})
 				if ev.ToolName == "todo_write" {
 					if todos, ok := parseTodos(ev.ToolArgs); ok {
@@ -323,10 +333,10 @@ func (r *Runner) execute(run model.Run, proj model.Project, req RunRequest, b *e
 				}
 			case "tool_update":
 				b.publish(AgentEvent{Type: "tool_update", RunID: run.ID, Tool: ev.ToolName, ToolCallID: ev.ToolCallID, Args: ev.ToolArgs, Output: ev.Output, At: nowMs()})
-			case pirun.EventToolEnd:
+			case omprun.EventToolEnd:
 				b.publish(AgentEvent{Type: "tool_end", RunID: run.ID, Tool: ev.ToolName, ToolCallID: ev.ToolCallID, Output: ev.Output, DurationMS: ev.DurationMS, IsError: ev.IsError, At: nowMs()})
 				// Tool calls mutate the project; nudge preview watchers.
-				if ev.ToolName == "write" || ev.ToolName == "edit" || ev.ToolName == "multi_edit" {
+				if ev.ToolName == "write" || ev.ToolName == "edit" {
 					r.hub.NotifyProjectChanged(proj.ID)
 				}
 				if ev.ToolName == "render_preview" && !ev.IsError {
@@ -348,12 +358,12 @@ func (r *Runner) execute(run model.Run, proj model.Project, req RunRequest, b *e
 				r.handleExtensionUI(run.ID, sess, b, ev.Data)
 			case "diagnostic":
 				b.publish(AgentEvent{Type: "stderr", RunID: run.ID, Text: ev.Text, At: nowMs()})
-			case pirun.EventStderr:
+			case omprun.EventStderr:
 				b.publish(AgentEvent{Type: "stderr", RunID: run.ID, Text: ev.Text, At: nowMs()})
-			case pirun.EventError:
+			case omprun.EventError:
 				providerFailure = ev.Text
 				b.publish(AgentEvent{Type: "error", RunID: run.ID, Text: ev.Text, At: nowMs()})
-			case pirun.EventSettled:
+			case omprun.EventSettled:
 				settled <- ev.Aborted
 				return
 			}
@@ -364,16 +374,16 @@ func (r *Runner) execute(run model.Run, proj model.Project, req RunRequest, b *e
 		}
 	}()
 
-	// Confirm the installed π selected the exact requested provider/model.
+	// Confirm the installed omp selected the exact requested provider/model.
 	// CLI argument parsing must never silently substitute a similarly named one.
 	checkCtx, checkCancel := context.WithTimeout(ctx, 30*time.Second)
 	state, stateErr := sess.State(checkCtx)
 	checkCancel()
 	if stateErr == nil && state.Model == nil {
-		stateErr = fmt.Errorf("π has no model selected. Open π to configure a model first")
+		stateErr = fmt.Errorf("omp has no model selected. Run `omp login` or configure a model in omp first")
 	}
 	if stateErr == nil && req.Model != "" && state.Model.Ref() != req.Model {
-		stateErr = fmt.Errorf("π selected %s instead of %s. Choose a model from the available list", state.Model.Ref(), req.Model)
+		stateErr = fmt.Errorf("omp selected %s instead of %s. Choose a model from the available list", state.Model.Ref(), req.Model)
 	}
 	if stateErr != nil {
 		r.completeRun(run, b, model.RunFailed, stateErr.Error())
@@ -381,7 +391,7 @@ func (r *Runner) execute(run model.Run, proj model.Project, req RunRequest, b *e
 	}
 	b.publish(AgentEvent{Type: "model", RunID: run.ID, Text: state.Model.Name + " · " + state.Model.Provider, Data: modelJSON(state.Model), At: nowMs()})
 
-	disposition, err := sess.Prompt(ctx, prompt.Turn(turn))
+	started, err := sess.Prompt(ctx, prompt.Turn(turn))
 	if err != nil {
 		r.completeRun(run, b, model.RunFailed, err.Error())
 		return
@@ -398,9 +408,9 @@ func (r *Runner) execute(run model.Run, proj model.Project, req RunRequest, b *e
 		abortCancel()
 	}
 
-	// "handled" means an input handler consumed the prompt -- no run started,
-	// so waiting for agent_settled would hang.
-	if disposition == "handled" {
+	// omp finished the prompt locally (e.g. a slash command): no agent run
+	// started, so waiting for it to settle would hang.
+	if !started {
 		r.completeRun(run, b, model.RunSucceeded, "")
 		return
 	}
@@ -417,11 +427,11 @@ func (r *Runner) execute(run model.Run, proj model.Project, req RunRequest, b *e
 		select {
 		case aborted = <-settled:
 		case <-processGone:
-			// π exited without emitting agent_settled -- surface diagnostics.
+			// omp exited without settling -- surface diagnostics.
 			select {
 			case aborted = <-settled:
 			default:
-				failure = "π exited before completing the run"
+				failure = "omp exited before completing the run"
 				if tail := strings.TrimSpace(sess.StderrTail()); tail != "" {
 					failure += ": " + tail
 				}
@@ -479,7 +489,7 @@ func (r *Runner) execute(run model.Run, proj model.Project, req RunRequest, b *e
 func (r *Runner) Shutdown() {
 	r.mu.Lock()
 	r.shuttingDown = true
-	sessions := make([]*pirun.Session, 0, len(r.sessions))
+	sessions := make([]*omprun.Session, 0, len(r.sessions))
 	for _, s := range r.sessions {
 		sessions = append(sessions, s)
 	}
@@ -520,7 +530,7 @@ func (r *Runner) Cancel(runID string) error {
 }
 
 // writeSystemPrompt composes the project's stable design instructions into a
-// temporary file that π appends to its system prompt (no argv limits).
+// temporary file that omp appends to its system prompt (no argv limits).
 func (r *Runner) writeSystemPrompt(proj model.Project, req RunRequest) (string, func(), error) {
 	in := prompt.Input{
 		ProjectDir:     proj.Dir,
@@ -596,10 +606,10 @@ func (r *Runner) resolveSkill(id string) *prompt.Skill {
 	return &prompt.Skill{ID: id, Name: name, Dir: dir, Mode: mode, Body: body}
 }
 
-// hasSession reports whether π already stores a session for a conversation.
-// π names session files "<timestamp>_<session id>.jsonl".
-func (r *Runner) hasSession(conversationID string) bool {
-	matches, _ := filepath.Glob(filepath.Join(r.cfg.SessionDir, "*_"+conversationID+".jsonl"))
+// hasSession reports whether omp already stores a session in a
+// conversation's session directory ("<timestamp>_<uuid>.jsonl" files).
+func hasSession(dir string) bool {
+	matches, _ := filepath.Glob(filepath.Join(dir, "*.jsonl"))
 	return len(matches) > 0
 }
 

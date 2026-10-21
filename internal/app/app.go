@@ -22,7 +22,7 @@ import (
 	"github.com/akki/pidesigner/internal/agentext"
 	"github.com/akki/pidesigner/internal/api"
 	"github.com/akki/pidesigner/internal/content"
-	"github.com/akki/pidesigner/internal/pirun"
+	"github.com/akki/pidesigner/internal/omprun"
 	"github.com/akki/pidesigner/internal/preview"
 	"github.com/akki/pidesigner/internal/store"
 )
@@ -33,7 +33,7 @@ type Options struct {
 	Port       int    // 0 picks a free port
 	DataDir    string // SQLite + projects/
 	ContentDir string // catalog
-	PiBin      string // pi executable, empty resolves automatically
+	OmpBin     string // omp executable, empty resolves automatically
 	UIDir      string // built UI directory, empty disables static serving
 	Quiet      bool   // suppress request logging
 	// Renderer is the pidesigner-render executable. Empty looks beside the
@@ -51,12 +51,12 @@ type App struct {
 	Hub     *preview.Hub
 
 	listener      net.Listener
-	piBin         string
+	ompBin        string
 	discoveryPath string
 }
 
-// PiBin reports the resolved pi executable path, or empty when unresolved.
-func (a *App) PiBin() string { return a.piBin }
+// OmpBin reports the resolved omp executable path, or empty when unresolved.
+func (a *App) OmpBin() string { return a.ompBin }
 
 // Start binds the listener and serves in the background.
 func Start(opts Options) (*App, error) {
@@ -87,9 +87,9 @@ func Start(opts Options) (*App, error) {
 	}
 	cat.Scan()
 
-	resolvedPi, piErr := pirun.ResolveBin(opts.PiBin)
-	if piErr != nil {
-		log.Printf("warning: %v", piErr)
+	resolvedOmp, ompErr := omprun.ResolveBin(opts.OmpBin)
+	if ompErr != nil {
+		log.Printf("warning: %v", ompErr)
 	}
 
 	hub := preview.NewHub()
@@ -102,7 +102,8 @@ func Start(opts Options) (*App, error) {
 	if renderer == "" {
 		log.Printf("warning: pidesigner-render not found; the agent will verify designs without rendering them")
 	}
-	runner := api.NewRunner(st, cat, opts.PiBin, hub, api.RunnerConfig{
+	models := omprun.NewCatalog(opts.OmpBin)
+	runner := api.NewRunner(st, cat, opts.OmpBin, hub, api.RunnerConfig{
 		SessionDir: filepath.Join(opts.DataDir, "sessions"),
 		RenderDir:  filepath.Join(opts.DataDir, "renders"),
 		Extension:  extension,
@@ -114,8 +115,8 @@ func Start(opts Options) (*App, error) {
 		Runner:      runner,
 		Hub:         hub,
 		ProjectRoot: projectRoot,
-		PiBin:       resolvedPi,
-		Models:      pirun.NewCatalog(opts.PiBin),
+		OmpBin:      resolvedOmp,
+		Models:      models,
 	}
 
 	// Resume watching existing projects.
@@ -157,7 +158,7 @@ func Start(opts Options) (*App, error) {
 		Runner:        runner,
 		Hub:           hub,
 		listener:      listener,
-		piBin:         resolvedPi,
+		ompBin:        resolvedOmp,
 		discoveryPath: filepath.Join(opts.DataDir, "runtime.json"),
 	}
 	// A stable discovery file lets MCP follow the native app across random

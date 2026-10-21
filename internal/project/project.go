@@ -65,7 +65,7 @@ func (m *Manager) List() ([]model.File, error) {
 		}
 		if d.IsDir() {
 			switch d.Name() {
-			case "node_modules", ".git", ".DS_Store", "__pycache__":
+			case "node_modules", ".git", ".omp", ".DS_Store", "__pycache__":
 				return filepath.SkipDir
 			}
 			return nil

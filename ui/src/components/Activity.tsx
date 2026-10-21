@@ -8,7 +8,7 @@ import {
   type UIRequest,
 } from "../activity";
 import { Dialog } from "./common";
-import { Icon, PiLogo } from "./Icon";
+import { AgentMark, Icon } from "./Icon";
 import { ModelIcon } from "./ModelIcon";
 import { RunDiagnostics } from "./RunDiagnostics";
 import { skillNames } from "../state";
@@ -115,7 +115,7 @@ export function ActivityCenter({
                     </span>
                     <ProjectStatus run={a} />
                     <span class="activity-project-meta">
-                      {a.model || "π agent"} · {elapsed(a.startedAt, a.endedAt)}
+                      {a.model || "omp agent"} · {elapsed(a.startedAt, a.endedAt)}
                     </span>
                   </button>
                 </li>
@@ -208,7 +208,7 @@ function ExtensionQuestion({
         void answer(false, request.method === "confirm" ? true : undefined);
       }}
     >
-      <h3>{request.title || "π needs your answer"}</h3>
+      <h3>{request.title || "omp needs your answer"}</h3>
       {request.message && <p>{request.message}</p>}
       {request.method === "select" ? (
         <label>
@@ -323,7 +323,7 @@ export function RunActivity({
           aria-expanded={open}
           aria-controls={open ? "run-activity-details" : undefined}
         >
-          <PiLogo size={24} />
+          <AgentMark size={24} />
           <span>
             <strong aria-live="polite">
               {run.connection === "reconnecting"
@@ -355,7 +355,7 @@ export function RunActivity({
               <ModelIcon id={run.modelId} provider={run.provider} size={18} />
               <span>
                 {run.model}
-                <small>Executed by π</small>
+                <small>Executed by omp</small>
               </span>
             </p>
           )}

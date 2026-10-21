@@ -1,4 +1,4 @@
-package pirun
+package omprun
 
 import (
 	"encoding/json"
@@ -11,16 +11,40 @@ import (
 func (s *Session) handleEvent(line []byte, kind string) {
 	switch kind {
 	case "agent_start":
+		s.settledEmitted = false
 		s.emit(Event{Type: EventAgentStart})
 	case "agent_end":
 		s.emit(Event{Type: EventAgentEnd})
-	case "agent_settled":
+	case "prompt_result":
 		var e struct {
-			Aborted bool `json:"aborted"`
+			AgentInvoked   bool   `json:"agentInvoked"`
+			Status         string `json:"status"`
+			SessionSettled bool   `json:"sessionSettled"`
+			Error          *struct {
+				Message string `json:"message"`
+			} `json:"error"`
 		}
-		if json.Unmarshal(line, &e) == nil {
-			s.emit(Event{Type: EventSettled, Aborted: e.Aborted})
+		if json.Unmarshal(line, &e) != nil {
+			return
 		}
+		s.promptAborted = e.Status == "aborted"
+		if e.Status == "error" {
+			message := ""
+			if e.Error != nil {
+				message = e.Error.Message
+			}
+			if message == "" {
+				message = "The selected omp model could not complete its request. Check its authentication and availability."
+			}
+			s.emit(Event{Type: EventError, Text: message})
+		}
+		// A prompt that never reached the agent gets no session_settled; one
+		// whose session is already quiet may be torn down right away.
+		if !e.AgentInvoked || e.SessionSettled {
+			s.settle()
+		}
+	case "session_settled":
+		s.settle()
 	case "message_start":
 		var e struct {
 			Message struct {
@@ -50,10 +74,9 @@ func (s *Session) handleEvent(line []byte, kind string) {
 	case "message_end":
 		var e struct {
 			Message struct {
-				Role         string `json:"role"`
-				StopReason   string `json:"stopReason"`
-				ErrorMessage string `json:"errorMessage"`
-				Content      []struct {
+				Role       string `json:"role"`
+				StopReason string `json:"stopReason"`
+				Content    []struct {
 					Type string `json:"type"`
 					Text string `json:"text"`
 				} `json:"content"`
@@ -69,13 +92,9 @@ func (s *Session) handleEvent(line []byte, kind string) {
 			}
 		}
 		s.emit(Event{Type: "message_end", Text: text.String()})
-		if e.Message.StopReason == "error" {
-			message := e.Message.ErrorMessage
-			if message == "" {
-				message = "The selected π model could not complete its request. Check its authentication and availability."
-			}
-			s.emit(Event{Type: EventError, Text: message})
-		} else {
+		// A provider error here may still be retried; prompt_result reports
+		// the authoritative outcome once omp's retries are exhausted.
+		if e.Message.StopReason != "error" {
 			s.emit(Event{Type: EventModelResult})
 		}
 	case "tool_execution_start", "tool_execution_update", "tool_execution_end":
@@ -104,17 +123,22 @@ func (s *Session) handleEvent(line []byte, kind string) {
 			event.ToolDetails = e.Result.Details
 		}
 		s.emit(event)
-	case "auto_retry_start", "summarization_retry_scheduled", "summarization_retry_attempt_start":
+	case "auto_retry_start":
 		s.emit(Event{Type: "retry", Data: line})
-	case "auto_retry_end", "summarization_retry_finished":
+	case "auto_retry_end":
 		s.emit(Event{Type: "retry_end", Data: line})
-	case "compaction_start", "compaction_end":
-		s.emit(Event{Type: kind, Data: line})
+	case "auto_compaction_start":
+		s.emit(Event{Type: "compaction_start", Data: line})
+	case "auto_compaction_end":
+		s.emit(Event{Type: "compaction_end", Data: line})
 	case "extension_ui_request":
 		var e struct {
 			Method string `json:"method"`
 		}
-		if json.Unmarshal(line, &e) == nil {
+		// Dialogs need an answer and notify is user-facing text. Widget,
+		// status and title updates are omp terminal presentation state with
+		// no meaning in πDesigner, and would flood the durable event log.
+		if json.Unmarshal(line, &e) == nil && forwardedUIMethods[e.Method] {
 			s.emit(Event{Type: "extension_ui", Data: line})
 		}
 	case "extension_error":
@@ -124,9 +148,23 @@ func (s *Session) handleEvent(line []byte, kind string) {
 		if json.Unmarshal(line, &e) == nil {
 			s.emit(Event{Type: "diagnostic", Text: e.Error})
 		}
-	case "queue_update", "session_info_changed", "thinking_level_changed":
+	case "rpc_frame_error":
+		s.emit(Event{Type: "diagnostic", Text: "omp dropped an event that exceeded its transport limit"})
+	case "queue_update", "session_info_update", "thinking_level_changed", "model_changed":
 		s.emit(Event{Type: "session_update", Data: line})
 	}
+}
+
+var forwardedUIMethods = map[string]bool{"select": true, "confirm": true, "input": true, "editor": true, "notify": true}
+
+// settle emits EventSettled once per stretch of agent activity, carrying
+// whether the last prompt was aborted.
+func (s *Session) settle() {
+	if s.settledEmitted {
+		return
+	}
+	s.settledEmitted = true
+	s.emit(Event{Type: EventSettled, Aborted: s.promptAborted})
 }
 
 type toolResult struct {
@@ -149,9 +187,9 @@ func resultText(r toolResult) string {
 	}
 	text := b.String()
 	// Binary/image blocks never enter the log. The complete result still belongs
-	// to the π session; the UI explicitly labels bounded text previews.
+	// to the omp session; the UI explicitly labels bounded text previews.
 	if len(text) > 16384 {
-		text = text[:16384] + "\n[Output preview truncated; complete output remains in the π session.]"
+		text = text[:16384] + "\n[Output preview truncated; complete output remains in the omp session.]"
 	}
 	return strings.ToValidUTF8(text, "�")
 }

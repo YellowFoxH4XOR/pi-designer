@@ -14,17 +14,17 @@ The primary user is the owner of this local project, making web, mobile, and des
 
 ## Product Purpose
 
-Turn a brief into editable interface files, preview them at device sizes, and refine them with the locally installed π coding agent.
+Turn a brief into editable interface files, preview them at device sizes, and refine them with the locally installed omp coding agent.
 
 ## Operating Context
 
-Go daemon, SQLite projects, Preact UI, installed π over JSONL RPC. The macOS app owns a bundled daemon. An MCP stdio server exposes the workspace to coding editors.
+Go daemon, SQLite projects, Preact UI, installed omp over JSONL RPC. The macOS app owns a bundled daemon. An MCP stdio server exposes the workspace to coding editors.
 
 ## Capabilities and Constraints
 
 - Prototypes, interface motion, and website-clone workflows.
 - Preserve the complete bundled design-system catalog, skills, existing project files, and MCP integration.
-- Only the user's installed π is the generation engine. Credentials remain with π.
+- Only the user's installed omp is the generation engine. Credentials remain with omp.
 - No image generation, video generation, cloud accounts, billing, or fabricated collaboration features.
 - Web, mobile, and desktop remain prototype preview viewports inside the Mac app. They are not separate πDesigner clients or claims of generated native applications.
 - Finish and verify desktop Mac window sizes, native menus, keyboard operation, and the local app bundle. No mobile-app UI work is in scope.

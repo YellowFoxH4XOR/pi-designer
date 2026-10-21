@@ -16,7 +16,7 @@
 
 ## Engine and model identities
 
-- `ui/public/pi.svg` remains the standalone lavender Greek π for execution attribution. The app logo redesign does not modify the installed agent or model/provider branding.
+- Execution attribution uses the official omp logo (`ui/public/omp.svg`, `.agent-mark` in the interface), vendored unchanged from can1357/oh-my-pi `assets/icon.svg` (MIT, © its authors) and placed on its native dark tile because the mark is drawn for dark backgrounds. Use is identification only. The app logo redesign does not modify the installed agent or model/provider branding.
 - Model/provider SVGs under `ui/public/model-icons/` are vendored unchanged from the OpenDesign reference checkout; provenance and Apache-2.0 license are adjacent.
 - The shared registry resolves model maker first (GPT → OpenAI, Opus/Sonnet/Haiku → Claude, DeepSeek → DeepSeek, Gemini → Gemini), then known routing providers, then a neutral code icon. Marks imply no endorsement or affiliation.
 

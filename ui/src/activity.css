@@ -9,9 +9,6 @@
   place-items: center;
   color: var(--muted);
 }
-.pi-agent-mark {
-  image-rendering: auto;
-}
 .activity-center-button {
   display: inline-flex;
   align-items: center;

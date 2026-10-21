@@ -196,7 +196,7 @@ export function QuestionForm({ form, disabled = false, onSubmit }: {
       onInput={(e) => update(question.id, inputType === 'number' && e.currentTarget.value !== '' ? Number(e.currentTarget.value) : e.currentTarget.value)}/>;
   }
 
-  return <form ref={formRef} class="question-form" onSubmit={submit} noValidate aria-label={form.title || 'Questions from π'}>
+  return <form ref={formRef} class="question-form" onSubmit={submit} noValidate aria-label={form.title || 'Questions from omp'}>
     <div class="question-form-head">
       <span class="question-form-kicker"><Icon name="skills" size={15}/>A few quick questions</span>
       {form.title && <h3 class="question-form-title">{form.title}</h3>}

@@ -1,4 +1,4 @@
-package pirun
+package omprun
 
 import (
 	"context"
@@ -8,16 +8,16 @@ import (
 	"time"
 )
 
-// TestLivePiRPC is a live smoke test against the locally installed Pi agent.
-// It is opt-in: set PIDESIGNER_LIVE_PI=1 to run it.
+// TestLiveOmpRPC is a live smoke test against the locally installed omp agent.
+// It is opt-in: set PIDESIGNER_LIVE_OMP=1 to run it.
 //
-//	go test ./internal/pirun -run TestLivePiRPC -v
-func TestLivePiRPC(t *testing.T) {
-	if os.Getenv("PIDESIGNER_LIVE_PI") == "" {
-		t.Skip("set PIDESIGNER_LIVE_PI=1 to run the live Pi RPC smoke test")
+//	go test ./internal/omprun -run TestLiveOmpRPC -v
+func TestLiveOmpRPC(t *testing.T) {
+	if os.Getenv("PIDESIGNER_LIVE_OMP") == "" {
+		t.Skip("set PIDESIGNER_LIVE_OMP=1 to run the live omp RPC smoke test")
 	}
 	if _, err := ResolveBin(""); err != nil {
-		t.Fatalf("resolve pi: %v", err)
+		t.Fatalf("resolve omp: %v", err)
 	}
 
 	dir := t.TempDir()
@@ -45,23 +45,19 @@ func TestLivePiRPC(t *testing.T) {
 		}
 	}()
 
-	disp, err := sess.Prompt(ctx, "Reply with exactly: PIPELINE_OK")
+	started, err := sess.Prompt(ctx, "Reply with exactly: PIPELINE_OK")
 	if err != nil {
 		t.Fatalf("prompt: %v", err)
 	}
-	if disp == "" {
-		t.Fatalf("expected a disposition, got empty")
-	}
-	t.Logf("disposition=%s", disp)
-	if disp == "handled" {
-		t.Skip("prompt was handled by an input handler; no run started")
+	if !started {
+		t.Fatal("omp finished an ordinary prompt locally; no run started")
 	}
 
 	select {
 	case aborted := <-settled:
 		t.Logf("settled (aborted=%v)", aborted)
 	case <-ctx.Done():
-		t.Fatalf("timed out waiting for agent_settled")
+		t.Fatalf("timed out waiting for the session to settle")
 	}
 
 	if !strings.Contains(text.String(), "PIPELINE_OK") {

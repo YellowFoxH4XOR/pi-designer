@@ -15,7 +15,7 @@ import (
 
 	"github.com/akki/pidesigner/internal/content"
 	"github.com/akki/pidesigner/internal/model"
-	"github.com/akki/pidesigner/internal/pirun"
+	"github.com/akki/pidesigner/internal/omprun"
 	"github.com/akki/pidesigner/internal/preview"
 	"github.com/akki/pidesigner/internal/project"
 	"github.com/akki/pidesigner/internal/store"
@@ -28,8 +28,8 @@ type Server struct {
 	Runner      *Runner
 	Hub         *preview.Hub
 	ProjectRoot string
-	PiBin       string
-	Models      *pirun.Catalog
+	OmpBin      string
+	Models      *omprun.Catalog
 }
 
 // Routes builds the HTTP mux.
@@ -143,7 +143,7 @@ func (s *Server) resolveProject(w http.ResponseWriter, r *http.Request) (model.P
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok":            true,
-		"piBin":         s.PiBin,
+		"ompBin":        s.OmpBin,
 		"projectRoot":   s.ProjectRoot,
 		"designSystems": len(s.Catalog.DesignSystems()),
 		"skills":        len(s.Catalog.Skills()),
