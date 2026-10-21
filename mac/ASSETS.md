@@ -1,19 +1,27 @@
 # πDesigner identities
 
-## App and engine marks
+## App mark: the drawing instrument
 
-- `ui/public/brand.svg`: original authored vector, a lavender Greek π on a charcoal rounded tile. Retains the owner's PiDesk-family palette; replaces the intermediate artboard/nib icon at the user's request.
-- `ui/public/pi.svg`: original authored standalone lavender π for engine attribution. Replaces the intermediate coral/blue/gold pixel mark; no upstream agent files are modified.
-- No generative image service was used. SVG geometry is the canonical source.
-- `scripts/generate-icon.swift` renders the app SVG into ten standard icon sizes through AppKit; `scripts/build-mac.sh` compiles them into `πDesigner.app/Contents/Resources/AppIcon.icns`. The favicon, UI and Dock share this source.
-- The native menu bar and notch use the Greek π with the Mac system font. They are operational status surfaces, not a system-notch replacement.
+- Canonical source: `ui/public/brand.svg`, an original authored vector. A deep-ink pen nib draws a Bézier curve, with an editable square anchor and control handle, on a folded ivory artboard. A vermilion tile gives it its own Dock silhouette and color identity.
+- Palette: vermilion `#E45F3E`, warm ivory `#FFF5E7`, deep ink `#233137`, with restrained fold/metal tones. No fonts, letters, external images, image model, or proprietary source artwork are used.
+- This replaces the intermediate lavender π/charcoal tile at the user's explicit request to stop resembling πDesk. The product name remains πDesigner; the icon is about designing rather than spelling the name.
+- `scripts/generate-icon.swift` rasterizes this same SVG through AppKit into ten standard icon sizes. `scripts/build-mac.sh` packages them into `πDesigner.app/Contents/Resources/AppIcon.icns`. Every shipping icon raster derives from this source; no separate bitmap drawing is maintained.
+- The web favicon, workspace header and Dock share the vector. The native activity header reads `NSApp.applicationIconImage`, so it cannot silently retain a different logo.
 
-## Model/provider marks
+## Menu-bar symbol
 
-- Local SVG assets under `ui/public/model-icons/`, vendored unchanged from the OpenDesign reference checkout; provenance and Apache-2.0 license are included alongside them.
-- The shared registry resolves the model maker first (GPT → OpenAI, Opus/Sonnet/Haiku → Claude, DeepSeek → DeepSeek, Gemini → Gemini), then known routing providers, then a neutral authored code icon.
-- Provider labels remain separate from model-maker identity. Marks identify the configured models/providers and imply no endorsement or affiliation.
+- Canonical source: `ui/public/brand-symbol.svg`, an original simplified pen-nib silhouette related to the app mark.
+- The nib hole and slit are transparent geometry, not white paint. This matters because macOS template rendering uses alpha, not the source color, to tint for light/dark menu bars.
+- The build copies this to `Contents/Resources/BrandTemplate.svg`. The native controller sets its size to 18×18 and `isTemplate = true`; task counts remain separate text.
 
-## Compatibility
+## Engine and model identities
 
-Display name and app-bundle filename are πDesigner. `dev.pidesigner.app`, executable names, CLI/MCP IDs, existing preferences and `~/Library/Application Support/PiDesigner` remain unchanged to preserve projects and permissions.
+- `ui/public/pi.svg` remains the standalone lavender Greek π for execution attribution. The app logo redesign does not modify the installed agent or model/provider branding.
+- Model/provider SVGs under `ui/public/model-icons/` are vendored unchanged from the OpenDesign reference checkout; provenance and Apache-2.0 license are adjacent.
+- The shared registry resolves model maker first (GPT → OpenAI, Opus/Sonnet/Haiku → Claude, DeepSeek → DeepSeek, Gemini → Gemini), then known routing providers, then a neutral code icon. Marks imply no endorsement or affiliation.
+
+## Review and compatibility
+
+- AppKit-rendered contact sheets check the mark at 16/24/32/64/128px on light/dark grounds and a large Dock rendering. Review files are generated under ignored `.impeccable/review/`.
+- Native tests check colored silhouettes at 16/32/128/512px, transparent corners, and genuinely monochrome alpha-template rendering at 18/32px. No πDesk-like glyph/color fallback is accepted as the app mark.
+- Display name, bundle identifier `dev.pidesigner.app`, executable names, CLI/MCP IDs, existing preferences and `~/Library/Application Support/PiDesigner` stay compatible. Workspace layout/state colors are not part of this logo-only redesign.

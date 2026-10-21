@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct ActivitySurface: View {
     @ObservedObject var model: ActivityViewModel
@@ -12,7 +13,7 @@ struct ActivitySurface: View {
         VStack(spacing: 0) {
             Button(action: notch ? toggle : { open(nil) }) {
                 HStack(spacing: 10) {
-                    Text("π").font(.system(size: 27, weight: .semibold)).foregroundColor(Color(red: 0.72, green: 0.74, blue: 1))
+                    Image(nsImage: NSApp.applicationIconImage).resizable().interpolation(.high).frame(width: 32, height: 32).accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: 3) {
                         Text(notch && model.expanded ? "Workspace activity" : model.items.first(where: { $0.active })?.projectName ?? "πDesigner").font(.system(size: 12, weight: .semibold)).lineLimit(1)
                         Text(model.disconnected ? "Activity disconnected · reconnecting" : model.items.first(where: { $0.active })?.label ?? "No active tasks").font(.system(size: 11)).foregroundColor(.secondary).lineLimit(1)

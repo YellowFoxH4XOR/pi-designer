@@ -6,7 +6,7 @@ Mode: Operate. Code-led implementation, using the user's pinned reference rather
 
 THESIS: A familiar prompt-first design workspace. Replace the developer-console arrangement with Home, Projects, Design systems, Skills, Settings, and an artifact-led Studio.
 
-OWN-WORLD: Light lavender-gray shell, off-white canvas, charcoal ink, PiDesk-family lavender palette with a π-led app identity. The standalone Greek π identifies execution, while model/provider marks identify the selected model. Neutral system UI type; a restrained Georgia heading on Home echoes the supplied reference. Soft corners on the workspace and composer, fine rules, no glow.
+OWN-WORLD: Light lavender-gray shell, off-white canvas and charcoal ink retain the existing workspace. The distinct app mark is a vermilion tile with an ivory artboard, Bézier curve and ink pen nib; a monochrome nib identifies the native menu bar. The standalone Greek π identifies execution, while maker/provider marks identify models. Neutral system UI type and the restrained Georgia Home heading remain unchanged. Soft corners, fine rules, no glow.
 
 STORY: Choose a workflow and design system, write a brief, then enter a studio with the conversation left and the actual preview right. Browse real existing projects and the complete system catalog.
 

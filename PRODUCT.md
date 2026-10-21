@@ -31,7 +31,7 @@ Go daemon, SQLite projects, Preact UI, installed π over JSONL RPC. The macOS ap
 
 ## Brand Commitments
 
-The user requested the workspace structure and usability of OpenDesign Cloud, rather than the original terminal-like three-pane shell. The app logo initially took inspiration from the PiDesk logo in `/Users/akki/Desktop/Projects/omp-ui/apps/desktop/public/app-icon.svg`. An intermediate design used an artboard/nib app icon and the upstream pixel agent mark. The user has now confirmed **πDesigner**: the Greek π replaces written “π” in the interface, with a π-led app icon retaining the family palette. A standalone π identifies execution, while maker/provider icons identify models. Keep app, engine, model and routing-provider identities distinct.
+The user requested the workspace structure and usability of OpenDesign Cloud, rather than the original terminal-like three-pane shell. The app logo initially took inspiration from the PiDesk logo in `/Users/akki/Desktop/Projects/omp-ui/apps/desktop/public/app-icon.svg`. An intermediate design used an artboard/nib app icon and the upstream pixel agent mark. The confirmed name is **πDesigner**, using the Greek π rather than the written “Pi”. The user subsequently rejected the πDesk-like lavender π tile and delegated a designer-specific logo redesign. The app now uses a distinct vermilion/ivory/ink pen-nib, Bézier-curve and artboard mark; no π monogram is required in the app icon. The workspace layout and its existing state colors remain unchanged. A standalone π identifies execution, while maker/provider icons identify models. Keep app, engine, model and routing-provider identities distinct.
 
 ## Evidence on Hand
 
