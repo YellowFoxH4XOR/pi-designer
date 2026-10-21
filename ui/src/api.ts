@@ -34,6 +34,7 @@ export interface Health { ok: boolean; ompBin: string; projectRoot: string; desi
 export interface AgentModel { id: string; provider: string; name: string; reasoning: boolean; contextWindow?: number }
 export interface ModelCatalog { models: AgentModel[]; current?: AgentModel; thinkingLevels: string[] }
 export interface Connection { available: boolean; config: Record<string, unknown> }
+export interface KnowledgeSource { id: string; name: string; url: string; documentUrl?: string; note: string; group?: string; useFor?: string; license?: string; installedHash?: string; previousHash?: string; availableHash?: string; checkedAt?: string; updated: boolean; error?: string }
 export interface AgentEvent {
   version?: number; contentIndex?: number; seq: number; runId: string; at: number; type: string; text?: string; tool?: string; toolCallId?: string; args?: Record<string, unknown>; isError?: boolean;
   output?: string; durationMs?: number; data?: any;
@@ -57,6 +58,11 @@ export const api = {
   runActivity: (id: string) => req<{ activity: Activity }>(`/api/runs/${encodeURIComponent(id)}/activity`),
   respondUI: (id: string, body: { id: string; value?: string; confirmed?: boolean; cancelled?: boolean }) => req(`/api/runs/${encodeURIComponent(id)}/ui-response`, json(body)),
   connection: () => req<Connection>('/api/connection'),
+  knowledge: () => req<{ sources: KnowledgeSource[] }>('/api/knowledge'),
+  checkKnowledge: (id: string) => req<KnowledgeSource>(`/api/knowledge/${encodeURIComponent(id)}/check`, { method: 'POST' }),
+  previewKnowledge: (id: string) => req<{ content: string }>(`/api/knowledge/${encodeURIComponent(id)}/preview`),
+  applyKnowledge: (id: string) => req<KnowledgeSource>(`/api/knowledge/${encodeURIComponent(id)}/apply`, { method: 'POST' }),
+  rollbackKnowledge: (id: string) => req<KnowledgeSource>(`/api/knowledge/${encodeURIComponent(id)}/rollback`, { method: 'POST' }),
   preferences: () => req<{ model: string; thinking: string }>('/api/preferences'),
   savePreferences: (p: { model: string; thinking: string }) => req<{ model: string; thinking: string }>('/api/preferences', json(p, 'PUT')),
   models: (refresh = false) => req<ModelCatalog>(`/api/models${refresh ? '?refresh=1' : ''}`),
@@ -87,7 +93,7 @@ function pickProject(p: Project) { return { name: p.name, designSystemId: p.desi
 export function subscribeRun(runId: string, after: number, onEvent: (event: AgentEvent) => void, onSnapshot: (a: Activity) => void, onConnection: (connected: boolean) => void) {
   const es = new EventSource(`/api/runs/${encodeURIComponent(runId)}/events?after=${after}`);
   es.onopen = () => onConnection(true); es.onerror = () => onConnection(false);
-  for (const type of ['starting', 'finishing', 'context', 'text', 'message_start', 'message_end', 'thinking', 'tool', 'tool_update', 'tool_end', 'turn', 'model', 'done', 'run_failed', 'error', 'canceled', 'stderr', 'todos', 'render', 'critique', 'retry', 'retry_end', 'compaction_start', 'compaction_end', 'attention', 'attention_resolved', 'extension_ui', 'session_update']) {
+  for (const type of ['starting', 'finishing', 'context', 'design_route', 'text', 'message_start', 'message_end', 'thinking', 'tool', 'tool_update', 'tool_end', 'turn', 'model', 'done', 'run_failed', 'error', 'canceled', 'stderr', 'todos', 'render', 'critique', 'retry', 'retry_end', 'compaction_start', 'compaction_end', 'attention', 'attention_resolved', 'extension_ui', 'session_update']) {
     es.addEventListener(type, ((e: MessageEvent) => { if (e.data) { try { onEvent(JSON.parse(e.data)); } catch { /* native transport error, not a protocol event */ } } }) as EventListener);
   }
   es.addEventListener('snapshot', ((e: MessageEvent) => { try { onSnapshot(JSON.parse(e.data)); } catch { /* reconnect retrieves a fresh projection */ } }) as EventListener);

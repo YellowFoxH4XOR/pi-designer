@@ -31,7 +31,7 @@ This replaces `/Applications/πDesigner.app`. It does not modify your omp config
 - **Skills:** inspect the installed workflow instructions and choose one for a new project.
 - **Studio:** conversation on the left; Preview/Code and the artifact on the right. Edit and save source files, rename a project, change its design system, or start another conversation.
 - **Model picker:** click the model/provider icon in Home or Studio to search models configured in your installed omp. Exact provider/model IDs are saved and checked against the omp process before a run.
-- **Settings:** the same model picker, only supported thinking levels, installed omp status, local project path, and the MCP configuration for your editor. Models and credentials are managed by omp (`omp login`, `omp models`).
+- **Settings:** the same model picker, only supported thinking levels, installed omp status, local project path, the MCP configuration for your editor, and reviewed design-reference updates. Models and credentials are managed by omp (`omp login`, `omp models`). See `docs/design-reference-updates.md`.
 
 Prototype preview sizes are 1440×900 (web), 1280×800 (desktop), and 390×844 (mobile). The iframe retains that real CSS viewport and scales to the canvas. CSS-only edits update in place; structural changes reload the preview.
 

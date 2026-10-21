@@ -93,6 +93,8 @@ Mark an item `in_progress` before starting it and `completed` the moment it is d
 
 ### 2.3 Design plan — two passes, before any code
 
+After starting the plan with `todo_write`, choose any external design references with `select_design_sources` using the brief, audience, platform and active design-system constraint. Choose zero to two sources, state why, and name a meaningful trade-off. The tool validates what is locally readable; do not ask the user to name a library or claim a browse-only source was read. If the tool is unavailable, use the bundled craft references instead. For a local revision, preserve the existing source choice unless the task changes substantially.
+
 Write the design plan in your reply before writing files (it is shown to the user as design notes):
 
 - **Color:** the core palette as 4–6 named hex values. With an active design system, name the token roles you will use and where the one accent appears instead of inventing colors.

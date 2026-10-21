@@ -201,8 +201,22 @@ func (r *Runner) execute(run model.Run, proj model.Project, req RunRequest, b *e
 	if r.cfg.Renderer != "" {
 		opts.Env = append(opts.Env, "PIDESIGNER_RENDERER="+r.cfg.Renderer)
 	}
+	if r.catalog.Knowledge != nil {
+		opts.Env = append(opts.Env, "PIDESIGNER_RUNTIME_DISCOVERY="+filepath.Join(filepath.Dir(r.catalog.Knowledge.Dir), "runtime.json"))
+	}
 
 	turn := prompt.TurnInput{Prompt: req.Prompt, Viewport: req.Viewport, SkipDiscovery: req.SkipDiscovery}
+	if r.catalog.Knowledge != nil {
+		var catalog strings.Builder
+		for _, src := range r.catalog.Knowledge.Sources {
+			kind := "browse-only; not locally readable"
+			if src.DocumentURL != "" {
+				kind = "approved text reference; fetched only if selected"
+			}
+			fmt.Fprintf(&catalog, "- %s (%s): %s %s [%s; %s]\n", src.ID, src.Name, src.UseFor, src.Note, kind, src.License)
+		}
+		turn.SourceCatalog = catalog.String()
+	}
 	// Each conversation is one persistent omp session, so follow-up turns keep
 	// the agent's full context: its plan, the files it read, its renders. A
 	// conversation without an omp session yet (new, or created under the
@@ -338,6 +352,19 @@ func (r *Runner) execute(run model.Run, proj model.Project, req RunRequest, b *e
 				// Tool calls mutate the project; nudge preview watchers.
 				if ev.ToolName == "write" || ev.ToolName == "edit" {
 					r.hub.NotifyProjectChanged(proj.ID)
+				}
+				if ev.ToolName == "select_design_sources" && !ev.IsError {
+					var selection struct {
+						Intent  string `json:"intent"`
+						Choices []struct {
+							ID     string `json:"id"`
+							Name   string `json:"name"`
+							Reason string `json:"reason"`
+						} `json:"choices"`
+					}
+					if json.Unmarshal(ev.ToolDetails, &selection) == nil && selection.Intent != "" && len(selection.Choices) <= 2 {
+						b.publish(AgentEvent{Type: "design_route", RunID: run.ID, Data: ev.ToolDetails, At: nowMs()})
+					}
 				}
 				if ev.ToolName == "render_preview" && !ev.IsError {
 					if render, ok := parseRender(proj.ID, ev.ToolDetails); ok {
@@ -538,6 +565,15 @@ func (r *Runner) writeSystemPrompt(proj model.Project, req RunRequest) (string, 
 		CraftDir:       filepath.Join(r.catalog.Root, "craft"),
 		CraftDocs:      r.catalog.CraftIndex(),
 		RenderPreview:  r.cfg.Renderer != "" && r.cfg.Extension != "",
+	}
+
+	if r.catalog.Knowledge != nil {
+		in.KnowledgeDir = r.catalog.Knowledge.Dir
+		in.KnowledgeDocs = r.catalog.Knowledge.Docs()
+		in.KnowledgeHints = map[string]string{}
+		for _, src := range r.catalog.Knowledge.Sources {
+			in.KnowledgeHints[src.ID+".md"] = src.UseFor
+		}
 	}
 
 	dsID := req.DesignSystemID

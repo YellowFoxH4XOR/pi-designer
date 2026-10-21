@@ -38,6 +38,7 @@ export interface Activity {
     designSystemId?: string;
     viewport?: string;
     thinking?: string;
+    designRoute?: { intent: string; choices: { id: string; name: string; reason: string; status?: string }[]; tradeoff?: string };
   };
   startedAt: number;
   updatedAt: number;
@@ -123,6 +124,9 @@ export function reduceActivity(current: RunState, e: AgentEvent): RunState {
       break;
     case "context":
       a.context = e.data;
+      break;
+    case "design_route":
+      a.context = { ...a.context, designRoute: e.data };
       break;
     case "model":
       a.model = e.text;
