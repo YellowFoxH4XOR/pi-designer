@@ -15,7 +15,7 @@ export function AgentMessage({ text, live = false, interactive = false, answered
   const notesOpen = live;
   return <div class="agent-message">
     {parsed.narration && <details class="design-notes" open={notesOpen}>
-      <summary><Icon name="eye" size={14}/>Design notes<span class="design-notes-hint">{live ? 'Working…' : 'How Pi got there'}</span></summary>
+      <summary><Icon name="eye" size={14}/>Design notes<span class="design-notes-hint">{live ? 'Working…' : 'How π got there'}</span></summary>
       <div class="design-notes-body"><RichText text={parsed.narration}/></div>
     </details>}
 
@@ -23,11 +23,11 @@ export function AgentMessage({ text, live = false, interactive = false, answered
 
     {parsed.pendingForm && (live
       ? <p class="form-preparing"><span class="working-indicator"><i/><i/><i/></span>Preparing questions…</p>
-      : <p class="form-broken">Pi sent questions that couldn’t be displayed. Ask it to resend them.</p>)}
+      : <p class="form-broken">π sent questions that couldn’t be displayed. Ask it to resend them.</p>)}
 
     {parsed.forms.map((form) => {
       if (form.invalid) {
-        return <p class="form-broken" key={form.id}>Pi sent questions that couldn’t be displayed. Ask it to resend them.</p>;
+        return <p class="form-broken" key={form.id}>π sent questions that couldn’t be displayed. Ask it to resend them.</p>;
       }
       const submitted = answered?.get(form.id);
       if (submitted) {

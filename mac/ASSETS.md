@@ -1,19 +1,19 @@
-# App and agent identities
+# πDesigner identities
 
-## PiDesigner app icon
+## App and engine marks
 
-- Canonical source: `ui/public/brand.svg`.
-- Original PiDesigner artwork: a charcoal tile, pale rotated artboard, lavender Bézier curve with square anchors, and a fountain-pen nib.
-- The palette retains the owner's PiDesk-family inspiration; the design-tool imagery follows the user's request to distinguish PiDesigner.
-- No generative image service was used.
-- `scripts/generate-icon.swift` reads the same SVG through AppKit and renders ten standard icon sizes with a transparent macOS outer margin.
-- `scripts/build-mac.sh` compiles that iconset to `PiDesigner.app/Contents/Resources/AppIcon.icns`.
-- The interface, favicon, and Dock icon share the same vector source; there is no separate manually maintained drawing.
+- `ui/public/brand.svg`: original authored vector, a lavender Greek π on a charcoal rounded tile. Retains the owner's PiDesk-family palette; replaces the intermediate artboard/nib icon at the user's request.
+- `ui/public/pi.svg`: original authored standalone lavender π for engine attribution. Replaces the intermediate coral/blue/gold pixel mark; no upstream agent files are modified.
+- No generative image service was used. SVG geometry is the canonical source.
+- `scripts/generate-icon.swift` renders the app SVG into ten standard icon sizes through AppKit; `scripts/build-mac.sh` compiles them into `πDesigner.app/Contents/Resources/AppIcon.icns`. The favicon, UI and Dock share this source.
+- The native menu bar and notch use the Greek π with the Mac system font. They are operational status surfaces, not a system-notch replacement.
 
-## Pi agent mark
+## Model/provider marks
 
-- Asset: `ui/public/pi.svg`.
-- Reproduced directly from the installed Pi 1.3.0 definition at `@earendil-works/pi-coding-agent/dist/modes/interactive/components/pi-logo.js`.
-- The source defines a 4×4 pixel grid and three fixed colors: coral `#e48a7a`, blue `#4f8eb3`, and gold `#eab65d`. The SVG preserves that grid and palette, without a PiDesigner background tile.
-- The Pi package README identifies the upstream project as Pi and links its logo at https://pi.dev/logo-auto.svg. The installed component was the source used here; no external asset service was required.
-- Used only to identify the actual installed Pi engine in model controls, Settings, agent messages, and verified run metadata. It is not the PiDesigner application icon and does not imply endorsement.
+- Local SVG assets under `ui/public/model-icons/`, vendored unchanged from the OpenDesign reference checkout; provenance and Apache-2.0 license are included alongside them.
+- The shared registry resolves the model maker first (GPT → OpenAI, Opus/Sonnet/Haiku → Claude, DeepSeek → DeepSeek, Gemini → Gemini), then known routing providers, then a neutral authored code icon.
+- Provider labels remain separate from model-maker identity. Marks identify the configured models/providers and imply no endorsement or affiliation.
+
+## Compatibility
+
+Display name and app-bundle filename are πDesigner. `dev.pidesigner.app`, executable names, CLI/MCP IDs, existing preferences and `~/Library/Application Support/PiDesigner` remain unchanged to preserve projects and permissions.

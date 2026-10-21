@@ -19,7 +19,7 @@ When a real value is unavailable, use an honest, clearly labeled placeholder (`�
 
 ### Color and typography
 
-- Derive the palette from the brand, design system, domain, or your reviewed design plan — never from PiDesigner's own interface.
+- Derive the palette from the brand, design system, domain, or your reviewed design plan — never from πDesigner's own interface.
 - Derive tints and state colors from the base palette with `oklch()` or `color-mix()` instead of inventing unrelated values.
 - One accent color, appearing at most twice per screen.
 - Display and body faces must be clearly distinct (or one family for utilitarian, data-dense briefs). Default to line lengths under 80 characters.

@@ -36,7 +36,7 @@ export function Home({ systems, systemId, setSystemId, skillId, setSkillId, fram
       <Composer value={prompt} onChange={setPrompt} onSubmit={submit} busy={busy} disabled={busy} systemName={selected?.name} onSystem={onSystem} frame={frame} onFrame={setFrame}/>
       {skillId === 'web-clone' && <div class="clone-source"><label for="clone-url"><Icon name="clone" size={17}/>Reference website</label><input id="clone-url" type="url" value={url} onInput={(e) => setURL(e.currentTarget.value)} placeholder="https://example.com" aria-invalid={!!urlError}/>{urlError && <p class="field-error" role="alert">{urlError}</p>}</div>}
       <div class="workflow-choices" aria-label="Design workflow">{workflows.map((w) => <button key={w.id} class={`workflow-choice ${skillId === w.id ? 'selected' : ''}`} aria-pressed={skillId === w.id} onClick={() => setSkillId(w.id)} title={w.description}><Icon name={w.icon} size={17}/>{w.name}</button>)}</div>
-      <p class="home-caption"><span class="status-dot"/>Built on your Mac. Powered by your Pi agent.</p>
+      <p class="home-caption"><span class="status-dot"/>Built on your Mac. Powered by your π agent.</p>
       {error && <p class="inline-error" role="alert">{error}</p>}
     </section>
 

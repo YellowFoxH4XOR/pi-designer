@@ -1,5 +1,5 @@
 // Command pidesigner runs the design workspace daemon: projects, files, chat
-// runs driven by the locally installed Pi agent, and the live preview.
+// runs driven by the locally installed π agent, and the live preview.
 package main
 
 import (

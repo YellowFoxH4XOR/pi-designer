@@ -1,5 +1,5 @@
 ---
-name: PiDesigner
+name: πDesigner
 description: A focused, PiDesk-family design workspace for the Mac
 colors:
   primary: "#5c61b6"
@@ -73,7 +73,7 @@ components:
     padding: "9px 12px"
 ---
 
-# Design System: PiDesigner
+# Design System: πDesigner
 
 ## Overview
 
@@ -111,7 +111,7 @@ Focus is a visible two-pixel accent outline with a three-pixel offset. Reduced m
 
 ## Shapes
 
-Controls have compact curves, cards and panels use medium curves, and the main canvas/composer have larger curves. PiDesigner’s app mark is a charcoal tile containing a pale, slightly rotated artboard, a lavender Bézier curve with square anchors, and a pen nib. It retains the PiDesk-family palette while identifying this as a design tool. The Pi agent uses its separate, actual pixel mark in coral, blue, and gold; never substitute the PiDesigner icon for the engine identity.
+Controls have compact curves, cards and panels use medium curves, and the main canvas/composer have larger curves. πDesigner’s app mark is an authored lavender Greek π on a charcoal tile. A standalone lavender π identifies the execution engine; model controls instead show the relevant locally bundled maker/provider mark. Opus and Sonnet use Claude/Anthropic, not DeepSeek. Unknown models use a neutral fallback. App, engine, model and routing-provider identity are never conflated.
 
 ## Components
 
@@ -121,19 +121,31 @@ Text labels accompany consistent authored line icons. Selected navigation uses a
 
 ### Composer
 
-A real textarea is paired with design-system selection, an optional device select, the actual Pi mark and selected-model control, and a single send action. The Home composer starts a project; the compact Studio composer refines it. Empty prompts cannot submit. During generation, the send action becomes a stop control.
+A real textarea is paired with design-system selection, an optional device select, a model/provider icon and selected-model control, and a single send action. The Home composer starts a project; the compact Studio composer refines it. Empty prompts cannot submit. During generation, the send action becomes a stop control.
 
 ### Design-system library
 
 Search and category filters scope the full bundled catalog. Grid specimens are indicative, explicitly labeled as samples. Detail views expose real guidelines, compiled CSS, palette values, and component fixtures. The detail tabs support arrow keys, Home, and End.
 
-### Pi model picker
+### π model picker
 
-The Pi control opens a searchable list read from the installed agent over RPC. Rows identify both model name and provider. Selection saves an exact provider/model id, checks supported thinking levels, and carries into the next run. Settings uses the same picker and only exposes supported thinking levels. Preserve loading, retry, empty-result, and failed-selection states. Credentials, endpoints, and provider headers are never model-list UI data.
+The π control opens a searchable list read from the installed agent over RPC. Rows identify both model name and provider. Selection saves an exact provider/model id, checks supported thinking levels, and carries into the next run. Settings uses the same picker and only exposes supported thinking levels. Preserve loading, retry, empty-result, and failed-selection states. Credentials, endpoints, and provider headers are never model-list UI data.
 
 ### Studio and source editor
 
 Preview/Code are distinct working views. CSS-only updates swap stylesheets without navigating the iframe; structural updates reload the preview. The source editor shows unsaved state and protects view changes, project navigation, and app quitting from accidental loss. Agent execution disables concurrent source writing.
+
+### Observable execution
+
+A persistent Studio strip gives the reported current action, project and elapsed time, with Stop. Expanding reveals the exact submitted brief/context, ID-correlated tool steps, bounded output snapshots, durations, errors and paginated diagnostics. Labels, not a blue dot or animation alone, distinguish starting, working, reconnecting, attention, finished, failed and stopped. No invented percentages or private reasoning.
+
+The global Activity control and project statuses reflect the same durable event journal. Completed turns with unanswered questions remain attention-needed. Source editing, model identity and preview state remain separate from transport health.
+
+### Mac background surfaces
+
+Closing or minimizing the window retains its source draft, daemon and tasks; explicit Quit stops execution and protects unsaved source. A native menu-bar item and optional dark charcoal top-centre panel read the daemon independently of the web view. The panel appears only with active/attention-needed work while the workspace is in the background, stays below the camera/menu bar, and expands on click. Its state is available to accessibility, not only painted as a glyph.
+
+Notifications are permission-controlled and deduplicated by run/outcome. Attention and failure are not completion. Sounds and project-name previews default off. Notification clicks restore the relevant conversation; permission denial retains menu-bar and in-app status.
 
 ### Dialogs and feedback
 
@@ -143,8 +155,8 @@ Use native HTML modal dialogs for focused system choice and renaming, with Escap
 
 - Do preserve the separation between the workspace and the generated artifact.
 - Do use the real catalog and local run state, including empty and failure cases.
-- Do keep Pi-only execution and local storage explicit without making it the visual focus.
+- Do keep π-only execution and local storage explicit without making it the visual focus.
 - Do keep native keyboard conventions and visible focus.
 - Don’t add account, billing, publishing, or collaboration controls without working capabilities.
-- Don’t describe prototype frames as separate native app generators or PiDesigner clients.
+- Don’t describe prototype frames as separate native app generators or πDesigner clients.
 - Don’t imply the light theme has a complete dark-mode counterpart.

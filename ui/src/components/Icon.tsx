@@ -1,7 +1,10 @@
 import type { ComponentChildren } from 'preact';
 
-export type IconName = 'home' | 'projects' | 'palette' | 'skills' | 'settings' | 'plus' | 'search' | 'arrow' | 'chevron' | 'back' | 'close' | 'web' | 'mobile' | 'desktop' | 'code' | 'eye' | 'refresh' | 'external' | 'copy' | 'check' | 'stop' | 'folder' | 'file' | 'motion' | 'clone' | 'deck' | 'connect' | 'menu' | 'send' | 'download' | 'clock';
+export type IconName = 'home' | 'projects' | 'palette' | 'skills' | 'settings' | 'plus' | 'search' | 'arrow' | 'chevron' | 'back' | 'close' | 'web' | 'mobile' | 'desktop' | 'code' | 'eye' | 'refresh' | 'external' | 'copy' | 'check' | 'stop' | 'folder' | 'file' | 'motion' | 'clone' | 'deck' | 'connect' | 'menu' | 'send' | 'download' | 'clock' | 'activity' | 'warning' | 'message';
 const paths: Record<IconName, ComponentChildren> = {
+  activity: <><path d="M3 12h4l3-8 4 16 3-8h4"/></>,
+  warning: <><path d="m12 3 10 18H2Z"/><path d="M12 9v5M12 17h.01"/></>,
+  message: <><path d="M21 12a8 8 0 0 1-8 8H4l-2 2V12a9 9 0 0 1 19 0Z"/><path d="M8 10h8M8 14h5"/></>,
   home: <><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z"/></>,
   projects: <><rect x="5" y="3" width="15" height="17" rx="2"/><path d="M5 7H2v14a1 1 0 0 0 1 1h13M9 7h7M9 11h7"/></>,
   palette: <><path d="M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 1.4-3.4 1.5 1.5 0 0 1 1-2.6H18a3 3 0 0 0 3-3 9 9 0 0 0-9-9Z"/><path d="M7.5 10h.01M10 6.8h.01M14.2 7h.01M17.2 10h.01" stroke-width="3"/></>,
@@ -37,7 +40,7 @@ const paths: Record<IconName, ComponentChildren> = {
 export function Icon({ name, size = 19, class: className = '' }: { name: IconName; size?: number; class?: string }) {
   return <svg class={`icon ${className}`} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{paths[name]}</svg>;
 }
-// The installed Pi logo pixel grid and fixed brand colors, not the app mark.
+// Standalone Greek π for execution; provider/model controls use ModelIcon.
 export function PiLogo({ size = 24 }: { size?: number }) {
   return <img src="/pi.svg" width={size} height={size} class="pi-agent-mark" alt="" />;
 }

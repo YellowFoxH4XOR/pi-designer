@@ -143,7 +143,7 @@ func (s *server) handle(ctx context.Context, line []byte) {
 			"serverInfo": map[string]any{"name": serverName, "version": serverVersion},
 			"instructions": "pidesigner exposes a local-first design workspace. " +
 				"Use list_design_systems + the design-system resources for brand context, " +
-				"write_file for surgical edits, and start_run to delegate a full design to the Pi agent.",
+				"write_file for surgical edits, and start_run to delegate a full design to the π agent.",
 		})
 	case "notifications/initialized", "notifications/cancelled":
 		// No response for notifications.
@@ -254,7 +254,7 @@ func toolDefinitions() []toolDef {
 		},
 		{
 			Name:        "list_models",
-			Description: "List models configured in the installed Pi, including exact provider/id values. Credentials remain with Pi.",
+			Description: "List models configured in the installed π, including exact provider/id values. Credentials remain with π.",
 			InputSchema: objectSchema(nil),
 		},
 		{
@@ -269,14 +269,14 @@ func toolDefinitions() []toolDef {
 		},
 		{
 			Name:        "start_run",
-			Description: "Delegate a design task to the Pi agent running in the project directory. Returns a run id; poll get_run. Prefer this for full generation.",
+			Description: "Delegate a design task to the π agent running in the project directory. Returns a run id; poll get_run. Prefer this for full generation.",
 			InputSchema: objectSchema(map[string]any{
 				"project":        projArg,
 				"prompt":         map[string]any{"type": "string", "description": "The design brief."},
 				"conversationId": map[string]any{"type": "string", "description": "Conversation to append the turn to."},
 				"designSystemId": map[string]any{"type": "string", "description": "Design system to apply."},
 				"skillId":        map[string]any{"type": "string", "description": "Skill to load (web-prototype, motion-design, web-clone, ...)."},
-				"model":          map[string]any{"type": "string", "description": "Exact provider/model id from list_models. Omit to use the model saved in PiDesigner."},
+				"model":          map[string]any{"type": "string", "description": "Exact provider/model id from list_models. Omit to use the model saved in πDesigner."},
 			}),
 		},
 		{
@@ -354,7 +354,7 @@ func (s *server) callTool(ctx context.Context, req rpcRequest) {
 			"designSystemId": argStr(args, "designSystemId"),
 			"skillId":        argStr(args, "skillId"),
 			"model":          argStr(args, "model"),
-			// Editors cannot answer PiDesigner's question forms.
+			// Editors cannot answer πDesigner's question forms.
 			"skipDiscovery": true,
 		})
 	case "get_run":

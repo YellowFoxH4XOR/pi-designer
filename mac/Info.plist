@@ -3,15 +3,15 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleName</key>
-	<string>PiDesigner</string>
+	<string>πDesigner</string>
 	<key>CFBundleDisplayName</key>
-	<string>PiDesigner</string>
+	<string>πDesigner</string>
 	<key>CFBundleIdentifier</key>
 	<string>dev.pidesigner.app</string>
 	<key>CFBundleVersion</key>
-	<string>0.1.1</string>
+	<string>0.2.0</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.1.1</string>
+	<string>0.2.0</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleExecutable</key>
@@ -40,6 +40,6 @@
 	<!-- The app shells out to the user's `pi` binary and writes into
 	     ~/Library/Application Support/PiDesigner. -->
 	<key>NSHumanReadableCopyright</key>
-	<string>pidesigner</string>
+	<string>πDesigner · Local design workspace</string>
 </dict>
 </plist>

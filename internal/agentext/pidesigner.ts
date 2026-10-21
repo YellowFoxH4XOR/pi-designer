@@ -1,18 +1,18 @@
 /**
- * PiDesigner's Pi extension: the design-agent tools a design run needs.
+ * πDesigner's π extension: the design-agent tools a design run needs.
  *
- * - todo_write: the live plan PiDesigner renders as a plan card.
- * - render_preview: renders a project HTML file at one of PiDesigner's preview
+ * - todo_write: the live plan πDesigner renders as a plan card.
+ * - render_preview: renders a project HTML file at one of πDesigner's preview
  *   frames with the bundled WebKit renderer and returns the screenshot to the
  *   model, so it can critique what it actually built.
  * - submit_critique: records one round of the expert panel critique, scores
  *   it, and decides whether the design ships or must be revised.
  *
- * Configuration comes from the environment PiDesigner sets for the run:
+ * Configuration comes from the environment πDesigner sets for the run:
  *   PIDESIGNER_RENDERER    absolute path of pidesigner-render (optional)
  *   PIDESIGNER_RENDER_DIR  directory where rendered PNGs are kept
  *
- * This file is written by the PiDesigner daemon; edits are overwritten.
+ * This file is written by the πDesigner daemon; edits are overwritten.
  */
 import { execFile } from "node:child_process";
 import { mkdir, readFile, realpath, stat, unlink } from "node:fs/promises";
@@ -182,7 +182,7 @@ export default function pidesigner(pi: ExtensionAPI) {
 		name: "render_preview",
 		label: "Render preview",
 		description:
-			"Render a project HTML file in WebKit at one of PiDesigner's preview frames (web 1440×900, desktop 1280×800, mobile 390×844) " +
+			"Render a project HTML file in WebKit at one of πDesigner's preview frames (web 1440×900, desktop 1280×800, mobile 390×844) " +
 			"and return a screenshot plus measured facts: horizontal overflow, script errors, broken images, page height. " +
 			`Use it to inspect your built design before delivering. Budget: ${RENDER_BUDGET} renders per run.`,
 		parameters: Type.Object({

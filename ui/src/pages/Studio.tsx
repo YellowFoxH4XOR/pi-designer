@@ -1,3 +1,7 @@
+import type { ComponentChildren } from 'preact';
+import { RunActivity } from '../components/Activity';
+import { fromActivity, type RunState as ActivityRun } from '../activity';
+import { ModelIcon } from '../components/ModelIcon';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { api, type Conversation, type DesignSystem, type FileEntry, type Message, type Project, type Render, type Run } from '../api';
 import { AgentMessage } from '../components/AgentMessage';
@@ -13,10 +17,10 @@ import { TodoCard } from '../components/TodoCard';
 import { continueMessage, parseAssistantText, parseFormAnswers, type ParsedFormAnswers } from '../components/protocol';
 import { skillNames, type Frame, type RunState } from '../state';
 
-export function Studio({ projectId, systems, run, onMonitor, onStart, onHome, onError, initialFrame = 'web' }: {
+export function Studio({ projectId, systems, run, onMonitor, onStart, onHome, onError, initialFrame = 'web', initialConversation = '', activityControl }: {
   projectId: string; systems: DesignSystem[]; run?: RunState; onMonitor: (run: Run) => void;
   onStart: (p: Project, conversationId: string, prompt: string, viewport: Frame) => Promise<void>;
-  onHome: () => void; onError: (s: string) => void; initialFrame?: Frame;
+  onHome: () => void; onError: (s: string) => void; initialFrame?: Frame; initialConversation?: string; activityControl?: ComponentChildren;
 }) {
   const [project, setProject] = useState<Project | null>(null);
   const [files, setFiles] = useState<FileEntry[]>([]);
@@ -32,6 +36,7 @@ export function Studio({ projectId, systems, run, onMonitor, onStart, onHome, on
   const [failure, setFailure] = useState('');
   const [connecting, setConnecting] = useState(false);
   const [historyRun, setHistoryRun] = useState<Run | null>(null);
+  const [historyActivity, setHistoryActivity] = useState<ActivityRun | null>(null);
   const [preview, setPreview] = useState<Render | null>(null);
   const messagesPane = useRef<HTMLDivElement>(null);
   const follow = useRef(true);
@@ -43,7 +48,7 @@ export function Studio({ projectId, systems, run, onMonitor, onStart, onHome, on
     Promise.all([api.project(projectId), api.files(projectId), api.runs(projectId)]).then(async ([p, f, r]) => {
       if (!active) return;
       setProject(p.project); setFiles(f.files); setConversations(p.conversations);
-      if (p.conversations[0]) setConversationId(p.conversations[0].id);
+      if (p.conversations[0]) setConversationId(p.conversations.find(c => c.id === initialConversation)?.id || p.conversations[0].id);
       const running = r.runs.find((r) => r.status === 'running');
       if (running) monitor.current(running);
     }).catch((e) => { if (active) setFailure(e.message); });
@@ -55,7 +60,15 @@ export function Studio({ projectId, systems, run, onMonitor, onStart, onHome, on
     let active = true;
     api.messages(conversationId).then((d) => { if (active) setMessages(d.messages); }).catch((e) => { if (active) onError(e.message); });
     return () => { active = false; };
-  }, [conversationId, run?.status]);
+  }, [conversationId, run?.id, run?.status]);
+
+  useEffect(() => { if (initialConversation && conversations.some(c => c.id === initialConversation)) setConversationId(initialConversation); }, [initialConversation, conversations]);
+  useEffect(() => {
+    let active = true;
+    setHistoryActivity(null);
+    if (historyRun) api.runActivity(historyRun.id).then(d => { if (active) setHistoryActivity(fromActivity(d.activity)); }).catch(() => {});
+    return () => { active = false; };
+  }, [historyRun?.id, run?.status]);
 
   // The latest finished run carries the plan and renders for a reopened project.
   useEffect(() => {
@@ -67,7 +80,7 @@ export function Studio({ projectId, systems, run, onMonitor, onStart, onHome, on
       setHistoryRun(latest ?? null);
     }).catch(() => {});
     return () => { active = false; };
-  }, [projectId, conversationId, run?.status]);
+  }, [projectId, conversationId, run?.id, run?.status]);
 
   useEffect(() => {
     let disposed = false, reconnect: number | undefined;
@@ -152,7 +165,7 @@ export function Studio({ projectId, systems, run, onMonitor, onStart, onHome, on
   const awaitingAnswers = latestAssistant ? latestAssistant.forms.some((form) => !form.invalid && !latestAnswers.has(form.id)) : false;
   const openTodos = planTodos.filter((todo) => todo.status !== 'completed');
   const canContinue = !busy && !connecting && openTodos.length > 0 && !awaitingAnswers;
-  const visibleTools = (run?.tools ?? []).filter((event) => event.tool !== 'todo_write' && event.tool !== 'render_preview');
+  const displayedActivity = conversationRun || historyActivity;
 
   function answeredFormsFor(index: number) {
     const message = messages[index];
@@ -168,8 +181,9 @@ export function Studio({ projectId, systems, run, onMonitor, onStart, onHome, on
   }
 
   return <div class="studio-shell">
-    <header class="studio-header"><IconButton icon="home" label="Back to home" onClick={onHome}/><Logo size={26}/><button class="project-title" onClick={() => { setName(project.name); setRenaming(true); }} title="Rename project" aria-label="Rename project">{project.name}<Icon name="chevron" size={14}/></button><span class="studio-workflow">{skillNames[project.skillId || ''] || 'Prototype'}</span><div class="studio-header-end"><span class="local-label"><span class="status-dot"/>Local workspace</span><button class="button secondary small" onClick={() => setPickingSystem(true)} disabled={busy}><Icon name="palette" size={16}/>{system?.name || 'Design system'}</button></div></header>
+    <header class="studio-header"><IconButton icon="home" label="Back to home" onClick={onHome}/><Logo size={26}/><button class="project-title" onClick={() => { setName(project.name); setRenaming(true); }} title="Rename project" aria-label="Rename project">{project.name}<Icon name="chevron" size={14}/></button><span class="studio-workflow">{skillNames[project.skillId || ''] || 'Prototype'}</span><div class="studio-header-end">{activityControl}<span class="local-label"><span class="status-dot"/>Local workspace</span><button class="button secondary small" onClick={() => setPickingSystem(true)} disabled={busy}><Icon name="palette" size={16}/>{system?.name || 'Design system'}</button></div></header>
     <div class="studio-content"><section class="conversation-pane" aria-label="Design conversation"><div class="conversation-toolbar"><label><span class="sr-only">Conversation</span><select value={conversationId} disabled={busy} onChange={(e) => { setConversationId(e.currentTarget.value); follow.current = true; }}>{conversations.map((c, i) => <option key={c.id} value={c.id}>{c.title === 'Main' ? 'Design conversation' : `${c.title} ${conversations.length - i}`}</option>)}</select></label><IconButton icon="plus" label="New conversation" onClick={newConversation} disabled={busy}/></div>
+      {displayedActivity && <RunActivity key={displayedActivity.id} run={displayedActivity} workflow={skillNames[project.skillId || ''] || 'Prototype'} system={system?.name} onError={onError}/>}
       <div class="conversation-messages" ref={messagesPane} onScroll={(e) => { const el = e.currentTarget; follow.current = el.scrollHeight - el.scrollTop - el.clientHeight < 100; }}>
         {!messages.length && !showLive && <div class="conversation-welcome"><Logo size={36}/><h2>Let’s make it yours.</h2><p>Describe the design you have in mind. We’ll build it here, together.</p></div>}
         {messages.map((message, index) => {
@@ -189,23 +203,23 @@ export function Studio({ projectId, systems, run, onMonitor, onStart, onHome, on
             return <article key={message.id} class="message message-user"><div class="message-byline"><span>You</span></div><RichText text={message.content}/></article>;
           }
           return <article key={message.id} class="message message-assistant">
-            <div class="message-byline"><PiLogo size={20}/><strong>Pi agent</strong></div>
+            <div class="message-byline"><PiLogo size={20}/><strong>π agent</strong></div>
             <AgentMessage text={message.content} interactive={index === latestAssistantIndex && !busy && !connecting} answered={answeredFormsFor(index)} onSend={sendText}/>
           </article>;
         })}
-        {showLive && <article class="message message-assistant live-message"><div class="message-byline"><PiLogo size={20}/><strong>Pi agent</strong><span class="generating-label">Working<span class="working-indicator"><i/><i/><i/></span></span></div>{run.text ? <AgentMessage text={run.text} live/> : <p class="thinking-label">Reading your brief and planning the design…</p>}</article>}
-        {run?.model && run.conversationId === conversationId && <p class="run-model"><PiLogo size={14}/>Using {run.model}</p>}
+        {showLive && <article class="message message-assistant live-message"><div class="message-byline"><PiLogo size={20}/><strong>π agent</strong><span class="generating-label">Working<span class="working-indicator"><i/><i/><i/></span></span></div>{run.text ? <AgentMessage text={run.text} live/> : <p class="thinking-label">Reading your brief and planning the design…</p>}</article>}
+        {run?.model && run.conversationId === conversationId && <p class="run-model"><ModelIcon id={run.modelId} provider={run.provider} size={16}/>Using {run.model}</p>}
         {planTodos.length > 0 && <TodoCard todos={planTodos} live={showLive}/>}
         {planRenders.length > 0 && <RenderStrip renders={planRenders} onOpen={setPreview}/>}
         {planCritiques.length > 0 && <CritiqueCard critiques={planCritiques} live={showLive}/>}
-        {visibleTools.length > 0 && <details class="tool-log"><summary><Icon name={busy ? 'code' : 'check'} size={15}/>{busy ? `Pi is using ${visibleTools[visibleTools.length - 1].tool}` : `${visibleTools.length} recent agent actions`}</summary><ul>{visibleTools.map((event, i) => <li key={i}><code>{event.tool}</code><span>{String(event.args?.path || event.args?.command || '').slice(0, 140)}</span></li>)}</ul></details>}
+
         {canContinue && <div class="continue-tasks"><button class="button secondary" onClick={() => void sendText(continueMessage(planTodos))} disabled={connecting}><Icon name="refresh" size={15}/>Continue remaining tasks<span class="continue-count">{openTodos.length}</span></button></div>}
-        {run?.status === 'failed' && <div class="inline-error" role="alert"><strong>Pi couldn’t finish this run.</strong><p>{run.error || 'Check your Pi model configuration, then try again.'}</p></div>}
-        {run?.status === 'canceled' && <p class="run-status">Generation stopped. Your existing files are unchanged unless Pi saved an edit before stopping.</p>}
-        {run?.status === 'succeeded' && <p class="run-status"><Icon name="check" size={15}/>{files.some((file) => /\.html?$/i.test(file.path)) ? 'Finished. Your design is ready to explore.' : 'Finished. Response saved to this conversation.'}</p>}
+        {run?.status === 'failed' && <div class="inline-error" role="alert"><strong>π couldn’t finish this run.</strong><p>{run.error || 'Check your π model configuration, then try again.'}</p></div>}
+        {run?.status === 'canceled' && <p class="run-status">Generation stopped. Your existing files are unchanged unless π saved an edit before stopping.</p>}
+        {run?.status === 'succeeded' && !run.attention && <p class="run-status"><Icon name="check" size={15}/>{files.some((file) => /\.html?$/i.test(file.path)) ? 'Finished. Your design is ready to explore.' : 'Finished. Response saved to this conversation.'}</p>}
       </div>
-      <div class="studio-composer"><Composer compact value={prompt} onChange={setPrompt} onSubmit={send} busy={busy} disabled={connecting} onStop={() => { if (run) api.cancelRun(run.id).catch((e) => onError(e.message)); }} systemName={system?.name} onSystem={() => setPickingSystem(true)} frame={frame} onFrame={setFrame}/><p>Pi can edit project files and run commands on your Mac.</p></div>
-    </section><PreviewPane project={project} files={files} frame={frame} onFrame={setFrame} changes={changes} busy={busy} onError={onError}/></div>
+      <div class="studio-composer"><Composer compact value={prompt} onChange={setPrompt} onSubmit={send} busy={busy} disabled={connecting} onStop={() => { if (run) api.cancelRun(run.id).catch((e) => onError(e.message)); }} systemName={system?.name} onSystem={() => setPickingSystem(true)} frame={frame} onFrame={setFrame}/><p>π can edit project files and run commands on your Mac.</p></div>
+    </section><PreviewPane project={project} files={files} frame={frame} onFrame={setFrame} changes={changes} busy={busy} activityLabel={displayedActivity?.label} onError={onError}/></div>
     {pickingSystem && <SystemPicker systems={systems} selected={project.designSystemId || ''} onClose={() => setPickingSystem(false)} onSelect={async (id) => { try { const d = await api.updateProject({ ...project, designSystemId: id }); setProject(d.project); setPickingSystem(false); } catch (e) { onError(String(e)); } }}/>}
     {preview && <Dialog title={`${renderLabel(preview)} render`} onClose={() => setPreview(null)} class="render-dialog"><RenderDialogBody render={preview}/></Dialog>}
     {renaming && <Dialog title="Rename project" onClose={() => setRenaming(false)}><form class="rename-form" onSubmit={async (e) => { e.preventDefault(); try { const d = await api.updateProject({ ...project, name }); setProject(d.project); setRenaming(false); } catch (e) { onError(String(e)); } }}><label>Project name<input autoFocus value={name} onInput={(e) => setName(e.currentTarget.value)} required/></label><button class="button primary" disabled={!name.trim()}>Save name</button></form></Dialog>}

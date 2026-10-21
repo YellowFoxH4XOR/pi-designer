@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-// Model deliberately excludes endpoints, headers and credentials from Pi's
+// Model deliberately excludes endpoints, headers and credentials from π's
 // full model objects. Only presentation/selection metadata crosses the API.
 type Model struct {
 	ID            string `json:"id"`
@@ -45,16 +45,16 @@ func (s *Session) Command(ctx context.Context, name string, args map[string]any,
 	select {
 	case reply := <-ch:
 		if !reply.Success {
-			return fmt.Errorf("Pi %s: %s", name, reply.Error)
+			return fmt.Errorf("π %s: %s", name, reply.Error)
 		}
 		if out != nil && len(reply.Data) > 0 {
 			return json.Unmarshal(reply.Data, out)
 		}
 		return nil
 	case <-ctx.Done():
-		return fmt.Errorf("Pi %s timed out: %w", name, ctx.Err())
+		return fmt.Errorf("π %s timed out: %w", name, ctx.Err())
 	case <-s.done:
-		return fmt.Errorf("Pi exited during %s: %s", name, s.StderrTail())
+		return fmt.Errorf("π exited during %s: %s", name, s.StderrTail())
 	}
 }
 
@@ -71,12 +71,12 @@ func (s *Session) ThinkingLevels(ctx context.Context) ([]string, error) {
 		return nil, err
 	}
 	if len(result.Levels) == 0 {
-		return nil, fmt.Errorf("Pi returned no supported thinking levels")
+		return nil, fmt.Errorf("π returned no supported thinking levels")
 	}
 	return result.Levels, nil
 }
 
-// Catalog asks the installed Pi for its available models; it never reads auth
+// Catalog asks the installed π for its available models; it never reads auth
 // files, calls a model provider directly, or invokes an inference request.
 type Catalog struct {
 	bin    string
@@ -101,6 +101,12 @@ func (c *Catalog) start(ctx context.Context, ref string) (*Session, func(), erro
 		os.RemoveAll(dir)
 		return nil, nil, err
 	}
+	// Metadata-only sessions have no run UI. Drain startup extension events so
+	// faithful RPC backpressure cannot prevent command responses from arriving.
+	go func() {
+		for range s.Events() {
+		}
+	}()
 	return s, func() { s.Close(); os.RemoveAll(dir) }, nil
 }
 
@@ -172,7 +178,7 @@ func (c *Catalog) Resolve(ctx context.Context, ref string) (*Model, error) {
 			return &m, nil
 		}
 	}
-	return nil, fmt.Errorf("Model %q is not available in your installed Pi. Refresh the model list and choose a listed model", ref)
+	return nil, fmt.Errorf("Model %q is not available in your installed π. Refresh the model list and choose a listed model", ref)
 }
 func (c *Catalog) Thinking(ctx context.Context, ref string) ([]string, error) {
 	if _, err := c.Resolve(ctx, ref); err != nil {
@@ -195,7 +201,7 @@ func (c *Catalog) Thinking(ctx context.Context, ref string) ([]string, error) {
 		return nil, err
 	}
 	if ref != "" && (state.Model == nil || state.Model.Ref() != ref) {
-		return nil, fmt.Errorf("Pi did not select the requested model %s", ref)
+		return nil, fmt.Errorf("π did not select the requested model %s", ref)
 	}
 	levels, err := s.ThinkingLevels(ctx)
 	if err != nil {
@@ -218,7 +224,7 @@ func ValidateRef(ref string) error {
 	}
 	parts := strings.SplitN(ref, "/", 2)
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" || strings.ContainsAny(ref, "\r\n\x00") {
-		return fmt.Errorf("Choose an exact provider/model from the Pi model list")
+		return fmt.Errorf("Choose an exact provider/model from the π model list")
 	}
 	return nil
 }

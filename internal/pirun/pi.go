@@ -1,6 +1,6 @@
-// Package pirun drives the locally installed Pi agent over its RPC mode.
+// Package pirun drives the locally installed π agent over its RPC mode.
 //
-// Pi speaks JSONL over stdin/stdout: one JSON record per line, LF-terminated.
+// π speaks JSONL over stdin/stdout: one JSON record per line, LF-terminated.
 // This package owns the process lifecycle, correlates command responses by id,
 // and turns the event stream into a typed channel.
 //
@@ -42,28 +42,33 @@ const (
 	EventModelResult   = "model_result"
 )
 
-// Event is one item from Pi's event stream.
+// Event is one item from π's event stream.
 type Event struct {
-	Type     string          `json:"type"`
-	Text     string          `json:"text,omitempty"`
-	ToolName string          `json:"toolName,omitempty"`
-	ToolArgs json.RawMessage `json:"toolArgs,omitempty"`
+	Type         string          `json:"type"`
+	Text         string          `json:"text,omitempty"`
+	ContentIndex int             `json:"contentIndex,omitempty"`
+	ToolName     string          `json:"toolName,omitempty"`
+	ToolArgs     json.RawMessage `json:"toolArgs,omitempty"`
 	// ToolDetails is a finished tool's structured result details.
 	ToolDetails json.RawMessage `json:"toolDetails,omitempty"`
 	IsError     bool            `json:"isError,omitempty"`
 	Aborted     bool            `json:"aborted,omitempty"`
+	ToolCallID  string          `json:"toolCallId,omitempty"`
+	Output      string          `json:"output,omitempty"`
+	DurationMS  int64           `json:"durationMs,omitempty"`
+	Data        json.RawMessage `json:"data,omitempty"`
 	Raw         json.RawMessage `json:"-"`
 }
 
-// Options configure a Pi invocation.
+// Options configure a π invocation.
 type Options struct {
 	// Bin is the pi executable. Empty means resolve from PATH / ~/.pi.
 	Bin string
-	// Dir is the working directory -- Pi's Read/Write/Edit tools operate here.
+	// Dir is the working directory -- π's Read/Write/Edit tools operate here.
 	Dir string
 	// Model is a model pattern, e.g. "anthropic/claude-sonnet-4-5".
 	Model string
-	// Thinking is Pi's thinking level: off|minimal|low|medium|high|xhigh|max.
+	// Thinking is π's thinking level: off|minimal|low|medium|high|xhigh|max.
 	Thinking string
 	// SkillPaths are skill files or directories to load for this run.
 	SkillPaths []string
@@ -87,21 +92,24 @@ type Options struct {
 	// AllowTools restricts the tool set, e.g. ["read","write","edit","bash"].
 	AllowTools []string
 	// Approve grants a one-time project-trust decision for the run. Automated
-	// runs need this: Pi's default trust policy is "ask", which cannot be
+	// runs need this: π's default trust policy is "ask", which cannot be
 	// answered over RPC.
 	Approve bool
 	// NoApprove explicitly denies project-trust.
 	NoApprove bool
 }
 
-// Session is a running Pi process.
+// Session is a running π process.
 type Session struct {
 	cmd    *exec.Cmd
 	stdin  io.WriteCloser
 	stdout io.ReadCloser
 	stderr io.ReadCloser
 
-	events chan Event
+	events       chan Event
+	stopDelivery chan struct{}
+	stopOnce     sync.Once
+	readers      sync.WaitGroup
 
 	mu      sync.Mutex
 	writeMu sync.Mutex
@@ -113,7 +121,7 @@ type Session struct {
 	stderrTail []string
 }
 
-// rpcResponse is a Pi command response record.
+// rpcResponse is a π command response record.
 type rpcResponse struct {
 	Type    string          `json:"type"`
 	ID      string          `json:"id"`
@@ -134,7 +142,7 @@ func ResolveBin(explicit string) (string, error) {
 	if p, err := exec.LookPath("pi"); err == nil {
 		return p, nil
 	}
-	// Pi's own installer keeps the binary here.
+	// π's own installer keeps the binary here.
 	home, err := os.UserHomeDir()
 	if err == nil {
 		candidate := filepath.Join(home, ".pi", "agent", "bin", "pi")
@@ -145,7 +153,7 @@ func ResolveBin(explicit string) (string, error) {
 	return "", errors.New("pi executable not found on PATH (looked for ~/.pi/agent/bin/pi)")
 }
 
-// Start launches Pi in RPC mode.
+// Start launches π in RPC mode.
 func Start(ctx context.Context, opts Options) (*Session, error) {
 	bin, err := ResolveBin(opts.Bin)
 	if err != nil {
@@ -205,7 +213,7 @@ func Start(ctx context.Context, opts Options) (*Session, error) {
 	if cmd.Env == nil {
 		cmd.Env = os.Environ()
 	}
-	// Put Pi in its own process group so the whole tree (Pi plus any tools it
+	// Put π in its own process group so the whole tree (π plus any tools it
 	// spawns) can be reaped together. Without this, killing the daemon leaves
 	// orphaned agent processes running to completion.
 	setProcessGroup(cmd)
@@ -228,27 +236,31 @@ func Start(ctx context.Context, opts Options) (*Session, error) {
 	}
 
 	s := &Session{
-		cmd:     cmd,
-		stdin:   stdin,
-		stdout:  stdout,
-		stderr:  stderr,
-		events:  make(chan Event, 256),
-		pending: map[string]chan *rpcResponse{},
-		done:    make(chan struct{}),
+		cmd:          cmd,
+		stdin:        stdin,
+		stdout:       stdout,
+		stderr:       stderr,
+		events:       make(chan Event, 256),
+		stopDelivery: make(chan struct{}),
+		pending:      map[string]chan *rpcResponse{},
+		done:         make(chan struct{}),
 	}
 
+	s.readers.Add(2)
 	go s.readStdout()
 	go s.readStderr()
+	go func() {
+		s.readers.Wait()
+		close(s.events)
+		_ = cmd.Wait() // wait only after both pipes have been drained
+		close(s.done)
+	}()
 	go func() {
 		select {
 		case <-ctx.Done():
 			s.CloseWith()
 		case <-s.done:
 		}
-	}()
-	go func() {
-		_ = cmd.Wait()
-		close(s.done)
 	}()
 
 	return s, nil
@@ -257,12 +269,12 @@ func Start(ctx context.Context, opts Options) (*Session, error) {
 // Events returns the event channel. It is closed when the session ends.
 func (s *Session) Events() <-chan Event { return s.events }
 
-// Done is closed when the Pi process exits.
+// Done is closed when the π process exits.
 func (s *Session) Done() <-chan struct{} { return s.done }
 
 // readStdout parses the JSONL protocol stream.
 func (s *Session) readStdout() {
-	defer close(s.events)
+	defer s.readers.Done()
 
 	// bufio.Reader (not Scanner) so long records are not capped at 64KB.
 	br := bufio.NewReaderSize(s.stdout, 1<<16)
@@ -351,74 +363,9 @@ func (s *Session) deliverResponse(resp *rpcResponse) {
 	}
 }
 
-// handleEvent converts an event record into a typed Event.
-func (s *Session) handleEvent(line []byte, recType string) {
-	switch recType {
-	case "agent_start":
-		s.emit(Event{Type: EventAgentStart})
-	case "agent_end":
-		s.emit(Event{Type: EventAgentEnd})
-	case "agent_settled":
-		var e struct {
-			Aborted bool `json:"aborted"`
-		}
-		_ = json.Unmarshal(line, &e)
-		s.emit(Event{Type: EventSettled, Aborted: e.Aborted})
-	case "message_update":
-		var e struct {
-			AssistantMessageEvent struct {
-				Type  string `json:"type"`
-				Delta string `json:"delta"`
-			} `json:"assistantMessageEvent"`
-		}
-		if err := json.Unmarshal(line, &e); err != nil {
-			return
-		}
-		switch e.AssistantMessageEvent.Type {
-		case "text_delta":
-			s.emit(Event{Type: EventTextDelta, Text: e.AssistantMessageEvent.Delta})
-		case "thinking_delta":
-			s.emit(Event{Type: EventThinkingDelta, Text: e.AssistantMessageEvent.Delta})
-		}
-	case "message_end":
-		var e struct {
-			Message struct {
-				Role         string `json:"role"`
-				StopReason   string `json:"stopReason"`
-				ErrorMessage string `json:"errorMessage"`
-			} `json:"message"`
-		}
-		if json.Unmarshal(line, &e) == nil && e.Message.Role == "assistant" && e.Message.StopReason == "error" {
-			message := e.Message.ErrorMessage
-			if message == "" {
-				message = "The selected Pi model could not complete its request. Check its authentication and availability in Pi."
-			}
-			s.emit(Event{Type: EventError, Text: message})
-		} else if e.Message.Role == "assistant" {
-			s.emit(Event{Type: EventModelResult})
-		}
-	case "tool_execution_start":
-		var e struct {
-			ToolName string          `json:"toolName"`
-			Args     json.RawMessage `json:"args"`
-		}
-		_ = json.Unmarshal(line, &e)
-		s.emit(Event{Type: EventToolStart, ToolName: e.ToolName, ToolArgs: e.Args})
-	case "tool_execution_end":
-		var e struct {
-			ToolName string `json:"toolName"`
-			IsError  bool   `json:"isError"`
-			Result   struct {
-				Details json.RawMessage `json:"details"`
-			} `json:"result"`
-		}
-		_ = json.Unmarshal(line, &e)
-		s.emit(Event{Type: EventToolEnd, ToolName: e.ToolName, IsError: e.IsError, ToolDetails: e.Result.Details})
-	}
-}
-
 // readStderr forwards diagnostics without treating them as protocol data.
 func (s *Session) readStderr() {
+	defer s.readers.Done()
 	br := bufio.NewReaderSize(s.stderr, 1<<16)
 	for {
 		line, err := br.ReadString('\n')
@@ -438,14 +385,11 @@ func (s *Session) readStderr() {
 	}
 }
 
-// emit pushes an event without blocking the reader goroutine indefinitely.
+// emit honors RPC backpressure; lifecycle events and deltas are never silently lost.
 func (s *Session) emit(e Event) {
-	defer func() { _ = recover() }() // channel may be closed concurrently
 	select {
 	case s.events <- e:
-	default:
-		// Drop the event rather than stalling Pi's stdout reader. Dropping
-		// deltas is preferable to blocking the agent.
+	case <-s.stopDelivery:
 	}
 }
 
@@ -490,9 +434,9 @@ func (s *Session) send(cmdType string, extra map[string]any) (string, chan *rpcR
 	return id, ch, nil
 }
 
-// Prompt sends a prompt and waits until Pi has accepted it.
+// Prompt sends a prompt and waits until π has accepted it.
 //
-// The returned disposition mirrors Pi's own vocabulary: "started", "queued"
+// The returned disposition mirrors π's own vocabulary: "started", "queued"
 // or "handled". "handled" means an input handler consumed the prompt and no
 // run started -- callers must not wait for agent_settled in that case.
 func (s *Session) Prompt(ctx context.Context, text string) (string, error) {
@@ -519,7 +463,7 @@ func (s *Session) Prompt(ctx context.Context, text string) (string, error) {
 	}
 }
 
-// Abort asks Pi to stop the current run.
+// Abort asks π to stop the current run.
 func (s *Session) Abort(ctx context.Context) error {
 	_, ch, err := s.send("abort", nil)
 	if err != nil {
@@ -541,6 +485,7 @@ func (s *Session) Abort(ctx context.Context) error {
 // Close shuts the session down: close stdin for an orderly exit, then kill
 // the process if it lingers.
 func (s *Session) Close() {
+	s.stopOnce.Do(func() { close(s.stopDelivery) })
 	s.mu.Lock()
 	if s.closed {
 		s.mu.Unlock()
@@ -564,5 +509,6 @@ func (s *Session) Close() {
 
 // CloseWith kills the process group immediately.
 func (s *Session) CloseWith() {
+	s.stopOnce.Do(func() { close(s.stopDelivery) })
 	killProcessGroup(s.cmd)
 }

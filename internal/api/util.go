@@ -15,13 +15,3 @@ func newID(prefix string) string {
 	}
 	return prefix + "_" + hex.EncodeToString(b)
 }
-
-// unsubscribe detaches an SSE subscriber from a run.
-func (r *Runner) unsubscribe(runID string, ch chan AgentEvent) {
-	r.mu.Lock()
-	b, ok := r.brokers[runID]
-	r.mu.Unlock()
-	if ok {
-		b.unsubscribe(ch)
-	}
-}

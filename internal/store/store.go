@@ -89,6 +89,9 @@ func (s *Store) migrate() error {
 			started_at INTEGER NOT NULL,
 			ended_at INTEGER
 		)`,
+		`CREATE TABLE IF NOT EXISTS run_events (seq INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE, body TEXT NOT NULL)`,
+		`CREATE INDEX IF NOT EXISTS idx_run_events ON run_events(run_id,seq)`,
+		`CREATE TABLE IF NOT EXISTS run_activity (run_id TEXT PRIMARY KEY REFERENCES runs(id) ON DELETE CASCADE, body TEXT NOT NULL)`,
 		`CREATE INDEX IF NOT EXISTS idx_conv_project ON conversations(project_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_msg_conv ON messages(conversation_id, created_at)`,
 		`CREATE INDEX IF NOT EXISTS idx_run_project ON runs(project_id, started_at)`,
