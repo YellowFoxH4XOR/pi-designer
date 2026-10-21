@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Real installed Pi metadata, real Go persistence, and an optional one-line
 // inference through the app. All project data is confined to a review daemon.
-const { chromium } = require(process.env.PLAYWRIGHT_PACKAGE || 'playwright');
+const { chromium } = require(process.env.PLAYWRIGHT_PACKAGE || '../ui/node_modules/playwright-core');
 const fs = require('node:fs/promises');
 const assert = require('node:assert/strict');
 (async () => {
@@ -18,11 +18,11 @@ const assert = require('node:assert/strict');
     await fs.mkdir('.impeccable/review', { recursive: true });
     await page.goto(meta.url);
     await page.getByRole('heading',{name:/Good ideas/}).waitFor();
-    await page.getByRole('button',{name:'Choose Pi model'}).waitFor();
-    assert.equal(await page.locator('.model-button .pi-agent-mark').getAttribute('src'), '/pi.svg');
+    await page.getByRole('button',{name:'Choose π model'}).waitFor();
+    assert.ok(await page.locator('.model-button .model-icon').count());
     assert.equal(await page.locator('.brand .brand-mark').getAttribute('src'), '/brand.svg');
-    pass('Pi agent mark and PiDesigner identity are separate assets');
-    await page.getByRole('button',{name:'Choose Pi model'}).click();
+    pass('Selected-model icons and πDesigner app identity are distinct');
+    await page.getByRole('button',{name:'Choose π model'}).click();
     await page.locator('.model-row[data-model-ref]').first().waitFor({timeout:45000});
     const {data:catalog}=await request('/api/models');
     assert.ok(catalog.models.length>0);

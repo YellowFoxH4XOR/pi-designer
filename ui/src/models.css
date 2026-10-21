@@ -1,5 +1,5 @@
-/* Pi's identity is separate from the PiDesigner app mark. */
-.pi-agent-mark { display: block; flex: 0 0 auto; image-rendering: pixelated; }
+/* π execution identity is separate from the app tile and selected model. */
+.pi-agent-mark { display: block; flex: 0 0 auto; image-rendering: auto; }
 .model-button { display: inline-flex; align-items: center; gap: 7px; padding: 7px; min-height: 34px; margin-left: auto; border-radius: 8px; color: #545361; background: #f6f5fa; border: 1px solid transparent; min-width: 0; text-align: left; }
 .model-button:hover:not(:disabled) { background: #eeedf6; border-color: #dcdae9; }
 .model-button > span { min-width: 0; }

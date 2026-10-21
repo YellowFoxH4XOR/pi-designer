@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Local-only browser review against the real Go API. Uses an already-installed
 // Playwright package; does not download a browser or start a model generation.
-const { chromium } = require(process.env.PLAYWRIGHT_PACKAGE || 'playwright');
+const { chromium } = require(process.env.PLAYWRIGHT_PACKAGE || '../ui/node_modules/playwright-core');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const assert = require('node:assert/strict');

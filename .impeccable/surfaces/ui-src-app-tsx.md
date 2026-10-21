@@ -13,7 +13,7 @@ Mode: Operate. Code-led implementation, using the user's pinned reference rather
 
 THESIS: A familiar prompt-first design workspace. Replace the developer-console arrangement with Home, Projects, Design systems, Skills, Settings, and an artifact-led Studio.
 
-OWN-WORLD: Light lavender-gray shell, off-white canvas, charcoal ink, PiDesk-family lavender palette with an artboard-and-pen app identity. The actual Pi pixel mark identifies the agent separately. Neutral system UI type; a restrained Georgia heading on Home echoes the supplied reference. Soft corners on the workspace and composer, fine rules, no glow.
+OWN-WORLD: Light lavender-gray shell, off-white canvas, charcoal ink, PiDesk-family lavender palette with a π-led app identity. A standalone Greek π identifies the execution engine, and model/provider marks identify the selected model. Neutral system UI type; a restrained Georgia heading on Home echoes the supplied reference. Soft corners on the workspace and composer, fine rules, no glow.
 
 STORY: Choose a workflow and design system, write a brief, then enter a studio with the conversation left and the actual preview right. Browse real existing projects and the complete system catalog.
 
@@ -21,7 +21,7 @@ FIRST VIEWPORT: A 224px sidebar, quiet utility header, large white rounded works
 
 FORM: User-pinned reference: OpenDesign Cloud home and studio, with a PiDesk-family identity. seed: none (user-pinned direction; mode-operate guidance applied).
 
-SIGNATURE INTERACTION: The prompt's selected workflow and design system carry directly into a real project, while device frames scale the artifact without changing its CSS viewport.
+SIGNATURE INTERACTION: The prompt's selected workflow and design system carry into a real project. Ordered, durable π RPC events drive the current-action strip, expandable tool timeline, project statuses and native menu-bar/notch panel. Closing or minimizing the workspace keeps work running; explicit Quit stops it. Device frames scale the artifact without changing its CSS viewport.
 
 FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
 

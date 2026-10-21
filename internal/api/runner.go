@@ -19,85 +19,8 @@ import (
 	"github.com/akki/pidesigner/internal/store"
 )
 
-// AgentEvent is one event in a run's event stream.
-type AgentEvent struct {
-	Type     string          `json:"type"`
-	RunID    string          `json:"runId"`
-	Text     string          `json:"text,omitempty"`
-	Tool     string          `json:"tool,omitempty"`
-	Args     json.RawMessage `json:"args,omitempty"`
-	IsError  bool            `json:"isError,omitempty"`
-	Aborted  bool            `json:"aborted,omitempty"`
-	Todos    []model.Todo    `json:"todos,omitempty"`
-	Render   *model.Render   `json:"render,omitempty"`
-	Critique *model.Critique `json:"critique,omitempty"`
-	At       int64           `json:"at"`
-}
-
-// broker fans a run's events out to any number of SSE subscribers.
-type broker struct {
-	mu      sync.Mutex
-	subs    map[chan AgentEvent]struct{}
-	closed  bool
-	history []AgentEvent
-}
-
-func newBroker() *broker { return &broker{subs: map[chan AgentEvent]struct{}{}} }
-
-func (b *broker) subscribe() chan AgentEvent {
-	ch := make(chan AgentEvent, 2048)
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	for _, e := range b.history {
-		ch <- e
-	}
-	if b.closed {
-		close(ch)
-	} else {
-		b.subs[ch] = struct{}{}
-	}
-	return ch
-}
-
-func (b *broker) unsubscribe(ch chan AgentEvent) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	if _, ok := b.subs[ch]; ok {
-		delete(b.subs, ch)
-		close(ch)
-	}
-}
-
-func (b *broker) publish(e AgentEvent) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	if b.closed {
-		return
-	}
-	b.history = append(b.history, e)
-	if len(b.history) > 1024 {
-		b.history = b.history[len(b.history)-1024:]
-	}
-	for ch := range b.subs {
-		select {
-		case ch <- e:
-		default: // slow subscriber: drop rather than stall the agent
-		}
-	}
-}
-
-func (b *broker) close() {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	if b.closed {
-		return
-	}
-	b.closed = true
-	for ch := range b.subs {
-		close(ch)
-	}
-	b.subs = map[chan AgentEvent]struct{}{}
-}
+// AgentEvent is the shared durable activity contract.
+type AgentEvent = model.AgentEvent
 
 // Runner owns agent sessions and run lifecycles.
 type Runner struct {
@@ -106,20 +29,24 @@ type Runner struct {
 	piBin   string
 	cfg     RunnerConfig
 
-	mu       sync.Mutex
-	sessions map[string]*pirun.Session
-	brokers  map[string]*broker
-	active   map[string]string
-	hub      FileChangeNotifier
+	uiMu            sync.Mutex
+	mu              sync.Mutex
+	wg              sync.WaitGroup
+	shuttingDown    bool
+	sessions        map[string]*pirun.Session
+	journals        map[string]*eventJournal
+	active          map[string]string
+	cancelRequested map[string]bool
+	hub             FileChangeNotifier
 }
 
 // RunnerConfig locates the agent's persistent state and design tools.
 type RunnerConfig struct {
-	// SessionDir stores one native Pi session per conversation.
+	// SessionDir stores one native π session per conversation.
 	SessionDir string
 	// RenderDir stores preview renders, one subdirectory per project.
 	RenderDir string
-	// Extension is PiDesigner's Pi extension (todo_write, render_preview).
+	// Extension is πDesigner's π extension (todo_write, render_preview).
 	Extension string
 	// Renderer is the pidesigner-render executable; empty disables
 	// render_preview.
@@ -134,14 +61,15 @@ type FileChangeNotifier interface {
 // NewRunner creates a Runner.
 func NewRunner(st *store.Store, cat *content.Catalog, piBin string, hub FileChangeNotifier, cfg RunnerConfig) *Runner {
 	return &Runner{
-		store:    st,
-		catalog:  cat,
-		piBin:    piBin,
-		cfg:      cfg,
-		sessions: map[string]*pirun.Session{},
-		brokers:  map[string]*broker{},
-		active:   map[string]string{},
-		hub:      hub,
+		store:           st,
+		catalog:         cat,
+		piBin:           piBin,
+		cfg:             cfg,
+		sessions:        map[string]*pirun.Session{},
+		journals:        map[string]*eventJournal{},
+		active:          map[string]string{},
+		cancelRequested: map[string]bool{},
+		hub:             hub,
 	}
 }
 
@@ -163,8 +91,7 @@ type RunRequest struct {
 
 // RunHandle is a started run.
 type RunHandle struct {
-	RunID  string
-	Broker *broker
+	RunID string
 }
 
 // Start begins a run against a project.
@@ -188,6 +115,9 @@ func (r *Runner) Start(ctx context.Context, req RunRequest) (*RunHandle, error) 
 	if req.SkillID == "" {
 		req.SkillID = proj.SkillID
 	}
+	if req.DesignSystemID == "" {
+		req.DesignSystemID = proj.DesignSystemID
+	}
 
 	now := time.Now()
 	run := model.Run{
@@ -199,22 +129,29 @@ func (r *Runner) Start(ctx context.Context, req RunRequest) (*RunHandle, error) 
 		StartedAt:      now,
 	}
 	r.mu.Lock()
+	if r.shuttingDown {
+		r.mu.Unlock()
+		return nil, fmt.Errorf("πDesigner is shutting down")
+	}
 	if r.active[proj.ID] != "" {
 		r.mu.Unlock()
-		return nil, fmt.Errorf("Pi is already working in this project")
+		return nil, fmt.Errorf("π is already working in this project")
 	}
 	r.active[proj.ID] = run.ID
+	r.wg.Add(1)
 	r.mu.Unlock()
 	if err := r.store.CreateRun(run); err != nil {
+		r.wg.Done()
 		r.mu.Lock()
 		delete(r.active, proj.ID)
 		r.mu.Unlock()
 		return nil, err
 	}
 
-	b := newBroker()
+	b := newRunJournal(r.store, run, proj)
+	b.publish(AgentEvent{Type: "context", RunID: run.ID, Data: modelJSON(map[string]string{"skillId": req.SkillID, "designSystemId": req.DesignSystemID, "viewport": req.Viewport, "thinking": req.Thinking}), At: nowMs()})
 	r.mu.Lock()
-	r.brokers[run.ID] = b
+	r.journals[run.ID] = b
 	r.mu.Unlock()
 
 	// Record the user's turn.
@@ -226,16 +163,20 @@ func (r *Runner) Start(ctx context.Context, req RunRequest) (*RunHandle, error) 
 	}
 
 	go r.execute(run, proj, req, b)
-	return &RunHandle{RunID: run.ID, Broker: b}, nil
+	return &RunHandle{RunID: run.ID}, nil
 }
 
 // execute runs the agent and streams its events.
-func (r *Runner) execute(run model.Run, proj model.Project, req RunRequest, b *broker) {
+func (r *Runner) execute(run model.Run, proj model.Project, req RunRequest, b *eventJournal) {
+	defer r.wg.Done()
 	defer func() {
 		b.close()
 		r.mu.Lock()
-		delete(r.brokers, run.ID)
-		delete(r.active, proj.ID)
+		delete(r.journals, run.ID)
+		if r.active[proj.ID] == run.ID {
+			delete(r.active, proj.ID)
+		}
+		delete(r.cancelRequested, run.ID)
 		r.mu.Unlock()
 	}()
 
@@ -246,7 +187,7 @@ func (r *Runner) execute(run model.Run, proj model.Project, req RunRequest, b *b
 		Dir:      proj.Dir,
 		Model:    req.Model,
 		Thinking: req.Thinking,
-		// Automated runs cannot answer Pi's project-trust prompt over RPC.
+		// Automated runs cannot answer π's project-trust prompt over RPC.
 		Approve: true,
 		Env:     append(os.Environ(), "PIDESIGNER_RENDER_DIR="+filepath.Join(r.cfg.RenderDir, proj.ID)),
 	}
@@ -258,7 +199,7 @@ func (r *Runner) execute(run model.Run, proj model.Project, req RunRequest, b *b
 	}
 
 	turn := prompt.TurnInput{Prompt: req.Prompt, Viewport: req.Viewport, SkipDiscovery: req.SkipDiscovery}
-	// Each conversation is one native Pi session, so follow-up turns keep the
+	// Each conversation is one native π session, so follow-up turns keep the
 	// agent's full context: its plan, the files it read, its renders. A
 	// conversation that predates native sessions gets its transcript replayed
 	// once; the session it starts carries the history from then on.
@@ -273,8 +214,7 @@ func (r *Runner) execute(run model.Run, proj model.Project, req RunRequest, b *b
 
 	systemFile, cleanup, err := r.writeSystemPrompt(proj, req)
 	if err != nil {
-		r.store.FinishRun(run.ID, model.RunFailed, err.Error())
-		b.publish(AgentEvent{Type: "error", RunID: run.ID, Text: err.Error(), At: nowMs()})
+		r.completeRun(run, b, model.RunFailed, err.Error())
 		return
 	}
 	defer cleanup()
@@ -285,11 +225,17 @@ func (r *Runner) execute(run model.Run, proj model.Project, req RunRequest, b *b
 
 	sess, err := pirun.Start(ctx, opts)
 	if err != nil {
-		r.store.FinishRun(run.ID, model.RunFailed, err.Error())
-		b.publish(AgentEvent{Type: "error", RunID: run.ID, Text: err.Error(), At: nowMs()})
+		r.completeRun(run, b, model.RunFailed, err.Error())
 		return
 	}
 	r.mu.Lock()
+	if r.shuttingDown || r.cancelRequested[run.ID] {
+		r.mu.Unlock()
+		sess.CloseWith()
+		sess.Close()
+		r.completeRun(run, b, model.RunCanceled, "")
+		return
+	}
 	r.sessions[run.ID] = sess
 	r.mu.Unlock()
 	defer func() {
@@ -299,39 +245,62 @@ func (r *Runner) execute(run model.Run, proj model.Project, req RunRequest, b *b
 		sess.Close()
 	}()
 
-	// Confirm the installed Pi selected the exact requested provider/model.
-	// CLI argument parsing must never silently substitute a similarly named one.
-	checkCtx, checkCancel := context.WithTimeout(ctx, 30*time.Second)
-	state, stateErr := sess.State(checkCtx)
-	checkCancel()
-	if stateErr == nil && state.Model == nil {
-		stateErr = fmt.Errorf("Pi has no model selected. Open Pi to configure a model first")
-	}
-	if stateErr == nil && req.Model != "" && state.Model.Ref() != req.Model {
-		stateErr = fmt.Errorf("Pi selected %s instead of %s. Choose a model from the available list", state.Model.Ref(), req.Model)
-	}
-	if stateErr != nil {
-		r.store.FinishRun(run.ID, model.RunFailed, stateErr.Error())
-		b.publish(AgentEvent{Type: "error", RunID: run.ID, Text: stateErr.Error(), At: nowMs()})
-		return
-	}
-	b.publish(AgentEvent{Type: "model", RunID: run.ID, Text: state.Model.Name + " · " + state.Model.Provider, At: nowMs()})
-
 	// Subscribe before prompting so a fast completion is not missed.
 	events := sess.Events()
 	settled := make(chan bool, 1)
 	processGone := make(chan struct{})
 	var assistantText strings.Builder
+	var messageText strings.Builder
 	var providerFailure string
 	work := &runWork{}
 
 	go func() {
 		defer close(processGone)
-		for ev := range events {
+		ticker := time.NewTicker(60 * time.Millisecond)
+		defer ticker.Stop()
+		var pending strings.Builder
+		var pendingIndex int
+		flush := func() {
+			if pending.Len() > 0 {
+				b.publish(AgentEvent{Type: "text", RunID: run.ID, Text: pending.String(), ContentIndex: pendingIndex, At: nowMs()})
+				pending.Reset()
+			}
+		}
+		defer flush()
+		for {
+			var ev pirun.Event
+			select {
+			case <-ticker.C:
+				flush()
+				continue
+			case next, open := <-events:
+				if !open {
+					return
+				}
+				ev = next
+			}
+			if ev.Type != pirun.EventTextDelta || ev.ContentIndex != pendingIndex {
+				flush()
+			}
 			switch ev.Type {
-			case pirun.EventTextDelta:
+			case "message_start":
+				messageText.Reset()
+				b.publish(AgentEvent{Type: "message_start", RunID: run.ID, At: nowMs()})
+			case "message_end":
+				prefix := strings.TrimSuffix(assistantText.String(), messageText.String())
+				assistantText.Reset()
+				assistantText.WriteString(prefix)
 				assistantText.WriteString(ev.Text)
-				b.publish(AgentEvent{Type: "text", RunID: run.ID, Text: ev.Text, At: nowMs()})
+				messageText.Reset()
+				messageText.WriteString(ev.Text)
+				b.publish(AgentEvent{Type: "message_end", RunID: run.ID, Text: ev.Text, At: nowMs()})
+			case pirun.EventThinkingDelta:
+				b.publish(AgentEvent{Type: "thinking", RunID: run.ID, At: nowMs()})
+			case pirun.EventTextDelta:
+				messageText.WriteString(ev.Text)
+				assistantText.WriteString(ev.Text)
+				pendingIndex = ev.ContentIndex
+				pending.WriteString(ev.Text)
 			case pirun.EventAgentEnd, pirun.EventModelResult:
 				if ev.Type == pirun.EventModelResult {
 					// A successful retry clears a previous transient provider error.
@@ -345,15 +314,17 @@ func (r *Runner) execute(run model.Run, proj model.Project, req RunRequest, b *b
 					b.publish(AgentEvent{Type: "turn", RunID: run.ID, At: nowMs()})
 				}
 			case pirun.EventToolStart:
-				b.publish(AgentEvent{Type: "tool", RunID: run.ID, Tool: ev.ToolName, Args: ev.ToolArgs, At: nowMs()})
+				b.publish(AgentEvent{Type: "tool", RunID: run.ID, Tool: ev.ToolName, ToolCallID: ev.ToolCallID, Args: ev.ToolArgs, At: nowMs()})
 				if ev.ToolName == "todo_write" {
 					if todos, ok := parseTodos(ev.ToolArgs); ok {
 						work.setTodos(todos)
 						b.publish(AgentEvent{Type: "todos", RunID: run.ID, Todos: todos, At: nowMs()})
 					}
 				}
+			case "tool_update":
+				b.publish(AgentEvent{Type: "tool_update", RunID: run.ID, Tool: ev.ToolName, ToolCallID: ev.ToolCallID, Args: ev.ToolArgs, Output: ev.Output, At: nowMs()})
 			case pirun.EventToolEnd:
-				b.publish(AgentEvent{Type: "tool_end", RunID: run.ID, Tool: ev.ToolName, IsError: ev.IsError, At: nowMs()})
+				b.publish(AgentEvent{Type: "tool_end", RunID: run.ID, Tool: ev.ToolName, ToolCallID: ev.ToolCallID, Output: ev.Output, DurationMS: ev.DurationMS, IsError: ev.IsError, At: nowMs()})
 				// Tool calls mutate the project; nudge preview watchers.
 				if ev.ToolName == "write" || ev.ToolName == "edit" || ev.ToolName == "multi_edit" {
 					r.hub.NotifyProjectChanged(proj.ID)
@@ -371,6 +342,12 @@ func (r *Runner) execute(run model.Run, proj model.Project, req RunRequest, b *b
 						b.publish(AgentEvent{Type: "critique", RunID: run.ID, Critique: &c, At: nowMs()})
 					}
 				}
+			case "retry", "retry_end", "compaction_start", "compaction_end", "session_update":
+				b.publish(AgentEvent{Type: ev.Type, RunID: run.ID, Data: ev.Data, At: nowMs()})
+			case "extension_ui":
+				r.handleExtensionUI(run.ID, sess, b, ev.Data)
+			case "diagnostic":
+				b.publish(AgentEvent{Type: "stderr", RunID: run.ID, Text: ev.Text, At: nowMs()})
 			case pirun.EventStderr:
 				b.publish(AgentEvent{Type: "stderr", RunID: run.ID, Text: ev.Text, At: nowMs()})
 			case pirun.EventError:
@@ -380,21 +357,51 @@ func (r *Runner) execute(run model.Run, proj model.Project, req RunRequest, b *b
 				settled <- ev.Aborted
 				return
 			}
+			if b.persistenceError() != nil {
+				sess.CloseWith()
+				return
+			}
 		}
 	}()
 
+	// Confirm the installed π selected the exact requested provider/model.
+	// CLI argument parsing must never silently substitute a similarly named one.
+	checkCtx, checkCancel := context.WithTimeout(ctx, 30*time.Second)
+	state, stateErr := sess.State(checkCtx)
+	checkCancel()
+	if stateErr == nil && state.Model == nil {
+		stateErr = fmt.Errorf("π has no model selected. Open π to configure a model first")
+	}
+	if stateErr == nil && req.Model != "" && state.Model.Ref() != req.Model {
+		stateErr = fmt.Errorf("π selected %s instead of %s. Choose a model from the available list", state.Model.Ref(), req.Model)
+	}
+	if stateErr != nil {
+		r.completeRun(run, b, model.RunFailed, stateErr.Error())
+		return
+	}
+	b.publish(AgentEvent{Type: "model", RunID: run.ID, Text: state.Model.Name + " · " + state.Model.Provider, Data: modelJSON(state.Model), At: nowMs()})
+
 	disposition, err := sess.Prompt(ctx, prompt.Turn(turn))
 	if err != nil {
-		r.store.FinishRun(run.ID, model.RunFailed, err.Error())
-		b.publish(AgentEvent{Type: "error", RunID: run.ID, Text: err.Error(), At: nowMs()})
+		r.completeRun(run, b, model.RunFailed, err.Error())
 		return
+	}
+
+	r.mu.Lock()
+	cancelRequested := r.cancelRequested[run.ID]
+	r.mu.Unlock()
+	if cancelRequested {
+		abortCtx, abortCancel := context.WithTimeout(ctx, 10*time.Second)
+		if sess.Abort(abortCtx) != nil {
+			sess.CloseWith()
+		}
+		abortCancel()
 	}
 
 	// "handled" means an input handler consumed the prompt -- no run started,
 	// so waiting for agent_settled would hang.
 	if disposition == "handled" {
-		r.store.FinishRun(run.ID, model.RunSucceeded, "")
-		b.publish(AgentEvent{Type: "done", RunID: run.ID, At: nowMs()})
+		r.completeRun(run, b, model.RunSucceeded, "")
 		return
 	}
 
@@ -410,11 +417,11 @@ func (r *Runner) execute(run model.Run, proj model.Project, req RunRequest, b *b
 		select {
 		case aborted = <-settled:
 		case <-processGone:
-			// Pi exited without emitting agent_settled -- surface diagnostics.
+			// π exited without emitting agent_settled -- surface diagnostics.
 			select {
 			case aborted = <-settled:
 			default:
-				failure = "Pi exited before completing the run"
+				failure = "π exited before completing the run"
 				if tail := strings.TrimSpace(sess.StderrTail()); tail != "" {
 					failure += ": " + tail
 				}
@@ -426,6 +433,17 @@ func (r *Runner) execute(run model.Run, proj model.Project, req RunRequest, b *b
 
 	if failure == "" && !aborted {
 		failure = providerFailure
+	}
+	if err := b.persistenceError(); err != nil {
+		failure = "Activity could not be saved: " + err.Error()
+	}
+
+	r.mu.Lock()
+	stopping := r.shuttingDown || r.cancelRequested[run.ID]
+	r.mu.Unlock()
+	if stopping {
+		aborted = true
+		failure = ""
 	}
 
 	// Persist the plan, renders, critique rounds, and the assistant turn.
@@ -447,9 +465,11 @@ func (r *Runner) execute(run model.Run, proj model.Project, req RunRequest, b *b
 	// Publish completion only after the transcript and entry metadata are
 	// durable, so a reconnect sees the same result as the streaming client.
 	if failure != "" {
-		r.store.FinishRun(run.ID, model.RunFailed, failure)
-		b.publish(AgentEvent{Type: "error", RunID: run.ID, Text: failure, At: nowMs()})
+		r.completeRun(run, b, model.RunFailed, failure)
 	} else {
+		if !aborted {
+			publishQuestionAttention(run.ID, assistantText.String(), b)
+		}
 		finishRun(r, run, b, aborted)
 	}
 }
@@ -458,6 +478,7 @@ func (r *Runner) execute(run model.Run, proj model.Project, req RunRequest, b *b
 // the daemon exits.
 func (r *Runner) Shutdown() {
 	r.mu.Lock()
+	r.shuttingDown = true
 	sessions := make([]*pirun.Session, 0, len(r.sessions))
 	for _, s := range r.sessions {
 		sessions = append(sessions, s)
@@ -467,45 +488,39 @@ func (r *Runner) Shutdown() {
 	for _, s := range sessions {
 		s.CloseWith()
 	}
+	r.wg.Wait() // finish journal writes before the app closes SQLite
 }
 
 // Cancel aborts an in-flight run.
 func (r *Runner) Cancel(runID string) error {
 	r.mu.Lock()
-	sess, ok := r.sessions[runID]
-	r.mu.Unlock()
-	if !ok {
+	active := false
+	for _, id := range r.active {
+		if id == runID {
+			active = true
+			break
+		}
+	}
+	if !active {
+		r.mu.Unlock()
 		return fmt.Errorf("run %s is not active", runID)
 	}
+	r.cancelRequested[runID] = true
+	sess := r.sessions[runID]
+	r.mu.Unlock()
+	if sess == nil {
+		return nil
+	} // execute observes cancellation before prompting
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	return sess.Abort(ctx)
-}
-
-// Subscribe returns the event channel for a run.
-func (r *Runner) Subscribe(runID string) (chan AgentEvent, bool) {
-	r.mu.Lock()
-	b, ok := r.brokers[runID]
-	r.mu.Unlock()
-	if !ok {
-		return nil, false
-	}
-	return b.subscribe(), true
-}
-
-// finishRun marks a run terminal and notifies subscribers.
-func finishRun(r *Runner, run model.Run, b *broker, aborted bool) {
-	if aborted {
-		r.store.FinishRun(run.ID, model.RunCanceled, "")
-		b.publish(AgentEvent{Type: "canceled", RunID: run.ID, At: nowMs()})
-		return
-	}
-	r.store.FinishRun(run.ID, model.RunSucceeded, "")
-	b.publish(AgentEvent{Type: "done", RunID: run.ID, At: nowMs()})
+	if sess.Abort(ctx) != nil {
+		sess.CloseWith()
+	} // accepted cancellation still stops a wedged RPC process
+	return nil
 }
 
 // writeSystemPrompt composes the project's stable design instructions into a
-// temporary file that Pi appends to its system prompt (no argv limits).
+// temporary file that π appends to its system prompt (no argv limits).
 func (r *Runner) writeSystemPrompt(proj model.Project, req RunRequest) (string, func(), error) {
 	in := prompt.Input{
 		ProjectDir:     proj.Dir,
@@ -581,8 +596,8 @@ func (r *Runner) resolveSkill(id string) *prompt.Skill {
 	return &prompt.Skill{ID: id, Name: name, Dir: dir, Mode: mode, Body: body}
 }
 
-// hasSession reports whether Pi already stores a session for a conversation.
-// Pi names session files "<timestamp>_<session id>.jsonl".
+// hasSession reports whether π already stores a session for a conversation.
+// π names session files "<timestamp>_<session id>.jsonl".
 func (r *Runner) hasSession(conversationID string) bool {
 	matches, _ := filepath.Glob(filepath.Join(r.cfg.SessionDir, "*_"+conversationID+".jsonl"))
 	return len(matches) > 0

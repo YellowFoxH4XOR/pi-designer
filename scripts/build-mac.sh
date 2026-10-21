@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build PiDesigner.app: a native macOS bundle containing
+# Build πDesigner.app: a native macOS bundle containing
 #   Contents/MacOS/pidesigner-app   the Swift/WKWebView shell
 #   Contents/MacOS/pidesigner       the Go daemon (sidecar)
 #   Contents/Resources/content/     design systems, skills, templates, craft
@@ -11,7 +11,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-APP_NAME="PiDesigner"
+APP_NAME="πDesigner"
 BUNDLE="build/${APP_NAME}.app"
 INSTALL=false
 [ "${1:-}" = "--install" ] && INSTALL=true
@@ -36,8 +36,10 @@ swiftc \
   -target arm64-apple-macos13.0 \
   -framework Cocoa \
   -framework WebKit \
+  -framework SwiftUI \
+  -framework UserNotifications \
   -o "${BUNDLE}/Contents/MacOS/pidesigner-app" \
-  mac/Sources/main.swift
+  mac/Sources/*.swift
 
 echo "==> compiling renderer CLI"
 # Offscreen WKWebView renderer used by the render_preview Pi tool. Built for
@@ -88,7 +90,7 @@ fi
 cat <<'EOF'
 
 Run it:
-  open build/PiDesigner.app
+  open build/πDesigner.app
 
 The daemon runs as a child process on a free loopback port.
 Data: ~/Library/Application Support/PiDesigner

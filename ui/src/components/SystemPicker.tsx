@@ -17,7 +17,7 @@ export function SystemPicker({ systems, selected, onSelect, onClose }: {
   const [query, setQuery] = useState('');
   const filtered = useMemo(() => systems.filter((s) => `${s.name} ${s.category} ${s.id}`.toLowerCase().includes(query.toLowerCase())), [systems, query]);
   return <Dialog title="Choose a design system" onClose={onClose} class="system-picker">
-    <p class="dialog-intro">Give Pi a palette, typography, and component language to work with.</p>
+    <p class="dialog-intro">Give π a palette, typography, and component language to work with.</p>
     <SearchField value={query} onInput={setQuery} placeholder={`Search ${systems.length} design systems`}/>
     <div class="picker-list">
       <button class={`picker-row ${!selected ? 'selected' : ''}`} onClick={() => onSelect('')}><span class="system-badge neutral"><Icon name="palette"/></span><span><strong>No preset</strong><small>Let your brief guide the design</small></span>{!selected && <Icon name="check" size={17}/>}</button>

@@ -1,3 +1,5 @@
+import type { Activity } from './activity';
+
 export interface Project {
   id: string; name: string; slug: string; designSystemId?: string; skillId?: string;
   entryFile?: string; createdAt: string; updatedAt: string;
@@ -33,7 +35,8 @@ export interface PiModel { id: string; provider: string; name: string; reasoning
 export interface ModelCatalog { models: PiModel[]; current?: PiModel; thinkingLevels: string[] }
 export interface Connection { available: boolean; config: Record<string, unknown> }
 export interface AgentEvent {
-  type: string; text?: string; tool?: string; args?: Record<string, unknown>; isError?: boolean;
+  version?: number; contentIndex?: number; seq: number; runId: string; at: number; type: string; text?: string; tool?: string; toolCallId?: string; args?: Record<string, unknown>; isError?: boolean;
+  output?: string; durationMs?: number; data?: any;
   todos?: Todo[]; render?: Render; critique?: Critique;
 }
 
@@ -49,6 +52,10 @@ const json = (body: unknown, method = 'POST') => ({ method, body: JSON.stringify
 const projectPath = (id: string) => `/api/projects/${encodeURIComponent(id)}`;
 export const api = {
   health: () => req<Health>('/api/health'),
+  activity: () => req<{ activities: Activity[] }>('/api/activity'),
+  runLog: (id: string, after = 0) => req<{ events: AgentEvent[] }>(`/api/runs/${encodeURIComponent(id)}/log?after=${after}`),
+  runActivity: (id: string) => req<{ activity: Activity }>(`/api/runs/${encodeURIComponent(id)}/activity`),
+  respondUI: (id: string, body: { id: string; value?: string; confirmed?: boolean; cancelled?: boolean }) => req(`/api/runs/${encodeURIComponent(id)}/ui-response`, json(body)),
   connection: () => req<Connection>('/api/connection'),
   preferences: () => req<{ model: string; thinking: string }>('/api/preferences'),
   savePreferences: (p: { model: string; thinking: string }) => req<{ model: string; thinking: string }>('/api/preferences', json(p, 'PUT')),
@@ -76,16 +83,14 @@ export const api = {
 };
 function pickProject(p: Project) { return { name: p.name, designSystemId: p.designSystemId || '', skillId: p.skillId || '' }; }
 
-// Polling is also used by the run monitor: an EventSource reconnect or a very
-// fast run cannot strand the UI in a permanent "working" state.
-export function subscribeRun(runId: string, onEvent: (event: AgentEvent) => void) {
-  const es = new EventSource(`/api/runs/${encodeURIComponent(runId)}/events`);
-  for (const type of ['text', 'tool', 'tool_end', 'turn', 'model', 'done', 'error', 'canceled', 'stderr', 'todos', 'render', 'critique']) {
-    es.addEventListener(type, ((e: MessageEvent) => {
-      if (!e.data) return; // browser transport errors are not agent errors
-      try { onEvent(JSON.parse(e.data)); } catch { /* ignore incomplete transport frames */ }
-    }) as EventListener);
+export function subscribeRun(runId: string, after: number, onEvent: (event: AgentEvent) => void, onSnapshot: (a: Activity) => void, onConnection: (connected: boolean) => void) {
+  const es = new EventSource(`/api/runs/${encodeURIComponent(runId)}/events?after=${after}`);
+  es.onopen = () => onConnection(true); es.onerror = () => onConnection(false);
+  for (const type of ['starting', 'finishing', 'context', 'text', 'message_start', 'message_end', 'thinking', 'tool', 'tool_update', 'tool_end', 'turn', 'model', 'done', 'run_failed', 'error', 'canceled', 'stderr', 'todos', 'render', 'critique', 'retry', 'retry_end', 'compaction_start', 'compaction_end', 'attention', 'attention_resolved', 'extension_ui', 'session_update']) {
+    es.addEventListener(type, ((e: MessageEvent) => { if (e.data) { try { onEvent(JSON.parse(e.data)); } catch { /* native transport error, not a protocol event */ } } }) as EventListener);
   }
+  es.addEventListener('snapshot', ((e: MessageEvent) => { try { onSnapshot(JSON.parse(e.data)); } catch { /* reconnect retrieves a fresh projection */ } }) as EventListener);
+  es.addEventListener('stream_end', () => es.close());
   return () => es.close();
 }
 

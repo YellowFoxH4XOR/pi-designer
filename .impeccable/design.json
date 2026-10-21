@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
   "generatedAt": "2026-10-20T21:20:32.143Z",
-  "title": "Design System: PiDesigner",
+  "title": "Design System: πDesigner",
   "extensions": {
     "colorMeta": {
       "primary": { "role": "primary", "displayName": "Studio Lavender", "canonical": "#5c61b6" },
@@ -55,9 +55,9 @@
       "css": ".ds-workflow{font:11.5px -apple-system,BlinkMacSystemFont,sans-serif;border:1px solid #d4d2ed;border-radius:9px;background:#eeedfa;color:#514da0;padding:9px 12px;cursor:pointer}.ds-workflow:hover{border-color:#bcb8db;color:#23242b}.ds-workflow:focus-visible{outline:2px solid #5c61b6;outline-offset:3px}"
     }
     ,{
-      "name": "Pi model control", "kind": "custom",
-      "description": "Actual Pi agent identity and a selected-model button; opens the installed agent's configured models.",
-      "html": "<button class=\"ds-model\"><svg width=\"24\" height=\"24\" viewBox=\"0 0 40 40\" aria-hidden=\"true\"><path fill=\"#e48a7a\" d=\"M0 0h30v20H20V10H0z\"/><path fill=\"#4f8eb3\" d=\"M0 10h10v10h10v10H10v10H0z\"/><path fill=\"#eab65d\" d=\"M30 20h10v20H30z\"/></svg><span>Pi default</span></button>",
+      "name": "π model control", "kind": "custom",
+      "description": "Selected model/maker identity and exact provider label; π identifies execution elsewhere.",
+      "html": "<button class=\"ds-model\"><img src=\"/model-icons/openai.svg\" alt=\"\" width=\"24\" height=\"24\"/><span>GPT · OpenAI</span></button>",
       "css": ".ds-model{display:inline-flex;align-items:center;gap:7px;padding:7px;border:1px solid transparent;border-radius:8px;background:#f6f5fa;color:#545361;font:11px -apple-system,BlinkMacSystemFont,sans-serif;cursor:pointer}.ds-model:hover{background:#eeedf6;border-color:#dcdae9}.ds-model:focus-visible{outline:2px solid #5c61b6;outline-offset:3px}"
     }
   ],
@@ -69,6 +69,6 @@
       { "name": "The Artifact Boundary Rule", "body": "Workspace colors stop at the prototype iframe. A selected design system controls the artifact’s colors; it never recolors the app shell.", "section": "colors" }
     ],
     "dos": ["Preserve the separation between the workspace and the generated artifact.", "Use the real catalog and local run state, including empty and failure cases.", "Keep native keyboard conventions and visible focus."],
-    "donts": ["Add account, billing, publishing, or collaboration controls without working capabilities.", "Describe prototype frames as separate PiDesigner clients.", "Imply the light theme has a complete dark-mode counterpart."]
+    "donts": ["Add account, billing, publishing, or collaboration controls without working capabilities.", "Describe prototype frames as separate πDesigner clients.", "Imply the light theme has a complete dark-mode counterpart."]
   }
 }

@@ -3,104 +3,7 @@
 import Cocoa
 import WebKit
 
-private enum Config {
-    static let name = "PiDesigner"
-    static let readyPrefix = "PIDESIGNER_READY "
-    static var dataDir: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("PiDesigner", isDirectory: true)
-    }
-    static let background = NSColor(srgbRed: 236/255, green: 238/255, blue: 243/255, alpha: 1)
-}
-
-final class Daemon {
-    private var process: Process?
-    private var input: Pipe?
-    private var output: Pipe?
-    private var errors: Pipe?
-    private var buffer = Data()
-    private var diagnostics = ""
-    private var stopping = false
-    private(set) var isRunning = false
-    var onReady: ((URL) -> Void)?
-    var onFailure: ((String) -> Void)?
-
-    func start() {
-        guard let executable = Bundle.main.executableURL,
-              let resources = Bundle.main.resourceURL else {
-            onFailure?("The application resources could not be located. Rebuild PiDesigner.")
-            return
-        }
-        let binary = executable.deletingLastPathComponent().appendingPathComponent("pidesigner")
-        guard FileManager.default.isExecutableFile(atPath: binary.path) else {
-            onFailure?("The bundled daemon is missing. Run scripts/build-mac.sh to rebuild the app.")
-            return
-        }
-        let proc = Process()
-        proc.executableURL = binary
-        proc.arguments = ["--port", "0", "--print-url", "--exit-on-stdin-close",
-            "--data", Config.dataDir.path,
-            "--content", resources.appendingPathComponent("content").path,
-            "--ui", resources.appendingPathComponent("ui").path]
-        var environment = ProcessInfo.processInfo.environment
-        // Finder launches don't inherit a login shell PATH. Include both Pi's
-        // own installer location and common Node installations explicitly.
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
-        environment["PATH"] = ["\(home)/.pi/agent/bin", environment["PATH"] ?? "",
-            "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"].joined(separator: ":")
-        environment["PIDESIGNER_APP"] = "1"
-        proc.environment = environment
-        let stdin = Pipe(), stdout = Pipe(), stderr = Pipe()
-        input = stdin; output = stdout; errors = stderr
-        proc.standardInput = stdin; proc.standardOutput = stdout; proc.standardError = stderr
-        stdout.fileHandleForReading.readabilityHandler = { [weak self] handle in
-            let data = handle.availableData
-            guard !data.isEmpty else { handle.readabilityHandler = nil; return }
-            DispatchQueue.main.async { self?.consume(data) }
-        }
-        stderr.fileHandleForReading.readabilityHandler = { [weak self] handle in
-            let data = handle.availableData
-            guard !data.isEmpty else { handle.readabilityHandler = nil; return }
-            DispatchQueue.main.async {
-                self?.diagnostics += String(decoding: data, as: UTF8.self)
-                if let text = self?.diagnostics { self?.diagnostics = String(text.suffix(8000)) }
-            }
-        }
-        proc.terminationHandler = { [weak self] p in
-            DispatchQueue.main.async {
-                guard let self else { return }
-                self.isRunning = false
-                if !self.stopping {
-                    self.onFailure?("The workspace daemon stopped (status \(p.terminationStatus)). Use View → Restart Workspace.\n\n\(self.diagnostics.suffix(1000))")
-                }
-            }
-        }
-        do { try proc.run(); process = proc; isRunning = true }
-        catch { onFailure?("The workspace could not start: \(error.localizedDescription)") }
-    }
-    private func consume(_ data: Data) {
-        buffer.append(data)
-        while let newline = buffer.firstIndex(of: 0x0A) {
-            let line = String(decoding: buffer[..<newline], as: UTF8.self)
-            buffer.removeSubrange(...newline)
-            guard line.hasPrefix(Config.readyPrefix),
-                  let url = URL(string: String(line.dropFirst(Config.readyPrefix.count))) else { continue }
-            onReady?(url)
-        }
-    }
-    func stop() {
-        stopping = true
-        input?.fileHandleForWriting.closeFile()
-        guard let process, process.isRunning else { return }
-        // EOF normally reaps the daemon and its Pi process tree immediately.
-        let deadline = Date().addingTimeInterval(4)
-        while process.isRunning && Date() < deadline { usleep(30_000) }
-        if process.isRunning { process.terminate() }
-    }
-    deinit { input?.fileHandleForWriting.closeFile() }
-}
-
-final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigationDelegate, WKUIDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
     private var window: NSWindow!
     private var webView: WKWebView!
     private var status: NSTextField!
@@ -108,6 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     private var baseURL: URL?
     private var captureStarted = false
     private var discardConfirmed = false
+    private var activity: NativeActivityController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Explicitly refresh the Dock mark after a locally rebuilt bundle;
@@ -117,6 +21,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             NSApp.applicationIconImage = icon
         }
         buildMenu()
+        if Self.argument("--capture") == nil {
+            let controller = NativeActivityController()
+            controller.onOpen = { [weak self] item in self?.openActivity(item) }
+            controller.onOpenDestination = { [weak self] project, conversation in self?.openDestination(project, conversation) }
+            controller.onSettings = { [weak self] in self?.showWorkspace(); self?.settings() }
+            controller.onQuit = { NSApp.terminate(nil) }
+            controller.screen = { [weak self] in self?.window?.screen }
+            controller.workspaceVisible = { [weak self] in NSApp.isActive && self?.window?.isVisible == true && self?.window?.isMiniaturized == false }
+            activity = controller
+        }
         let capturing = Self.argument("--capture") != nil
         let width = capturing ? Double(Self.argument("--capture-width") ?? "") ?? 1440 : 1440
         let height = capturing ? Double(Self.argument("--capture-height") ?? "") ?? 900 : 900
@@ -132,6 +46,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         window.collectionBehavior = [.fullScreenPrimary]
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .default()
+        configuration.userContentController.add(self, name: "pidesigner")
+        configuration.userContentController.addUserScript(WKUserScript(source: "window.__pidesignerNative = true", injectionTime: .atDocumentStart, forMainFrameOnly: true))
         webView = WKWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = self
         webView.uiDelegate = self
@@ -170,6 +86,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         daemon.onReady = { [weak self] url in
             guard let self else { return }
             self.baseURL = url
+            self.activity?.connect(url)
             self.status.isHidden = true
             self.webView.isHidden = false
             var target = url
@@ -187,43 +104,78 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         status.textColor = .systemRed
         webView.isHidden = true
     }
-    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard webView != nil && !discardConfirmed else { return .terminateNow }
         webView.evaluateJavaScript("document.documentElement.dataset.unsavedChanges === 'true'") { [weak self] value, _ in
             guard let self else { sender.reply(toApplicationShouldTerminate: true); return }
-            guard value as? Bool == true else { sender.reply(toApplicationShouldTerminate: true); return }
+            let dirty = value as? Bool == true
+            let running = self.activity?.model.items.filter { $0.status == "running" }.count ?? 0
+            guard dirty || running > 0 else { sender.reply(toApplicationShouldTerminate: true); return }
+            self.showWorkspace()
             let alert = NSAlert()
-            alert.messageText = "Discard unsaved source changes?"
-            alert.informativeText = "Your saved project files will remain on this Mac. Unsaved edits in the source editor will be lost."
-            alert.addButton(withTitle: "Keep Editing")
-            alert.addButton(withTitle: "Discard and Quit")
+            alert.messageText = running > 0 ? "Quit and stop \(running) active task(s)?" : "Discard unsaved source changes?"
+            alert.informativeText = dirty ? "Saved project files remain on this Mac. Unsaved source edits will be lost, and active tasks will stop." : "Closing the window keeps tasks running. Quitting stops them."
+            alert.addButton(withTitle: "Keep Working")
+            alert.addButton(withTitle: dirty ? "Discard and Quit" : "Stop Tasks and Quit")
             alert.beginSheetModal(for: self.window) { sender.reply(toApplicationShouldTerminate: $0 == .alertSecondButtonReturn) }
         }
         return .terminateLater
     }
     func windowShouldClose(_ sender: NSWindow) -> Bool {
-        if discardConfirmed { return true }
-        webView.evaluateJavaScript("document.documentElement.dataset.unsavedChanges === 'true'") { [weak self] value, _ in
-            guard let self else { return }
-            if value as? Bool != true {
-                self.discardConfirmed = true; sender.performClose(nil); return
-            }
-            let alert = NSAlert()
-            alert.messageText = "Discard unsaved source changes?"
-            alert.addButton(withTitle: "Keep Editing")
-            alert.addButton(withTitle: "Discard and Close")
-            alert.beginSheetModal(for: sender) { response in
-                if response == .alertSecondButtonReturn { self.discardConfirmed = true; sender.performClose(nil) }
-            }
-        }
+        // Close hides the workspace; it does not discard source, unload WebKit,
+        // close the daemon pipe, or terminate active π tasks.
+        sender.orderOut(nil)
+        activity?.updateVisibility()
         return false
     }
-    func applicationWillTerminate(_ notification: Notification) { daemon.stop() }
+    func windowDidMiniaturize(_ notification: Notification) { activity?.updateVisibility() }
+    func windowDidDeminiaturize(_ notification: Notification) { activity?.updateVisibility() }
+    func windowDidMove(_ notification: Notification) { activity?.updateVisibility() }
+    func applicationWillTerminate(_ notification: Notification) { activity?.stop(); daemon.stop() }
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        showWorkspace(); return true
+    }
+    @objc private func showWorkspace() {
         if window.isMiniaturized { window.deminiaturize(nil) }
         window.makeKeyAndOrderFront(nil)
-        return true
+        NSApp.activate(ignoringOtherApps: true)
+        activity?.updateVisibility()
+    }
+    private func openActivity(_ item: ActivitySummary?) {
+        showWorkspace()
+        guard let item else { return }
+        openDestination(item.projectId, item.conversationId)
+    }
+    private func openDestination(_ project: String, _ conversation: String?) {
+        showWorkspace()
+        var query = URLComponents()
+        query.queryItems = [URLQueryItem(name: "conversation", value: conversation ?? ""), URLQueryItem(name: "activity", value: "1")]
+        let route = "project/" + project + "?" + (query.percentEncodedQuery ?? "")
+        guard let json = try? JSONSerialization.data(withJSONObject: route, options: .fragmentsAllowed), let literal = String(data: json, encoding: .utf8) else { return }
+        webView.evaluateJavaScript("location.hash = " + literal + "; requestAnimationFrame(() => window.dispatchEvent(new Event('pidesigner:show-activity')))")
+    }
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        // Generated prototypes must never request permissions or manipulate the
+        // host. Only our exact top-level loopback document can use this bridge.
+        guard message.frameInfo.isMainFrame, message.webView === webView,
+              let base = baseURL, message.frameInfo.securityOrigin.host == base.host,
+              message.frameInfo.securityOrigin.protocol == base.scheme,
+              message.frameInfo.securityOrigin.port == base.port,
+              let body = message.body as? [String: Any], let action = body["action"] as? String,
+              let activity else { return }
+        let reply = { [weak self] in
+            activity.settings { settings in
+                guard let data = try? JSONSerialization.data(withJSONObject: settings), let json = String(data: data, encoding: .utf8) else { return }
+                self?.webView.evaluateJavaScript("window.dispatchEvent(new CustomEvent('pidesigner:native-settings', {detail: " + json + "}))")
+            }
+        }
+        switch action {
+        case "getSettings": reply()
+        case "updateSettings": activity.updatePreferences(body["preferences"] as? [String: Any] ?? [:]); reply()
+        case "requestNotifications": activity.requestNotificationPermission(completion: reply)
+        default: break
+        }
     }
     private func buildMenu() {
         let bar = NSMenu()
@@ -236,17 +188,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
             item.target = target; menu.addItem(item)
         }
         let app = menu(Config.name)
-        action(app, "About PiDesigner", #selector(NSApplication.orderFrontStandardAboutPanel(_:)), "")
+        action(app, "About πDesigner", #selector(NSApplication.orderFrontStandardAboutPanel(_:)), "")
         app.addItem(.separator())
         action(app, "Settings…", #selector(settings), ",", target: self)
         action(app, "Open Project Folder", #selector(openDataFolder), "", target: self)
         app.addItem(.separator())
-        action(app, "Hide PiDesigner", #selector(NSApplication.hide(_:)), "h")
+        action(app, "Hide πDesigner", #selector(NSApplication.hide(_:)), "h")
         let hideOthers = NSMenuItem(title: "Hide Others", action: #selector(NSApplication.hideOtherApplications(_:)), keyEquivalent: "h")
         hideOthers.keyEquivalentModifierMask = [.command, .option]; app.addItem(hideOthers)
         action(app, "Show All", #selector(NSApplication.unhideAllApplications(_:)), "")
         app.addItem(.separator())
-        action(app, "Quit PiDesigner", #selector(NSApplication.terminate(_:)), "q")
+        action(app, "Quit πDesigner", #selector(NSApplication.terminate(_:)), "q")
         let file = menu("File")
         action(file, "New Prototype", #selector(newPrototype), "n", target: self)
         action(file, "Close Window", #selector(NSWindow.performClose(_:)), "w")
@@ -269,6 +221,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         let fullScreen = NSMenuItem(title: "Enter Full Screen", action: #selector(NSWindow.toggleFullScreen(_:)), keyEquivalent: "f")
         fullScreen.keyEquivalentModifierMask = [.command, .control]; view.addItem(fullScreen)
         let windows = menu("Window")
+        action(windows, "Show Workspace", #selector(showWorkspace), "", target: self)
         action(windows, "Minimize", #selector(NSWindow.performMiniaturize(_:)), "m")
         action(windows, "Zoom", #selector(NSWindow.performZoom(_:)), "")
         NSApp.windowsMenu = windows

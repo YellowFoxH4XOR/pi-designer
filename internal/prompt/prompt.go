@@ -1,4 +1,4 @@
-// Package prompt composes the instructions PiDesigner gives the Pi agent.
+// Package prompt composes the instructions πDesigner gives the π agent.
 //
 // The prompt is split the way design agents need it:
 //
@@ -7,7 +7,7 @@
 //     rules, the always-on frontend-design guidance, and the project's design
 //     system and skill. It only changes when the project's design system or
 //     skill changes, so the provider's prompt cache survives across turns of a
-//     persistent Pi session.
+//     persistent π session.
 //   - Turn returns the user message for one run: turn-variable context
 //     (viewport, discovery overrides, transcript replay for conversations that
 //     predate native sessions) followed by the user's request.
@@ -121,7 +121,7 @@ func System(in Input) string {
 	b.WriteString("## Project context\n\n")
 	fmt.Fprintf(&b, "Project directory (your working directory): %s\n", in.ProjectDir)
 	b.WriteString("Write the artifact files there. The entry file is `index.html`.\n\n")
-	b.WriteString("PiDesigner renders the artifact live in three fixed frames. It must work at every one of them:\n\n")
+	b.WriteString("πDesigner renders the artifact live in three fixed frames. It must work at every one of them:\n\n")
 	for _, v := range Viewports {
 		fmt.Fprintf(&b, "- %s (`%s`): %d × %d\n", v.Label, v.ID, v.Width, v.Height)
 	}
@@ -207,7 +207,7 @@ func writeSkill(b *strings.Builder, sk *Skill) {
 	}
 	fmt.Fprintf(b, "## Active skill: %s\n\n", sk.Name)
 	fmt.Fprintf(b, "Skill root: %s — relative paths in the skill resolve against this directory. The skill files are read-only: copy a seed into the project, never edit it in place.\n\n", sk.Dir)
-	b.WriteString("This skill was written for Open Design. Its commands for `$OD_BIN`, `$OD_NODE_BIN`, `od`, `$OD_PROJECT_ID`, `.od-skills/` staging, or Open Design media generation do not exist in PiDesigner: run the skill's own scripts directly from the skill root with `node`, write outputs into the project, deliver motion as runnable HTML (no rendered video), and verify with `render_preview`.\n\n")
+	b.WriteString("This skill was written for Open Design. Its commands for `$OD_BIN`, `$OD_NODE_BIN`, `od`, `$OD_PROJECT_ID`, `.od-skills/` staging, or Open Design media generation do not exist in πDesigner: run the skill's own scripts directly from the skill root with `node`, write outputs into the project, deliver motion as runnable HTML (no rendered video), and verify with `render_preview`.\n\n")
 	b.WriteString("Follow this skill's workflow exactly.")
 	var reads []string
 	for _, f := range preflightFiles {
@@ -235,7 +235,7 @@ type TurnInput struct {
 	Viewport string
 	// SkipDiscovery forbids question forms: the caller cannot answer them.
 	SkipDiscovery bool
-	// Transcript is replayed when the conversation has no native Pi session.
+	// Transcript is replayed when the conversation has no native π session.
 	Transcript []Message
 }
 

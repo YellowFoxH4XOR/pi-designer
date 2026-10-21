@@ -1,6 +1,6 @@
 import type { Todo } from '../api';
 
-// Pure parsing of the Pi assistant-text protocol. No DOM, no React, no
+// Pure parsing of the π assistant-text protocol. No DOM, no React, no
 // side effects: the same text always produces the same result, which keeps
 // streaming renders stable and makes the parser testable in isolation.
 //

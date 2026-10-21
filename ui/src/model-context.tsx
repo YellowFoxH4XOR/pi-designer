@@ -3,7 +3,8 @@ import { useCallback, useContext, useEffect, useRef, useState } from 'preact/hoo
 import { api, type ModelCatalog } from './api';
 import type { Preferences } from './state';
 import { Dialog, SearchField } from './components/common';
-import { Icon, PiLogo } from './components/Icon';
+import { Icon } from './components/Icon';
+import { ModelIcon } from './components/ModelIcon';
 
 export const modelRef = (m: { provider: string; id: string }) => `${m.provider}/${m.id}`;
 export function providerName(id: string) {
@@ -18,7 +19,7 @@ interface ModelContextValue {
 const ModelContext = createContext<ModelContextValue | null>(null);
 export function useModels() {
   const value = useContext(ModelContext);
-  if (!value) throw new Error('Pi model controls require the model provider');
+  if (!value) throw new Error('π model controls require the model provider');
   return value;
 }
 export function ModelProvider({ children }: { children: ComponentChildren }) {
@@ -61,7 +62,7 @@ export function ModelProvider({ children }: { children: ComponentChildren }) {
     try {
       const { levels } = await api.thinkingLevels(ref);
       const thinking = levels.includes(preferences.thinking) ? preferences.thinking : levels.includes('medium') ? 'medium' : levels[0];
-      if (!thinking) throw new Error('Pi returned no thinking levels for this model.');
+      if (!thinking) throw new Error('π returned no thinking levels for this model.');
       await save({ model: ref, thinking });
       setLevels(levels); setOpened(false);
     } catch (e) { setSelectionError(String(e).replace(/^Error: /, '')); }
@@ -75,22 +76,22 @@ export function ModelProvider({ children }: { children: ComponentChildren }) {
 export function ModelButton({ compact = false, disabled = false, settings = false }: { compact?: boolean; disabled?: boolean; settings?: boolean }) {
   const { preferences, catalog, open, ready } = useModels();
   const selected = catalog?.models.find((m) => modelRef(m) === preferences.model);
-  const label = preferences.model ? selected?.name || preferences.model.split('/').slice(1).join('/') : 'Pi default';
-  const provider = selected ? providerName(selected.provider) : catalog?.current ? `${catalog.current.name} · ${providerName(catalog.current.provider)}` : 'Your installed Pi';
-  return <button type="button" class={`model-button ${compact ? 'compact' : ''} ${settings ? 'settings-model' : ''}`} onClick={open} disabled={disabled || !ready} aria-label="Choose Pi model" aria-haspopup="dialog" title={`${label} · ${provider}`}><PiLogo size={settings ? 28 : 22}/><span><strong>{label}</strong>{settings && <small>{provider}</small>}</span><Icon name="chevron" size={13} class="model-chevron"/></button>;
+  const label = preferences.model ? selected?.name || preferences.model.split('/').slice(1).join('/') : 'π default';
+  const provider = selected ? providerName(selected.provider) : catalog?.current ? `${catalog.current.name} · ${providerName(catalog.current.provider)}` : 'Your installed π';
+  return <button type="button" class={`model-button ${compact ? 'compact' : ''} ${settings ? 'settings-model' : ''}`} onClick={open} disabled={disabled || !ready} aria-label="Choose π model" aria-haspopup="dialog" title={`${label} · ${provider}`}><ModelIcon id={selected?.id || (preferences.model ? preferences.model.split('/').slice(1).join('/') : catalog?.current?.id)} provider={selected?.provider || (preferences.model ? preferences.model.split('/')[0] : catalog?.current?.provider)} size={settings ? 28 : 22}/><span><strong>{label}</strong>{settings && <small>{provider}</small>}</span><Icon name="chevron" size={13} class="model-chevron"/></button>;
 }
 function ModelDialog({ catalog, selected, loading, error, selecting, onRefresh, onSelect, onClose }: { catalog: ModelCatalog | null; selected: string; loading: boolean; error: string; selecting: string | null; onRefresh: () => void; onSelect: (ref: string) => void; onClose: () => void }) {
   const [query, setQuery] = useState('');
   const filtered = (catalog?.models || []).filter((m) => `${m.name} ${m.provider} ${m.id}`.toLowerCase().includes(query.toLowerCase()));
   const current = catalog?.current;
-  return <Dialog title="Choose a Pi model" onClose={onClose} class="model-picker">
-    <p class="dialog-intro">Available models from your installed Pi. Accounts and credentials stay with Pi.</p>
+  return <Dialog title="Choose a π model" onClose={onClose} class="model-picker">
+    <p class="dialog-intro">Available models from your installed π. Accounts and credentials stay with π.</p>
     <SearchField value={query} onInput={setQuery} placeholder="Search models or providers"/>
-    <div class="model-picker-info"><span>{catalog ? `${catalog.models.length} models available` : 'Reading your Pi configuration…'}</span><button class="text-button" onClick={onRefresh} disabled={loading || selecting !== null}><Icon name="refresh" size={13}/>{loading ? 'Refreshing…' : 'Refresh'}</button></div>
+    <div class="model-picker-info"><span>{catalog ? `${catalog.models.length} models available` : 'Reading your π configuration…'}</span><button class="text-button" onClick={onRefresh} disabled={loading || selecting !== null}><Icon name="refresh" size={13}/>{loading ? 'Refreshing…' : 'Refresh'}</button></div>
     {error && <p class="inline-error" role="alert">{error}</p>}
-    {!catalog && loading ? <div class="loading-state">Starting Pi to discover your models…</div> : <div class="model-list">
-      {!query && <button class={`model-row ${!selected ? 'selected' : ''}`} onClick={() => onSelect('')} disabled={selecting !== null}><PiLogo size={27}/><span><strong>Pi default</strong><small>{current ? `${current.name} · ${providerName(current.provider)}` : 'Use the default configured in Pi'}</small></span>{!selected && <Icon name="check" size={17}/>}</button>}
-      {filtered.map((m) => { const ref = modelRef(m); return <button key={ref} data-model-ref={ref} class={`model-row ${ref === selected ? 'selected' : ''}`} onClick={() => onSelect(ref)} disabled={selecting !== null}><span class="model-row-symbol"><Icon name="code" size={17}/></span><span><strong>{m.name}</strong><small>{providerName(m.provider)}<span class="model-id">{m.id}</span></small></span><span class="model-row-meta">{selecting === ref ? 'Selecting…' : ref === selected ? <Icon name="check" size={17}/> : m.reasoning ? 'Reasoning' : ''}</span></button>; })}
+    {!catalog && loading ? <div class="loading-state">Starting π to discover your models…</div> : <div class="model-list">
+      {!query && <button class={`model-row ${!selected ? 'selected' : ''}`} onClick={() => onSelect('')} disabled={selecting !== null}><ModelIcon id={current?.id} provider={current?.provider} size={27}/><span><strong>π default</strong><small>{current ? `${current.name} · ${providerName(current.provider)}` : 'Use the default configured in π'}</small></span>{!selected && <Icon name="check" size={17}/>}</button>}
+      {filtered.map((m) => { const ref = modelRef(m); return <button key={ref} data-model-ref={ref} class={`model-row ${ref === selected ? 'selected' : ''}`} onClick={() => onSelect(ref)} disabled={selecting !== null}><ModelIcon id={m.id} provider={m.provider} size={27}/><span><strong>{m.name}</strong><small>{providerName(m.provider)}<span class="model-id">{m.id}</span></small></span><span class="model-row-meta">{selecting === ref ? 'Selecting…' : ref === selected ? <Icon name="check" size={17}/> : m.reasoning ? 'Reasoning' : ''}</span></button>; })}
       {catalog && !filtered.length && <p class="no-results">No models match “{query}”. Try a model or provider name.</p>}
     </div>}
     {selecting !== null && <p class="model-select-status" role="status">Checking this model’s supported thinking levels…</p>}

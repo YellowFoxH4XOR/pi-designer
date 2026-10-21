@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { api, subscribeRun, type Run, type AgentEvent, type Critique, type Render, type Todo } from './api';
+import { api, subscribeRun, type Run } from './api';
+import { fromActivity, reduceActivity, type RunState } from './activity';
+export type { RunState } from './activity';
 
 export type Frame = 'web' | 'mobile' | 'desktop';
 export const frames: Record<Frame, { w: number; h: number; label: string }> = {
@@ -9,7 +11,7 @@ export const workflows = [
   { id: 'web-prototype', name: 'Prototype', icon: 'web' as const, description: 'A working interface, built from your brief.' },
   { id: 'motion-design', name: 'Motion design', icon: 'motion' as const, description: 'Bring a page or interaction to life.' },
   { id: 'simple-deck', name: 'Slide deck', icon: 'deck' as const, description: 'A swipeable presentation, slide by slide.' },
-  { id: 'web-clone', name: 'Website clone', icon: 'clone' as const, description: 'Rebuild a reference website with Pi.' },
+  { id: 'web-clone', name: 'Website clone', icon: 'clone' as const, description: 'Rebuild a reference website with π.' },
 ];
 export const skillNames: Record<string, string> = {
   'web-prototype': 'Prototype', 'web-artifacts-builder': 'Prototype', 'motion-design': 'Motion design', 'web-clone': 'Website clone',
@@ -28,7 +30,7 @@ export function useRoute() {
       const next = location.hash.slice(1) || 'home';
       if (next === current) return;
       const request = new Event('pidesigner:navigate', { cancelable: true });
-      if (!window.dispatchEvent(request)) {
+      if (current.split('?')[0] !== next.split('?')[0] && !window.dispatchEvent(request)) {
         history.replaceState(null, '', `${location.pathname}${location.search}#${current}`);
         return;
       }
@@ -39,78 +41,72 @@ export function useRoute() {
   }, []);
   return [route, (next: string) => { location.hash = next; }] as const;
 }
-export interface RunState {
-  id: string; projectId: string; status: Run['status']; text: string; tools: AgentEvent[];
-  todos: Todo[]; renders: Render[]; critiques: Critique[];
-  error?: string; conversationId?: string; model?: string;
-}
+// Discover work globally, including runs started by an editor/MCP. Each stream
+// starts after an authoritative snapshot and resumes using a durable cursor.
 export function useRuns(onFinished: () => void) {
   const [runs, setRuns] = useState<Record<string, RunState>>({});
+  const [activityError, setActivityError] = useState('');
+  const state = useRef(runs); state.current = runs;
   const subscriptions = useRef(new Map<string, () => void>());
+  const loading = useRef(new Set<string>());
+  const mounted = useRef(true);
   const finished = useRef(onFinished); finished.current = onFinished;
-  useEffect(() => () => { subscriptions.current.forEach((stop) => stop()); }, []);
 
-  function monitor(run: Run) {
-    if (subscriptions.current.has(run.id)) return;
-    setRuns((all) => ({
-      ...all,
-      [run.projectId]: {
-        id: run.id, projectId: run.projectId, status: run.status, text: '', tools: [],
-        todos: run.todos ?? [], renders: run.renders ?? [], critiques: run.critiques ?? [], conversationId: run.conversationId,
-      },
-    }));
-    let stopped = false, polling = false;
-    const stopEvents = subscribeRun(run.id, (ev) => {
-      if (stopped) return;
-      setRuns((all) => {
-        const current = all[run.projectId];
-        if (!current || current.id !== run.id) return all;
-        const next = { ...current };
-        if (ev.type === 'text') next.text += ev.text || '';
-        if (ev.type === 'model') next.model = ev.text || '';
-        if (ev.type === 'turn' && !next.text.endsWith('\n\n')) next.text += '\n\n';
-        if (ev.type === 'tool') next.tools = [...next.tools.slice(-29), ev];
-        if (ev.type === 'todos' && Array.isArray(ev.todos)) next.todos = ev.todos;
-        if (ev.type === 'render' && ev.render?.image && !next.renders.some((render) => render.image === ev.render?.image)) {
-          next.renders = [...next.renders, ev.render];
-        }
-        if (ev.type === 'critique' && ev.critique) {
-          const round = ev.critique;
-          next.critiques = [...next.critiques.filter((critique) => critique.round !== round.round), round].sort((a, b) => a.round - b.round);
-        }
-        return { ...all, [run.projectId]: next };
+  async function monitor(run: Pick<Run, 'id'> & Partial<Run>) {
+    if (subscriptions.current.has(run.id) || loading.current.has(run.id)) return;
+    loading.current.add(run.id);
+    try {
+      const { activity } = await api.runActivity(run.id);
+      if (!mounted.current) return;
+      const initial = fromActivity(activity);
+      setRuns(all => all[activity.projectId]?.startedAt > activity.startedAt ? all : ({ ...all, [activity.projectId]: initial }));
+      if (activity.status !== 'running') return;
+      const stop = subscribeRun(run.id, activity.seq, event => {
+        if (!mounted.current) return;
+        setRuns(all => {
+          const current = all[activity.projectId];
+          if (!current || current.id !== run.id) return all;
+          return { ...all, [activity.projectId]: reduceActivity(current, event) };
+        });
+      }, snapshot => {
+        if (!mounted.current) return;
+        setRuns(all => {
+          const current = all[snapshot.projectId];
+          if (current && current.id !== run.id) return all;
+          return { ...all, [snapshot.projectId]: fromActivity(snapshot) };
+        });
+        if (snapshot.status !== 'running') { subscriptions.current.get(run.id)?.(); subscriptions.current.delete(run.id); finished.current(); }
+      }, connected => {
+        if (!mounted.current) return;
+        setRuns(all => { const current = all[activity.projectId]; return current?.id === run.id ? { ...all, [activity.projectId]: { ...current, connection: connected ? 'connected' : 'reconnecting' } } : all; });
       });
-    });
-    const stop = () => { stopped = true; stopEvents(); clearInterval(timer); subscriptions.current.delete(run.id); };
-    const poll = async () => {
-      if (stopped || polling) return;
-      polling = true;
-      try {
-        const { run: latest } = await api.run(run.id);
-        if (latest.status !== 'running' && !stopped) {
-          stop();
-          setRuns((all) => {
-            const current = all[run.projectId];
-            return {
-              ...all,
-              [run.projectId]: {
-                ...current,
-                status: latest.status,
-                error: latest.error,
-                todos: latest.todos?.length ? latest.todos : current.todos,
-                renders: latest.renders?.length ? latest.renders : current.renders,
-                critiques: latest.critiques?.length ? latest.critiques : current.critiques,
-              },
-            };
-          });
-          finished.current();
-        }
-      } catch { /* preserve the run while the daemon is temporarily unreachable */ }
-      finally { polling = false; }
-    };
-    const timer = window.setInterval(poll, 1500);
-    subscriptions.current.set(run.id, stop);
-    void poll();
+      subscriptions.current.set(run.id, stop);
+    } catch (e) { if (mounted.current) setActivityError(String(e).replace(/^Error: /, '')); }
+    finally { loading.current.delete(run.id); }
   }
-  return { runs, monitor };
+  useEffect(() => {
+    mounted.current = true; let pending = false;
+    async function sync() {
+      if (pending) return; pending = true;
+      try {
+        const { activities } = await api.activity();
+        if (!mounted.current) return;
+        setActivityError('');
+        for (const a of activities) {
+          const current = state.current[a.projectId];
+          if (!current || current.id !== a.runId || current.status !== a.status || current.attention !== a.attention || !subscriptions.current.has(a.runId) && current.seq !== a.seq) {
+            // Authoritative discovery is also the fallback when an SSE connection
+            // dies before its terminal snapshot arrives.
+            if (current && current.id !== a.runId) { subscriptions.current.get(current.id)?.(); subscriptions.current.delete(current.id); }
+            subscriptions.current.get(a.runId)?.(); subscriptions.current.delete(a.runId);
+            void monitor({ id: a.runId });
+          }
+        }
+      } catch { if (mounted.current) setActivityError('Activity disconnected. Reconnecting…'); }
+      finally { pending = false; }
+    }
+    void sync(); const timer = window.setInterval(sync, 1500);
+    return () => { mounted.current = false; clearInterval(timer); subscriptions.current.forEach(stop => stop()); subscriptions.current.clear(); };
+  }, []);
+  return { runs, monitor, activityError };
 }

@@ -67,11 +67,15 @@ func TestConfiguredModelDiscoveryAndExactProviderSelection(t *testing.T) {
 func TestPiProviderErrorIsAnEvent(t *testing.T) {
 	s := &Session{events: make(chan Event, 4)}
 	s.handleRecord([]byte(`{"type":"message_end","message":{"role":"assistant","stopReason":"error","errorMessage":"Provider authentication failed"}}`))
+	if ev := <-s.events; ev.Type != "message_end" {
+		t.Fatal("authoritative message was lost")
+	}
 	ev := <-s.events
 	if ev.Type != EventError || !strings.Contains(ev.Text, "authentication") {
 		t.Fatalf("provider failure was silently ignored: %+v", ev)
 	}
 	s.handleRecord([]byte(`{"type":"message_end","message":{"role":"assistant","stopReason":"stop"}}`))
+	<-s.events // authoritative final message
 	if ev := <-s.events; ev.Type != EventModelResult {
 		t.Fatal("a successful retry must clear the previous provider error")
 	}

@@ -65,6 +65,10 @@ func (s *Server) Routes() http.Handler {
 
 	// Runs
 	mux.HandleFunc("POST /api/projects/{id}/chat", s.handleChat)
+	mux.HandleFunc("GET /api/activity", s.handleActivity)
+	mux.HandleFunc("GET /api/runs/{id}/activity", s.handleRunActivity)
+	mux.HandleFunc("GET /api/runs/{id}/log", s.handleRunLog)
+	mux.HandleFunc("POST /api/runs/{id}/ui-response", s.handleUIResponse)
 	mux.HandleFunc("GET /api/runs/{id}", s.handleGetRun)
 	mux.HandleFunc("GET /api/projects/{id}/runs", s.handleRuns)
 	mux.HandleFunc("POST /api/runs/{id}/cancel", s.handleCancelRun)
@@ -465,44 +469,6 @@ func (s *Server) handleCancelRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"canceled": true})
-}
-
-// handleRunEvents streams a run's agent events over SSE.
-func (s *Server) handleRunEvents(w http.ResponseWriter, r *http.Request) {
-	runID := r.PathValue("id")
-	ch, ok := s.Runner.Subscribe(runID)
-	if !ok {
-		writeErr(w, http.StatusNotFound, "run is not active")
-		return
-	}
-	defer s.Runner.unsubscribe(runID, ch)
-
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("X-Accel-Buffering", "no")
-	w.WriteHeader(http.StatusOK)
-
-	flusher, _ := w.(http.Flusher)
-
-	for {
-		select {
-		case <-r.Context().Done():
-			return
-		case ev, open := <-ch:
-			if !open {
-				return
-			}
-			payload, err := json.Marshal(ev)
-			if err != nil {
-				continue
-			}
-			fmt.Fprintf(w, "event: %s\ndata: %s\n\n", ev.Type, payload)
-			if flusher != nil {
-				flusher.Flush()
-			}
-		}
-	}
 }
 
 // handleRender serves a preview render the agent took of a project.
