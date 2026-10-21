@@ -9,7 +9,7 @@ Ready for PR review as a local Mac build. The activity pipeline, background life
 - `go test -race ./...` and `go vet ./...`.
 - Frontend typecheck, production build, and five reducer/model-identity tests.
 - Metadata-only discovery against the installed π: 70 configured models; exact provider/model selection and supported thinking levels verified without inference or changing the default.
-- Nine browser integration checks against an isolated real daemon/SQLite/SSE, using deterministic fixture RPC: branding/icons, live parallel tools/output, offline/reload recovery, diagnostics, external-run discovery, supported extension questions, question-only completion, provider errors/cancellation, superseded-attention recovery, and minimum-window layout. No browser runtime errors.
+- Twelve browser/native-renderer integration checks against an isolated real daemon/SQLite/SSE, using deterministic fixture RPC: branding/icons, live parallel tools/output, offline/reload recovery, diagnostics, external-run discovery, supported extension questions, question-only completion, provider errors/cancellation, superseded-attention recovery, minimum-window layout, long-conversation scroll containment, variable-height error banners, and native WebKit root-height checks. No browser runtime errors.
 - Eight native integration checks in the actual built app with isolated data/preferences: main-frame native preferences bridge, close continuation, notch expansion, minimize continuation, completion while minimized, menu-bar access after completion, rapid-outcome notification-ledger recovery, and attention independent of foreground WebKit.
 - Ten native DTO/preferences assertions, including distinct attention/completion/failure/cancellation outcomes and private/quiet notification defaults.
 - Ad-hoc bundle signing and `codesign --verify --deep --strict build/πDesigner.app`.
@@ -18,6 +18,12 @@ Ready for PR review as a local Mac build. The activity pipeline, background life
 - No review daemon or fixture agent left running. Existing user data and the previously running app were not migrated, replaced or stopped by the tests.
 
 Browser and native evidence is generated under ignored `.impeccable/review/` by the repeatable scripts. Raster review captures are test artifacts, not shipping assets. Shipping icon rasters are generated from the canonical authored SVG; see `mac/ASSETS.md` for provenance.
+
+## Unlimited-scroll regression
+
+A 60-step plan plus a long conversation and critique reproduced a 3,826px root document inside a 900px window. Absolutely positioned `.sr-only` labels had an unbounded static position outside the conversation's scroll container. The fix explicitly anchors hidden labels, makes the conversation a containing block, bounds the app shell to its viewport, and confines scroll chaining to the appropriate inner panels. Hidden status text remains in the accessibility tree.
+
+The regression verifies root scroll height/window scroll position, independent conversation scrolling, pinned header/composer, large error banners, and native WebKit at 1440×900, 900×620, and a reduced 900×480 CSS viewport (zoom stress). Root CSS minimums are removed; AppKit still enforces the physical window minimum. Expanded activity details can shrink to preserve the composer when an error banner takes space. The existing live app/task was not restarted by these tests.
 
 ## Manual checks / known limits
 

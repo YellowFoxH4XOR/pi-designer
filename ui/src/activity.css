@@ -118,7 +118,10 @@
   margin: 12px 0;
 }
 .run-activity {
-  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  flex: 0 1 auto;
+  min-height: 0;
   background: #f9f9fc;
   border: 1px solid #d8d9e6;
   border-radius: 10px;
@@ -130,6 +133,7 @@
   border-color: #e3cfad;
 }
 .run-activity-top {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: 5px;
@@ -187,6 +191,8 @@
   background: #f4e8ec;
 }
 .run-activity-details {
+  flex: 0 1 auto;
+  min-height: 0;
   border-top: 1px solid #dfdfea;
   padding: 12px;
   max-height: min(36dvh, 330px);

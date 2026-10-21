@@ -43,6 +43,15 @@ async function run(text) {
     send({ type: 'agent_end' }); send({ type: 'agent_settled', aborted: false }); active = false; return;
   }
   message('Reading the project and building a focused interface.');
+  if (text.includes('SCROLL_STRESS')) {
+    message(Array.from({length:120},(_,i)=>`Review note ${i+1}: keep the conversation inside its own scroll area while the canvas and composer remain fixed.`).join('\n\n'));
+    const todos=Array.from({length:60},(_,i)=>({content:`Design step ${i+1}: verify a detailed layout, interaction, and accessibility state.`,status:i<20?'completed':i===20?'in_progress':'pending'}));
+    send({type:'tool_execution_start',toolCallId:'plan-stress',toolName:'todo_write',args:{todos}});
+    send({type:'tool_execution_end',toolCallId:'plan-stress',toolName:'todo_write',result:{content:[{type:'text',text:'Plan recorded'}]},isError:false});
+    const critique={round:1,composite:7.5,decision:'revise',panelists:['critic','brand','a11y','copy'].map(role=>({role,score:7.5,notes:'Review this fixture carefully. '.repeat(20),mustFix:['Keep long content inside the correct scroll panel.']}))};
+    send({type:'tool_execution_start',toolCallId:'critique-stress',toolName:'submit_critique',args:{}});
+    send({type:'tool_execution_end',toolCallId:'critique-stress',toolName:'submit_critique',result:{content:[{type:'text',text:'Critique recorded'}],details:critique},isError:false});
+  }
   send({ type: 'auto_retry_start', attempt: 1, maxAttempts: 3, delayMs: 20, errorMessage: 'Fixture transient error' });
   await sleep(20); send({ type: 'auto_retry_end', success: true, attempt: 1 });
   send({ type: 'compaction_start', reason: 'threshold' }); send({ type: 'compaction_end', reason: 'threshold', aborted: false });
