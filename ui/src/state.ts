@@ -108,5 +108,11 @@ export function useRuns(onFinished: () => void) {
     void sync(); const timer = window.setInterval(sync, 1500);
     return () => { mounted.current = false; clearInterval(timer); subscriptions.current.forEach(stop => stop()); subscriptions.current.clear(); };
   }, []);
-  return { runs, monitor, activityError };
+  // A deleted project's activity is gone server-side; drop it locally too.
+  function forget(projectId: string) {
+    const current = state.current[projectId];
+    if (current) { subscriptions.current.get(current.id)?.(); subscriptions.current.delete(current.id); }
+    setRuns(({ [projectId]: _removed, ...rest }) => rest);
+  }
+  return { runs, monitor, forget, activityError };
 }

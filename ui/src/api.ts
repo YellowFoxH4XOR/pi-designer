@@ -73,6 +73,7 @@ export const api = {
     req<{ project: Project; conversationId: string }>('/api/projects', json(body)),
   project: (id: string) => req<{ project: Project; conversations: Conversation[] }>(projectPath(id)),
   updateProject: (p: Project) => req<{ project: Project }>(projectPath(p.id), json(pickProject(p), 'PATCH')),
+  deleteProject: (id: string) => req<{ deleted: string }>(projectPath(id), { method: 'DELETE' }),
   files: (id: string) => req<{ files: FileEntry[] }>(`${projectPath(id)}/files`),
   file: (id: string, path: string) => req<{ content: string }>(`${projectPath(id)}/file?path=${encodeURIComponent(path)}`),
   writeFile: (id: string, path: string, content: string) => req(`${projectPath(id)}/file`, json({ path, content }, 'PUT')),

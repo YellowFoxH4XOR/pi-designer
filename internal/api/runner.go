@@ -36,6 +36,7 @@ type Runner struct {
 	sessions        map[string]*omprun.Session
 	journals        map[string]*eventJournal
 	active          map[string]string
+	deleting        map[string]bool
 	cancelRequested map[string]bool
 	hub             FileChangeNotifier
 }
@@ -70,6 +71,7 @@ func NewRunner(st *store.Store, cat *content.Catalog, ompBin string, hub FileCha
 		sessions:        map[string]*omprun.Session{},
 		journals:        map[string]*eventJournal{},
 		active:          map[string]string{},
+		deleting:        map[string]bool{},
 		cancelRequested: map[string]bool{},
 		hub:             hub,
 	}
@@ -134,6 +136,10 @@ func (r *Runner) Start(ctx context.Context, req RunRequest) (*RunHandle, error) 
 	if r.shuttingDown {
 		r.mu.Unlock()
 		return nil, fmt.Errorf("πDesigner is shutting down")
+	}
+	if r.deleting[proj.ID] {
+		r.mu.Unlock()
+		return nil, fmt.Errorf("this project is being deleted")
 	}
 	if r.active[proj.ID] != "" {
 		r.mu.Unlock()

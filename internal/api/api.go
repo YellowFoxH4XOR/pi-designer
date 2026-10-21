@@ -257,19 +257,6 @@ func (s *Server) handleGetProject(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"project": proj, "conversations": convs})
 }
 
-func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
-	proj, _, ok := s.resolveProject(w, r)
-	if !ok {
-		return
-	}
-	if err := s.Store.DeleteProject(proj.ID); err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	_ = os.RemoveAll(proj.Dir)
-	writeJSON(w, http.StatusOK, map[string]any{"deleted": proj.ID})
-}
-
 func (s *Server) handleListFiles(w http.ResponseWriter, r *http.Request) {
 	_, pm, ok := s.resolveProject(w, r)
 	if !ok {

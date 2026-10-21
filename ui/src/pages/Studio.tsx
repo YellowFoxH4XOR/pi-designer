@@ -13,14 +13,15 @@ import { RenderDialogBody, RenderStrip, renderLabel } from '../components/Render
 import { RichText } from '../components/RichText';
 import { PreviewPane, type FileChange } from '../components/PreviewPane';
 import { SystemPicker } from '../components/SystemPicker';
+import { DeleteProjectDialog } from '../components/DeleteProject';
 import { TodoCard } from '../components/TodoCard';
 import { continueMessage, parseAssistantText, parseFormAnswers, type ParsedFormAnswers } from '../components/protocol';
 import { skillNames, type Frame, type RunState } from '../state';
 
-export function Studio({ projectId, systems, run, onMonitor, onStart, onHome, onError, initialFrame = 'web', initialConversation = '', activityControl }: {
+export function Studio({ projectId, systems, run, onMonitor, onStart, onHome, onDelete, onError, initialFrame = 'web', initialConversation = '', activityControl }: {
   projectId: string; systems: DesignSystem[]; run?: RunState; onMonitor: (run: Run) => void;
   onStart: (p: Project, conversationId: string, prompt: string, viewport: Frame) => Promise<void>;
-  onHome: () => void; onError: (s: string) => void; initialFrame?: Frame; initialConversation?: string; activityControl?: ComponentChildren;
+  onHome: () => void; onDelete: (p: Project) => Promise<void>; onError: (s: string) => void; initialFrame?: Frame; initialConversation?: string; activityControl?: ComponentChildren;
 }) {
   const [project, setProject] = useState<Project | null>(null);
   const [files, setFiles] = useState<FileEntry[]>([]);
@@ -32,6 +33,7 @@ export function Studio({ projectId, systems, run, onMonitor, onStart, onHome, on
   const [prompt, setPrompt] = useState('');
   const [pickingSystem, setPickingSystem] = useState(false);
   const [renaming, setRenaming] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [name, setName] = useState('');
   const [failure, setFailure] = useState('');
   const [connecting, setConnecting] = useState(false);
@@ -181,7 +183,7 @@ export function Studio({ projectId, systems, run, onMonitor, onStart, onHome, on
   }
 
   return <div class="studio-shell">
-    <header class="studio-header"><IconButton icon="home" label="Back to home" onClick={onHome}/><Logo size={26}/><button class="project-title" onClick={() => { setName(project.name); setRenaming(true); }} title="Rename project" aria-label="Rename project">{project.name}<Icon name="chevron" size={14}/></button><span class="studio-workflow">{skillNames[project.skillId || ''] || 'Prototype'}</span><div class="studio-header-end">{activityControl}<span class="local-label"><span class="status-dot"/>Local workspace</span><button class="button secondary small" onClick={() => setPickingSystem(true)} disabled={busy}><Icon name="palette" size={16}/>{system?.name || 'Design system'}</button></div></header>
+    <header class="studio-header"><IconButton icon="home" label="Back to home" onClick={onHome}/><Logo size={26}/><button class="project-title" onClick={() => { setName(project.name); setRenaming(true); }} title="Rename project" aria-label="Rename project">{project.name}<Icon name="chevron" size={14}/></button><span class="studio-workflow">{skillNames[project.skillId || ''] || 'Prototype'}</span><div class="studio-header-end">{activityControl}<span class="local-label"><span class="status-dot"/>Local workspace</span><button class="button secondary small" onClick={() => setPickingSystem(true)} disabled={busy}><Icon name="palette" size={16}/>{system?.name || 'Design system'}</button><IconButton icon="trash" label="Delete project" onClick={() => setDeleting(true)}/></div></header>
     <div class="studio-content"><section class="conversation-pane" aria-label="Design conversation"><div class="conversation-toolbar"><label><span class="sr-only">Conversation</span><select value={conversationId} disabled={busy} onChange={(e) => { setConversationId(e.currentTarget.value); follow.current = true; }}>{conversations.map((c, i) => <option key={c.id} value={c.id}>{c.title === 'Main' ? 'Design conversation' : `${c.title} ${conversations.length - i}`}</option>)}</select></label><IconButton icon="plus" label="New conversation" onClick={newConversation} disabled={busy}/></div>
       {displayedActivity && <RunActivity key={displayedActivity.id} run={displayedActivity} workflow={skillNames[project.skillId || ''] || 'Prototype'} system={system?.name} onError={onError}/>}
       <div class="conversation-messages" ref={messagesPane} onScroll={(e) => { const el = e.currentTarget; follow.current = el.scrollHeight - el.scrollTop - el.clientHeight < 100; }}>
@@ -224,5 +226,6 @@ export function Studio({ projectId, systems, run, onMonitor, onStart, onHome, on
     {pickingSystem && <SystemPicker systems={systems} selected={project.designSystemId || ''} onClose={() => setPickingSystem(false)} onSelect={async (id) => { try { const d = await api.updateProject({ ...project, designSystemId: id }); setProject(d.project); setPickingSystem(false); } catch (e) { onError(String(e)); } }}/>}
     {preview && <Dialog title={`${renderLabel(preview)} render`} onClose={() => setPreview(null)} class="render-dialog"><RenderDialogBody render={preview}/></Dialog>}
     {renaming && <Dialog title="Rename project" onClose={() => setRenaming(false)}><form class="rename-form" onSubmit={async (e) => { e.preventDefault(); try { const d = await api.updateProject({ ...project, name }); setProject(d.project); setRenaming(false); } catch (e) { onError(String(e)); } }}><label>Project name<input autoFocus value={name} onInput={(e) => setName(e.currentTarget.value)} required/></label><button class="button primary" disabled={!name.trim()}>Save name</button></form></Dialog>}
+    {deleting && <DeleteProjectDialog project={project} running={busy} onClose={() => setDeleting(false)} onDelete={onDelete}/>}
   </div>;
 }

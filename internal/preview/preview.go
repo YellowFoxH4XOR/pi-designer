@@ -99,6 +99,17 @@ func (h *Hub) Watch(project, dir string) (stop func()) {
 	return func() { w.once.Do(func() { close(w.stop) }) }
 }
 
+// Unwatch stops polling a project directory, e.g. once the project is deleted.
+func (h *Hub) Unwatch(project string) {
+	h.mu.Lock()
+	w := h.watchers[project]
+	delete(h.watchers, project)
+	h.mu.Unlock()
+	if w != nil {
+		w.once.Do(func() { close(w.stop) })
+	}
+}
+
 func (w *watcher) loop() {
 	ticker := time.NewTicker(250 * time.Millisecond)
 	defer ticker.Stop()

@@ -56,6 +56,8 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .button.secondary { background: var(--white); border: 1px solid #d9dae3; }
 .button.secondary:hover:not(:disabled) { background: var(--subtle); border-color: #bcbecf; }
 .button.small { min-height: 32px; padding: 7px 11px; font-size: 12px; border-radius: 7px; }
+.button.danger { color: #fff; background: var(--error); }
+.button.danger:hover:not(:disabled) { background: #862f2d; }
 .text-button { display: inline-flex; gap: 5px; align-items: center; color: var(--muted); padding: 5px 0; font-size: 12px; }
 .text-button:hover { color: var(--accent); }
 .status-dot { width: 6px; height: 6px; display: inline-block; flex: 0 0 auto; background: var(--success); border-radius: 50%; }
@@ -238,6 +240,12 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .project-card-meta strong { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; font-weight: 550; }
 .project-card-meta small { color: var(--muted); font-size: 10px; white-space: nowrap; }
 .project-card > p { margin: 6px 1px 0; font-size: 11px; color: var(--muted); }
+.project-card-wrap { position: relative; min-width: 0; }
+.project-card-wrap > .project-card { width: 100%; }
+.project-delete { position: absolute; top: 8px; right: 8px; background: #ffffffd9; opacity: 0; transition: opacity .12s; }
+.project-card-wrap:hover .project-delete, .project-delete:focus-visible { opacity: 1; }
+.project-delete:hover:not(:disabled) { color: var(--error); background: #fff; }
+@media (hover: none) { .project-delete { opacity: 1; } }
 .skills-list { margin-top: 15px; }
 .skill-row { display: flex; gap: 21px; align-items: flex-start; border-top: 1px solid var(--line); padding: 26px 0; }
 .skill-icon { padding-top: 4px; color: #777394; }
@@ -355,6 +363,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .dialog-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .dialog-head h2 { font-size: 18px; font-weight: 600; letter-spacing: -.4px; margin: 0; }
 .dialog-intro { font-size: 12px; line-height: 1.7; color: var(--muted); margin: 9px 0 20px; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
 .picker-list { margin-top: 15px; max-height: 51dvh; overflow: auto; }
 .picker-row { display: flex; align-items: center; gap: 11px; text-align: left; padding: 10px 9px; width: 100%; border-radius: 8px; }
 .picker-row:hover { background: var(--subtle); }.picker-row.selected { background: var(--accent-soft); }

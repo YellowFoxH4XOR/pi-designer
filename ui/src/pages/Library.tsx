@@ -1,23 +1,26 @@
 import { useEffect, useMemo, useState } from 'preact/hooks';
 import { api, type DesignSystem, type Project, type Skill, type SystemContext } from '../api';
-import { Empty, SearchField, relativeDate, CopyButton } from '../components/common';
+import { Empty, SearchField, relativeDate, CopyButton, IconButton } from '../components/common';
 import { Icon } from '../components/Icon';
 import { SystemBadge, systemColors } from '../components/SystemPicker';
 import { RichText } from '../components/RichText';
 import { skillNames, workflows } from '../state';
 import { ProjectStatus } from '../components/Activity';
+import { DeleteProjectDialog } from '../components/DeleteProject';
 import type { RunState } from '../activity';
 
-export function Projects({ projects, runs, onOpen, onNew }: { projects: Project[]; runs: Record<string, RunState>; onOpen: (s: string) => void; onNew: () => void }) {
+export function Projects({ projects, runs, onOpen, onNew, onDelete }: { projects: Project[]; runs: Record<string, RunState>; onOpen: (s: string) => void; onNew: () => void; onDelete: (p: Project) => Promise<void> }) {
   const [search, setSearch] = useState('');
+  const [deleting, setDeleting] = useState<Project | null>(null);
   const filtered = projects.filter((p) => p.name.toLowerCase().includes(search.toLowerCase()));
   return <div class="library-page">
     <div class="page-heading"><div><h1>All projects</h1><p>A place for every idea, and every iteration.</p></div><button class="button primary" onClick={onNew}><Icon name="plus" size={17}/>New project</button></div>
     <div class="library-toolbar"><span>{projects.length} {projects.length === 1 ? 'project' : 'projects'}</span><SearchField value={search} onInput={setSearch} placeholder="Search projects"/></div>
-    {!filtered.length ? <Empty icon="projects" title={search ? 'No projects found' : 'A clean canvas awaits'}><p>{search ? 'Try another project name.' : 'Start with a brief. omp will take it from there.'}</p>{!search && <button class="button primary" onClick={onNew}>Create a project<Icon name="plus" size={17}/></button>}</Empty> : <div class="project-grid">{filtered.map((p) => <button key={p.id} class="project-card" onClick={() => onOpen(p.id)}>
+    {!filtered.length ? <Empty icon="projects" title={search ? 'No projects found' : 'A clean canvas awaits'}><p>{search ? 'Try another project name.' : 'Start with a brief. omp will take it from there.'}</p>{!search && <button class="button primary" onClick={onNew}>Create a project<Icon name="plus" size={17}/></button>}</Empty> : <div class="project-grid">{filtered.map((p) => <div key={p.id} class="project-card-wrap"><button class="project-card" onClick={() => onOpen(p.id)}>
       <div class="project-cover"><Icon name={p.skillId === 'web-clone' ? 'clone' : p.skillId === 'motion-design' ? 'motion' : p.skillId === 'simple-deck' ? 'deck' : 'web'} size={36}/><span>{p.entryFile ? 'Open prototype' : 'Ready for your first brief'}<Icon name="chevron" size={14}/></span></div>
       <div class="project-card-meta"><strong>{p.name}</strong><small>{relativeDate(p.updatedAt)}</small></div><ProjectStatus run={runs[p.id]}/><p>{skillNames[p.skillId || ''] || 'Prototype'}{p.designSystemId ? ` · ${p.designSystemId.replace(/-/g, ' ')}` : ''}</p>
-    </button>)}</div>}
+    </button><IconButton icon="trash" label={`Delete ${p.name}`} class="project-delete" onClick={() => setDeleting(p)}/></div>)}</div>}
+    {deleting && <DeleteProjectDialog project={deleting} running={runs[deleting.id]?.status === 'running'} onClose={() => setDeleting(null)} onDelete={async (p) => { await onDelete(p); setDeleting(null); }}/>}
   </div>;
 }
 
