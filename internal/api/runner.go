@@ -533,6 +533,10 @@ func (r *Runner) writeSystemPrompt(proj model.Project, req RunRequest) (string, 
 	if r.catalog.Knowledge != nil {
 		in.KnowledgeDir = r.catalog.Knowledge.Dir
 		in.KnowledgeDocs = r.catalog.Knowledge.Docs()
+		in.KnowledgeHints = map[string]string{}
+		for _, src := range r.catalog.Knowledge.Sources {
+			in.KnowledgeHints[src.ID+".md"] = src.UseFor
+		}
 	}
 
 	dsID := req.DesignSystemID

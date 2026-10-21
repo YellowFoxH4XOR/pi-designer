@@ -25,13 +25,24 @@ type Source struct {
 	URL         string `json:"url"`
 	DocumentURL string `json:"documentUrl,omitempty"`
 	Note        string `json:"note"`
+	Group       string `json:"group,omitempty"`
+	UseFor      string `json:"useFor,omitempty"`
+	License     string `json:"license,omitempty"`
 }
 
 var Approved = []Source{
-	{"xias", "XIAS · design QA", "https://github.com/plugin87/ux-ui-agent-skills", "https://raw.githubusercontent.com/plugin87/ux-ui-agent-skills/main/.claude/skills/design-qa/SKILL.md", "MIT guidance. Review upstream changes before applying."},
-	{"shadcn", "shadcn/ui · components", "https://ui.shadcn.com/docs", "https://ui.shadcn.com/llms.txt", "Documentation only. Component code and third-party registries are not installed."},
-	{"material", "Material Design 3", "https://m3.material.io/", "", "Official guide: open upstream. No assets or UI kits are mirrored."},
-	{"figma", "Figma Community kits", "https://www.figma.com/community/ui-kits", "", "Browse original files. Each kit has separate terms; nothing is downloaded."},
+	{ID: "xias", Name: "XIAS · design QA", Group: "Design guidance", URL: "https://github.com/plugin87/ux-ui-agent-skills", DocumentURL: "https://raw.githubusercontent.com/plugin87/ux-ui-agent-skills/main/.claude/skills/design-qa/SKILL.md", Note: "One selected QA skill from XIAS; not its full 26-skill collection.", UseFor: "Review hierarchy, states and accessibility after a draft is built.", License: "MIT"},
+	{ID: "material", Name: "Material Design 3", Group: "Design guidance", URL: "https://m3.material.io/", Note: "The bundled Material design system is selectable under Design systems. Official site remains browse-only.", UseFor: "Android patterns, adaptive layouts and Material components."},
+	{ID: "material-color", Name: "Material Color Utilities", Group: "Design guidance", URL: "https://github.com/material-foundation/material-color-utilities", DocumentURL: "https://raw.githubusercontent.com/material-foundation/material-color-utilities/main/README.md", Note: "Official color-system documentation, not the full Material 3 guidelines.", UseFor: "Dynamic color schemes, semantic color roles and contrast.", License: "Apache-2.0"},
+	{ID: "shadcn", Name: "shadcn/ui", Group: "shadcn ecosystem", URL: "https://ui.shadcn.com/docs", DocumentURL: "https://ui.shadcn.com/llms.txt", Note: "The bundled shadcn design system is selectable under Design systems. Component code is not installed.", UseFor: "Accessible product UI foundations and component selection.", License: "MIT (code)"},
+	{ID: "reui", Name: "ReUI", Group: "shadcn ecosystem", URL: "https://github.com/keenthemes/reui", DocumentURL: "https://raw.githubusercontent.com/keenthemes/reui/main/README.md", Note: "Project overview, not the full component catalog or Pro blocks.", UseFor: "Dense app UI, dashboards and operational workflows.", License: "MIT (repo)"},
+	{ID: "magicui", Name: "Magic UI", Group: "shadcn ecosystem", URL: "https://github.com/magicuidesign/magicui", DocumentURL: "https://raw.githubusercontent.com/magicuidesign/magicui/main/README.md", Note: "Project overview; animated components are not installed.", UseFor: "One purposeful animated moment in a marketing interface.", License: "MIT (repo)"},
+	{ID: "kokonut", Name: "Kokonut UI", Group: "shadcn ecosystem", URL: "https://github.com/kokonut-labs/kokonutui", DocumentURL: "https://raw.githubusercontent.com/kokonut-labs/kokonutui/main/README.md", Note: "Project overview; animated components are not installed.", UseFor: "Modern interactive components for a React/Tailwind project.", License: "MIT (repo)"},
+	{ID: "aceternity", Name: "Aceternity UI", Group: "shadcn ecosystem", URL: "https://ui.aceternity.com/", Note: "Browse free components at source. Redistribution and Pro terms differ; no mirroring.", UseFor: "Expressive landing-page interaction; check the component's terms."},
+	{ID: "studio", Name: "shadcn/studio", Group: "shadcn ecosystem", URL: "https://github.com/shadcnstudio/shadcn-studio", DocumentURL: "https://raw.githubusercontent.com/shadcnstudio/shadcn-studio/main/README.md", Note: "Repo overview only; check terms for specific templates and blocks.", UseFor: "Find composable blocks and themes before making new ones.", License: "MIT (repo); check assets"},
+	{ID: "figma", Name: "Figma Community kits", Group: "Figma kits", URL: "https://www.figma.com/community/ui-kits", Note: "Community files have individual authors and terms; browse, do not mirror.", UseFor: "Inspect real layout and component precedents before designing."},
+	{ID: "figma-sds", Name: "Figma Simple Design System", Group: "Figma kits", URL: "https://github.com/figma/sds", DocumentURL: "https://raw.githubusercontent.com/figma/sds/main/README.md", Note: "Official open-source SDS overview, not the entire Figma Community.", UseFor: "Connect responsive components, variables and code handoff.", License: "MIT (repo)"},
+	{ID: "obra", Name: "Obra shadcn/ui Community kit", Group: "Figma kits", URL: "https://www.figma.com/community/file/1514746685758799870/shadcn-ui-kit-community-edition", Note: "Free Community Edition; consult the author for file reuse terms.", UseFor: "Preview shadcn components in Figma before implementation."},
 }
 
 const maxDocument = 512 << 10
@@ -168,7 +179,9 @@ func (m *Manager) Check(ctx context.Context, id string) (Entry, error) {
 	if len(b) == 0 || len(b) > maxDocument {
 		return Entry{}, errors.New("document empty or too large")
 	}
-	if !strings.HasPrefix(src.DocumentURL, "https://ui.shadcn.com/") && !strings.HasPrefix(strings.TrimSpace(string(b)), "---") && !strings.HasPrefix(strings.TrimSpace(string(b)), "#") {
+	// READMEs may start with image markup; reject full HTML/error pages instead.
+	lower := strings.ToLower(strings.TrimSpace(string(b)))
+	if strings.Contains(res.Header.Get("Content-Type"), "text/html") || strings.HasPrefix(lower, "<!doctype") || strings.HasPrefix(lower, "<html") || !strings.Contains(string(b), "# ") {
 		return Entry{}, errors.New("unexpected document format")
 	}
 	if m.data.Entries[id] == nil {

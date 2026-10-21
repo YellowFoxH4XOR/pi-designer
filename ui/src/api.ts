@@ -34,7 +34,7 @@ export interface Health { ok: boolean; piBin: string; projectRoot: string; desig
 export interface PiModel { id: string; provider: string; name: string; reasoning: boolean; contextWindow?: number }
 export interface ModelCatalog { models: PiModel[]; current?: PiModel; thinkingLevels: string[] }
 export interface Connection { available: boolean; config: Record<string, unknown> }
-export interface KnowledgeSource { id: string; name: string; url: string; documentUrl?: string; note: string; installedHash?: string; previousHash?: string; availableHash?: string; checkedAt?: string; updated: boolean; error?: string }
+export interface KnowledgeSource { id: string; name: string; url: string; documentUrl?: string; note: string; group?: string; useFor?: string; license?: string; installedHash?: string; previousHash?: string; availableHash?: string; checkedAt?: string; updated: boolean; error?: string }
 export interface AgentEvent {
   version?: number; contentIndex?: number; seq: number; runId: string; at: number; type: string; text?: string; tool?: string; toolCallId?: string; args?: Record<string, unknown>; isError?: boolean;
   output?: string; durationMs?: number; data?: any;

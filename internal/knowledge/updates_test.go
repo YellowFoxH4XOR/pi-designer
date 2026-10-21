@@ -79,6 +79,28 @@ func TestReviewApplyAndTamper(t *testing.T) {
 		t.Fatal("tampered installed file listed")
 	}
 }
+func TestApprovedSourceCoverage(t *testing.T) {
+	want := []string{"xias", "material", "material-color", "shadcn", "reui", "magicui", "kokonut", "aceternity", "studio", "figma", "figma-sds", "obra"}
+	seen := map[string]bool{}
+	for _, src := range Approved {
+		if seen[src.ID] {
+			t.Fatalf("duplicate source %s", src.ID)
+		}
+		seen[src.ID] = true
+		if src.URL == "" || src.UseFor == "" || src.Group == "" {
+			t.Fatalf("incomplete source %+v", src)
+		}
+	}
+	for _, id := range want {
+		if !seen[id] {
+			t.Errorf("missing source %s", id)
+		}
+	}
+	if len(Approved) != len(want) {
+		t.Errorf("expected %d sources, got %d", len(want), len(Approved))
+	}
+}
+
 func TestLimitsAndFailures(t *testing.T) {
 	m, err := Open(t.TempDir())
 	if err != nil {
