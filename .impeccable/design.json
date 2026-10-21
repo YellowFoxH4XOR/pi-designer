@@ -1,74 +1,414 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-20T21:20:32.143Z",
+  "generatedAt": "2026-10-21T19:11:53.840Z",
   "title": "Design System: πDesigner",
   "extensions": {
     "colorMeta": {
-      "primary": { "role": "primary", "displayName": "Studio Lavender", "canonical": "#5c61b6" },
-      "shell": { "role": "neutral", "displayName": "Lavender Gray", "canonical": "#eceef3" },
-      "canvas": { "role": "neutral", "displayName": "Canvas White", "canonical": "#fcfcfd" },
-      "ink": { "role": "neutral", "displayName": "Charcoal Ink", "canonical": "#23242b" }
+      "brand-coral": {
+        "role": "secondary",
+        "displayName": "Brand Vermilion",
+        "canonical": "#E45F3E",
+        "tonalRamp": [
+          "oklch(15% 0.1729 35.11)",
+          "oklch(27% 0.1729 35.11)",
+          "oklch(39% 0.1729 35.11)",
+          "oklch(51% 0.1729 35.11)",
+          "oklch(63% 0.1729 35.11)",
+          "oklch(75% 0.1729 35.11)",
+          "oklch(87% 0.1729 35.11)",
+          "oklch(95% 0.1729 35.11)"
+        ]
+      },
+      "brand-paper": {
+        "role": "secondary",
+        "displayName": "Brand Ivory",
+        "canonical": "#FFF5E7",
+        "tonalRamp": [
+          "oklch(15% 0.0214 76.54)",
+          "oklch(27% 0.0214 76.54)",
+          "oklch(39% 0.0214 76.54)",
+          "oklch(51% 0.0214 76.54)",
+          "oklch(63% 0.0214 76.54)",
+          "oklch(75% 0.0214 76.54)",
+          "oklch(87% 0.0214 76.54)",
+          "oklch(95% 0.0214 76.54)"
+        ]
+      },
+      "brand-ink": {
+        "role": "secondary",
+        "displayName": "Brand Deep Ink",
+        "canonical": "#233137",
+        "tonalRamp": [
+          "oklch(15% 0.0216 226.12)",
+          "oklch(27% 0.0216 226.12)",
+          "oklch(39% 0.0216 226.12)",
+          "oklch(51% 0.0216 226.12)",
+          "oklch(63% 0.0216 226.12)",
+          "oklch(75% 0.0216 226.12)",
+          "oklch(87% 0.0216 226.12)",
+          "oklch(95% 0.0216 226.12)"
+        ]
+      },
+      "primary": {
+        "role": "primary",
+        "displayName": "Studio Lavender",
+        "canonical": "#5c61b6",
+        "tonalRamp": [
+          "oklch(15% 0.1316 278.36)",
+          "oklch(27% 0.1316 278.36)",
+          "oklch(39% 0.1316 278.36)",
+          "oklch(51% 0.1316 278.36)",
+          "oklch(63% 0.1316 278.36)",
+          "oklch(75% 0.1316 278.36)",
+          "oklch(87% 0.1316 278.36)",
+          "oklch(95% 0.1316 278.36)"
+        ]
+      },
+      "primary-soft": {
+        "role": "neutral",
+        "displayName": "Soft Lavender",
+        "canonical": "#eeedfb",
+        "tonalRamp": [
+          "oklch(15% 0.0187 289.33)",
+          "oklch(27% 0.0187 289.33)",
+          "oklch(39% 0.0187 289.33)",
+          "oklch(51% 0.0187 289.33)",
+          "oklch(63% 0.0187 289.33)",
+          "oklch(75% 0.0187 289.33)",
+          "oklch(87% 0.0187 289.33)",
+          "oklch(95% 0.0187 289.33)"
+        ]
+      },
+      "lavender": {
+        "role": "neutral",
+        "displayName": "Lavender",
+        "canonical": "#a8b1ff",
+        "tonalRamp": [
+          "oklch(15% 0.1115 278.43)",
+          "oklch(27% 0.1115 278.43)",
+          "oklch(39% 0.1115 278.43)",
+          "oklch(51% 0.1115 278.43)",
+          "oklch(63% 0.1115 278.43)",
+          "oklch(75% 0.1115 278.43)",
+          "oklch(87% 0.1115 278.43)",
+          "oklch(95% 0.1115 278.43)"
+        ]
+      },
+      "shell": {
+        "role": "neutral",
+        "displayName": "Lavender Gray",
+        "canonical": "#eceef3",
+        "tonalRamp": [
+          "oklch(15% 0.0070 268.55)",
+          "oklch(27% 0.0070 268.55)",
+          "oklch(39% 0.0070 268.55)",
+          "oklch(51% 0.0070 268.55)",
+          "oklch(63% 0.0070 268.55)",
+          "oklch(75% 0.0070 268.55)",
+          "oklch(87% 0.0070 268.55)",
+          "oklch(95% 0.0070 268.55)"
+        ]
+      },
+      "rail": {
+        "role": "neutral",
+        "displayName": "Rail Gray",
+        "canonical": "#e9ebf1",
+        "tonalRamp": [
+          "oklch(15% 0.0083 271.33)",
+          "oklch(27% 0.0083 271.33)",
+          "oklch(39% 0.0083 271.33)",
+          "oklch(51% 0.0083 271.33)",
+          "oklch(63% 0.0083 271.33)",
+          "oklch(75% 0.0083 271.33)",
+          "oklch(87% 0.0083 271.33)",
+          "oklch(95% 0.0083 271.33)"
+        ]
+      },
+      "canvas": {
+        "role": "neutral",
+        "displayName": "Canvas White",
+        "canonical": "#fcfcfd",
+        "tonalRamp": [
+          "oklch(15% 0.0013 286.38)",
+          "oklch(27% 0.0013 286.38)",
+          "oklch(39% 0.0013 286.38)",
+          "oklch(51% 0.0013 286.38)",
+          "oklch(63% 0.0013 286.38)",
+          "oklch(75% 0.0013 286.38)",
+          "oklch(87% 0.0013 286.38)",
+          "oklch(95% 0.0013 286.38)"
+        ]
+      },
+      "white": {
+        "role": "neutral",
+        "displayName": "White",
+        "canonical": "#ffffff",
+        "tonalRamp": [
+          "oklch(15% 0.0000 89.88)",
+          "oklch(27% 0.0000 89.88)",
+          "oklch(39% 0.0000 89.88)",
+          "oklch(51% 0.0000 89.88)",
+          "oklch(63% 0.0000 89.88)",
+          "oklch(75% 0.0000 89.88)",
+          "oklch(87% 0.0000 89.88)",
+          "oklch(95% 0.0000 89.88)"
+        ]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Charcoal Ink",
+        "canonical": "#23242b",
+        "tonalRamp": [
+          "oklch(15% 0.0131 279.02)",
+          "oklch(27% 0.0131 279.02)",
+          "oklch(39% 0.0131 279.02)",
+          "oklch(51% 0.0131 279.02)",
+          "oklch(63% 0.0131 279.02)",
+          "oklch(75% 0.0131 279.02)",
+          "oklch(87% 0.0131 279.02)",
+          "oklch(95% 0.0131 279.02)"
+        ]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Muted Ink",
+        "canonical": "#646673",
+        "tonalRamp": [
+          "oklch(15% 0.0206 278.70)",
+          "oklch(27% 0.0206 278.70)",
+          "oklch(39% 0.0206 278.70)",
+          "oklch(51% 0.0206 278.70)",
+          "oklch(63% 0.0206 278.70)",
+          "oklch(75% 0.0206 278.70)",
+          "oklch(87% 0.0206 278.70)",
+          "oklch(95% 0.0206 278.70)"
+        ]
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Divider Gray",
+        "canonical": "#e2e3ea",
+        "tonalRamp": [
+          "oklch(15% 0.0095 279.68)",
+          "oklch(27% 0.0095 279.68)",
+          "oklch(39% 0.0095 279.68)",
+          "oklch(51% 0.0095 279.68)",
+          "oklch(63% 0.0095 279.68)",
+          "oklch(75% 0.0095 279.68)",
+          "oklch(87% 0.0095 279.68)",
+          "oklch(95% 0.0095 279.68)"
+        ]
+      },
+      "selected": {
+        "role": "neutral",
+        "displayName": "Selected Lavender",
+        "canonical": "#dedff0",
+        "tonalRamp": [
+          "oklch(15% 0.0231 283.24)",
+          "oklch(27% 0.0231 283.24)",
+          "oklch(39% 0.0231 283.24)",
+          "oklch(51% 0.0231 283.24)",
+          "oklch(63% 0.0231 283.24)",
+          "oklch(75% 0.0231 283.24)",
+          "oklch(87% 0.0231 283.24)",
+          "oklch(95% 0.0231 283.24)"
+        ]
+      },
+      "action": {
+        "role": "neutral",
+        "displayName": "Action Charcoal",
+        "canonical": "#26262d",
+        "tonalRamp": [
+          "oklch(15% 0.0129 285.51)",
+          "oklch(27% 0.0129 285.51)",
+          "oklch(39% 0.0129 285.51)",
+          "oklch(51% 0.0129 285.51)",
+          "oklch(63% 0.0129 285.51)",
+          "oklch(75% 0.0129 285.51)",
+          "oklch(87% 0.0129 285.51)",
+          "oklch(95% 0.0129 285.51)"
+        ]
+      },
+      "success": {
+        "role": "neutral",
+        "displayName": "Success Green",
+        "canonical": "#3b7956",
+        "tonalRamp": [
+          "oklch(15% 0.0856 156.93)",
+          "oklch(27% 0.0856 156.93)",
+          "oklch(39% 0.0856 156.93)",
+          "oklch(51% 0.0856 156.93)",
+          "oklch(63% 0.0856 156.93)",
+          "oklch(75% 0.0856 156.93)",
+          "oklch(87% 0.0856 156.93)",
+          "oklch(95% 0.0856 156.93)"
+        ]
+      },
+      "error": {
+        "role": "neutral",
+        "displayName": "Error Red",
+        "canonical": "#a13c3a",
+        "tonalRamp": [
+          "oklch(15% 0.1349 24.45)",
+          "oklch(27% 0.1349 24.45)",
+          "oklch(39% 0.1349 24.45)",
+          "oklch(51% 0.1349 24.45)",
+          "oklch(63% 0.1349 24.45)",
+          "oklch(75% 0.1349 24.45)",
+          "oklch(87% 0.1349 24.45)",
+          "oklch(95% 0.1349 24.45)"
+        ]
+      }
     },
     "shadows": [
-      { "name": "workspace", "value": "0 2px 3px #25263904", "purpose": "Low ambient elevation under the workspace canvas." },
-      { "name": "dialog", "value": "0 18px 60px #29283d26", "purpose": "Modal selection and renaming." },
-      { "name": "prototype", "value": "0 4px 22px #2b294a12, 0 0 0 1px #d6d7e3", "purpose": "Separate the artifact from the workspace background." }
+      {
+        "name": "workspace",
+        "value": "0 2px 3px #25263904",
+        "purpose": "Low ambient elevation under the workspace canvas."
+      },
+      {
+        "name": "dialog",
+        "value": "0 18px 60px #29283d26",
+        "purpose": "Modal selection and renaming."
+      },
+      {
+        "name": "prototype",
+        "value": "0 4px 22px #2b294a12, 0 0 0 1px #d6d7e3",
+        "purpose": "Separate the artifact from the workspace background."
+      }
     ],
     "motion": [
-      { "name": "working-dots", "value": "1.4s ease-in-out infinite", "purpose": "Indicate work alongside a persistent text status; disabled for reduced motion." }
+      {
+        "name": "working-dots",
+        "value": "1.4s ease-in-out infinite",
+        "purpose": "Indicate work alongside a persistent text status; disabled for reduced motion."
+      }
     ],
     "breakpoints": [
-      { "name": "wide-desktop", "value": "1600px" },
-      { "name": "compact-desktop", "value": "1190px" },
-      { "name": "minimum-desktop", "value": "900px" }
-    ]
+      {
+        "name": "wide-desktop",
+        "value": "1600px"
+      },
+      {
+        "name": "compact-desktop",
+        "value": "1190px"
+      },
+      {
+        "name": "minimum-desktop",
+        "value": "900px"
+      }
+    ],
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Georgia is reserved for the Home heading."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Library headings and section titles."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Navigation, controls, and conversations use the Mac system stack."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Compact working labels."
+      },
+      "code": {
+        "displayName": "Code",
+        "purpose": "Monospace is reserved for source, paths, and measured dimensions."
+      }
+    }
   },
   "components": [
     {
-      "name": "Primary action", "kind": "button", "refersTo": "button-primary",
+      "name": "Primary action",
+      "kind": "button",
+      "refersTo": "button-primary",
       "description": "The one primary action in a working region.",
       "html": "<button class=\"ds-primary\">Use this system</button>",
       "css": ".ds-primary{font:550 13px -apple-system,BlinkMacSystemFont,sans-serif;padding:11px 17px;border:0;border-radius:9px;background:#26262d;color:#fff;cursor:pointer}.ds-primary:hover{background:#42414f}.ds-primary:focus-visible{outline:2px solid #5c61b6;outline-offset:3px}"
     },
     {
-      "name": "Secondary action", "kind": "button", "refersTo": "button-secondary",
+      "name": "Secondary action",
+      "kind": "button",
+      "refersTo": "button-secondary",
       "description": "A secondary command that stays subordinate to the creation action.",
       "html": "<button class=\"ds-secondary\">Copy config</button>",
       "css": ".ds-secondary{font:550 13px -apple-system,BlinkMacSystemFont,sans-serif;padding:11px 17px;border:1px solid #d9dae3;border-radius:9px;background:#fff;color:#23242b;cursor:pointer}.ds-secondary:hover{background:#f3f3f7;border-color:#bcbecf}.ds-secondary:focus-visible{outline:2px solid #5c61b6;outline-offset:3px}"
     },
     {
-      "name": "Search field", "kind": "input",
+      "name": "Search field",
+      "kind": "input",
       "description": "Search scoped to the current catalog or project library.",
       "html": "<input class=\"ds-search\" type=\"search\" aria-label=\"Search design systems\" placeholder=\"Search design systems\" />",
       "css": ".ds-search{font:12px -apple-system,BlinkMacSystemFont,sans-serif;border:1px solid #dfe0e8;border-radius:8px;background:#fff;color:#23242b;padding:9px 10px;caret-color:#5c61b6}.ds-search::placeholder{color:#646673}.ds-search:focus-visible{outline:2px solid #5c61b6;outline-offset:2px}"
     },
     {
-      "name": "Selected navigation", "kind": "nav", "refersTo": "navigation-selected",
+      "name": "Selected navigation",
+      "kind": "nav",
+      "refersTo": "navigation-selected",
       "description": "Persistent workspace location.",
       "html": "<a class=\"ds-navigation\" href=\"#home\" aria-current=\"page\">Home</a>",
       "css": ".ds-navigation{display:block;font:570 13px -apple-system,BlinkMacSystemFont,sans-serif;line-height:43px;padding:0 12px;border-radius:9px;background:#dedff0;color:#32313f;text-decoration:none}.ds-navigation:hover{background:#d6d8e9}.ds-navigation:focus-visible{outline:2px solid #5c61b6;outline-offset:3px}"
     },
     {
-      "name": "Workflow choice", "kind": "chip", "refersTo": "workflow-selected",
+      "name": "Workflow choice",
+      "kind": "chip",
+      "refersTo": "workflow-selected",
       "description": "Select the generation methodology before starting a project.",
       "html": "<button class=\"ds-workflow\" aria-pressed=\"true\">Prototype</button>",
-      "css": ".ds-workflow{font:11.5px -apple-system,BlinkMacSystemFont,sans-serif;border:1px solid #d4d2ed;border-radius:9px;background:#eeedfa;color:#514da0;padding:9px 12px;cursor:pointer}.ds-workflow:hover{border-color:#bcb8db;color:#23242b}.ds-workflow:focus-visible{outline:2px solid #5c61b6;outline-offset:3px}"
-    }
-    ,{
-      "name": "omp model control", "kind": "custom",
+      "css": ".ds-workflow{font:11.5px -apple-system,BlinkMacSystemFont,sans-serif;border:1px solid #d4d2ed;border-radius:9px;background:#eeedfb;color:#514da0;padding:9px 12px;cursor:pointer}.ds-workflow:hover{border-color:#bcb8db;color:#23242b}.ds-workflow:focus-visible{outline:2px solid #5c61b6;outline-offset:3px}"
+    },
+    {
+      "name": "omp model control",
+      "kind": "custom",
       "description": "Selected model/maker identity and exact provider label; omp identifies execution elsewhere.",
-      "html": "<button class=\"ds-model\"><img src=\"/model-icons/openai.svg\" alt=\"\" width=\"24\" height=\"24\"/><span>GPT · OpenAI</span></button>",
+      "html": "<button class=\"ds-model\"><svg width=\"24\" height=\"24\" aria-hidden=\"true\" xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 20 20\"><path d=\"M11.248 18.25q-.825 0-1.568-.314a4.3 4.3 0 0 1-1.32-.874 4 4 0 0 1-1.304.214 4 4 0 0 1-2.046-.544 4.27 4.27 0 0 1-1.518-1.485 4 4 0 0 1-.56-2.095q0-.48.131-1.04A4.4 4.4 0 0 1 2.04 10.71a4.07 4.07 0 0 1 .017-3.4 4.2 4.2 0 0 1 1.056-1.418 3.8 3.8 0 0 1 1.6-.842 3.9 3.9 0 0 1 .76-1.683q.593-.759 1.451-1.188a4.04 4.04 0 0 1 1.832-.429q.825 0 1.567.313.742.314 1.32.875a4 4 0 0 1 1.304-.215q1.106 0 2.046.545a4.14 4.14 0 0 1 1.501 1.485q.578.941.578 2.095 0 .48-.132 1.04.66.61 1.023 1.419.363.792.363 1.666 0 .892-.38 1.717a4.3 4.3 0 0 1-1.072 1.435 3.8 3.8 0 0 1-1.584.825 3.8 3.8 0 0 1-.775 1.683 4.06 4.06 0 0 1-1.436 1.188 4.04 4.04 0 0 1-1.832.429m-4.076-2.062q.825 0 1.435-.347l3.103-1.782a.36.36 0 0 0 .164-.313v-1.42L7.881 14.62a.67.67 0 0 1-.726 0l-3.118-1.798a.5.5 0 0 1-.017.115v.198q0 .841.396 1.551.413.693 1.139 1.089a3.2 3.2 0 0 0 1.617.412m.165-2.69a.4.4 0 0 0 .181.05q.083 0 .165-.05l1.238-.71-3.977-2.31a.7.7 0 0 1-.363-.643v-3.58q-.825.362-1.32 1.122a2.9 2.9 0 0 0-.495 1.65q0 .809.413 1.55.412.743 1.072 1.123zm3.91 3.663q.875 0 1.585-.396a2.96 2.96 0 0 0 1.534-2.64v-3.564a.32.32 0 0 0-.165-.297l-1.254-.726v4.604a.7.7 0 0 1-.363.643l-3.119 1.799a3 3 0 0 0 1.783.577m.627-6.039V8.878L10.01 7.822 8.129 8.878v2.244l1.881 1.056zM7.057 5.859a.7.7 0 0 1 .363-.644l3.119-1.798a3 3 0 0 0-1.782-.578q-.874 0-1.584.396A2.96 2.96 0 0 0 6.05 4.324a3.07 3.07 0 0 0-.396 1.551v3.547q0 .199.165.314l1.237.726zm8.383 7.887q.825-.364 1.303-1.123.495-.758.495-1.65a3.15 3.15 0 0 0-.412-1.55q-.413-.743-1.073-1.123l-3.086-1.782q-.099-.065-.181-.049a.3.3 0 0 0-.165.05l-1.238.692 3.993 2.327a.6.6 0 0 1 .264.264.64.64 0 0 1 .1.363zm-3.317-8.382a.63.63 0 0 1 .726 0l3.135 1.831v-.297q0-.792-.396-1.501a2.86 2.86 0 0 0-1.105-1.155q-.71-.43-1.65-.43-.825 0-1.436.347L8.294 5.941a.36.36 0 0 0-.165.314v1.418z\"/></svg><span>GPT · OpenAI</span></button>",
       "css": ".ds-model{display:inline-flex;align-items:center;gap:7px;padding:7px;border:1px solid transparent;border-radius:8px;background:#f6f5fa;color:#545361;font:11px -apple-system,BlinkMacSystemFont,sans-serif;cursor:pointer}.ds-model:hover{background:#eeedf6;border-color:#dcdae9}.ds-model:focus-visible{outline:2px solid #5c61b6;outline-offset:3px}"
+    },
+    {
+      "name": "Review card",
+      "kind": "card",
+      "description": "A local design review and its reported outcome.",
+      "html": "<section class=\"ds-review\"><strong>Design review</strong><p>Reported critique and required changes.</p></section>",
+      "css": ".ds-review{background:#fff;border:1px solid #e1e1ea;border-radius:11px;padding:11px 12px 10px;margin:0 0 14px;color:#4b4a5b;font:11px/1.6 -apple-system,BlinkMacSystemFont,sans-serif}.ds-review strong{font-size:10.5px;font-weight:600}.ds-review p{margin:6px 0 0}"
+    },
+    {
+      "name": "Live agent activity",
+      "kind": "custom",
+      "description": "Live activity stays at the end of the conversation, below plan, render and critique cards, so following a long design run keeps the latest execution visible. It shows the current reported action, total elapsed time and age of the last event, plus two recent completed tools and every running tool. File paths or commands are visible before expanding; each tool exposes output and arguments on demand. Running durations tick without requiring new events. View all activity opens and focuses the persistent strip’s full history. Reconnecting explicitly marks unavailable updates; silence is not presented as proof of continued progress.",
+      "html": "<section class=\"ds-progress\" aria-label=\"Live agent activity\"><div class=\"ds-progress-heading\"><strong>Reading DESIGN.md</strong><span>12s</span></div><p>Last activity 2s ago</p><details><summary>Reading DESIGN.md <span>Running · 2s</span></summary><code>DESIGN.md</code></details><button>View all activity</button></section>",
+      "css": ".ds-progress{margin-top:16px;padding-top:13px;border-top:1px solid #e2e3ea;font:11px/1.6 -apple-system,BlinkMacSystemFont,sans-serif;color:#646673}.ds-progress-heading{display:flex;gap:7px;color:#54516e;line-height:1.5}.ds-progress-heading strong{flex:1;font-weight:590}.ds-progress-heading>span{font-variant-numeric:tabular-nums}.ds-progress p{margin:5px 0 10px}.ds-progress details{border-top:1px solid #e2e3ea}.ds-progress summary{cursor:pointer;padding:9px 0;color:#54516e}.ds-progress summary span{float:right;color:#646673;font-size:10px}.ds-progress code{font:10px/1.6 monospace}.ds-progress button{border:0;background:transparent;padding:6px 0;margin-top:6px;color:#54516e;font:11px -apple-system,BlinkMacSystemFont,sans-serif;cursor:pointer}.ds-progress button:hover{text-decoration:underline;text-underline-offset:3px}.ds-progress button:focus-visible,.ds-progress summary:focus-visible{outline:2px solid #5c61b6;outline-offset:3px}"
     }
   ],
   "narrative": {
     "northStar": "A place for ideas to take shape",
-    "overview": "A light, operational Mac workspace with a distinct vermilion/ivory/ink pen-and-artboard identity. The shell retains its existing lavender-gray tonal separation; the artifact sits on a clean canvas.",
-    "keyCharacteristics": ["Persistent navigation", "A prompt-first starting point", "Restrained typography", "An artifact-led studio"],
-    "rules": [
-      { "name": "The Artifact Boundary Rule", "body": "Workspace colors stop at the prototype iframe. A selected design system controls the artifact’s colors; it never recolors the app shell.", "section": "colors" }
+    "overview": "A light, operational Mac workspace with its own designer-tool identity: a pen nib shapes a Bézier curve on an ivory artboard, set against vermilion. The workspace shell keeps its existing lavender-gray tonal separation; the artifact sits on a clean canvas. The app mark deliberately departs from πDesk rather than repeating its π tile. The reference informs familiar workspace hierarchy and density, not cloud accounts, invented sharing features, or another product’s identity.\n\nKey characteristics: persistent navigation, a prompt-first starting point, restrained typography, and an artifact-led studio. The interface is desktop-only. Device frames describe generated prototypes, not app clients.",
+    "keyCharacteristics": [
+      "persistent navigation",
+      "a prompt-first starting point",
+      "restrained typography",
+      "an artifact-led studio"
     ],
-    "dos": ["Preserve the separation between the workspace and the generated artifact.", "Use the real catalog and local run state, including empty and failure cases.", "Keep native keyboard conventions and visible focus."],
-    "donts": ["Add account, billing, publishing, or collaboration controls without working capabilities.", "Describe prototype frames as separate πDesigner clients.", "Imply the light theme has a complete dark-mode counterpart."]
+    "rules": [
+      {
+        "name": "The Artifact Boundary Rule",
+        "body": "Workspace colors stop at the prototype iframe. A selected design system controls the artifact’s colors; it never recolors the app shell.",
+        "section": "colors"
+      }
+    ],
+    "dos": [
+      "Do preserve the separation between the workspace and the generated artifact.",
+      "Do use the real catalog and local run state, including empty and failure cases.",
+      "Do keep omp-only execution and local storage explicit without making it the visual focus.",
+      "Do keep native keyboard conventions and visible focus."
+    ],
+    "donts": [
+      "Don’t add account, billing, publishing, or collaboration controls without working capabilities.",
+      "Don’t describe prototype frames as separate native app generators or πDesigner clients.",
+      "Don’t imply the light theme has a complete dark-mode counterpart."
+    ]
   }
 }

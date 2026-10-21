@@ -10,6 +10,32 @@ import (
 	"time"
 )
 
+func TestThinkingHeartbeatThrottlingAndPrivacy(t *testing.T) {
+	s := &Session{events: make(chan Event, 8)}
+	delta := []byte(`{"type":"message_update","assistantMessageEvent":{"type":"thinking_delta","delta":"private reasoning"}}`)
+	s.handleRecord(delta)
+	s.handleRecord(delta)
+	if len(s.events) != 1 {
+		t.Fatal("reasoning deltas must be throttled")
+	}
+	s.lastThinkingActivity = time.Now().Add(-2 * time.Second)
+	s.handleRecord(delta)
+	if len(s.events) != 2 {
+		t.Fatal("ongoing reasoning must refresh activity")
+	}
+	s.handleRecord([]byte(`{"type":"message_update","assistantMessageEvent":{"type":"thinking_start"}}`))
+	if len(s.events) != 3 {
+		t.Fatal("a new thinking block must report immediately")
+	}
+	for len(s.events) > 0 {
+		e := <-s.events
+		b, err := json.Marshal(e)
+		if err != nil || e.Type != EventThinkingDelta || e.Text != "" || strings.Contains(string(b), "private reasoning") {
+			t.Fatalf("private thinking leaked: %s", b)
+		}
+	}
+}
+
 func TestJSONLFramingKeepsUnicodeAndLongRecords(t *testing.T) {
 	source := "{\"text\":\"" + strings.Repeat("x", 100000) + "\u2028\u2029end\"}\r\n{\"next\":true}\n"
 	reader := bufio.NewReaderSize(strings.NewReader(source), 1024)

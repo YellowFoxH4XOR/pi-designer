@@ -3,6 +3,7 @@ package omprun
 import (
 	"encoding/json"
 	"strings"
+	"time"
 )
 
 // Protocol adaptation lives here, separate from process/command ownership.
@@ -68,8 +69,12 @@ func (s *Session) handleEvent(line []byte, kind string) {
 		if e.AssistantMessageEvent.Type == "text_delta" {
 			s.emit(Event{Type: EventTextDelta, Text: e.AssistantMessageEvent.Delta, ContentIndex: e.AssistantMessageEvent.ContentIndex})
 		}
-		if e.AssistantMessageEvent.Type == "thinking_start" {
-			s.emit(Event{Type: EventThinkingDelta})
+		if e.AssistantMessageEvent.Type == "thinking_start" || e.AssistantMessageEvent.Type == "thinking_delta" {
+			now := time.Now()
+			if e.AssistantMessageEvent.Type == "thinking_start" || now.Sub(s.lastThinkingActivity) >= time.Second {
+				s.lastThinkingActivity = now
+				s.emit(Event{Type: EventThinkingDelta})
+			}
 		}
 	case "message_end":
 		var e struct {

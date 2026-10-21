@@ -116,9 +116,10 @@ type Session struct {
 	stderrTail []string
 
 	// Reader-goroutine state: chunk reassembly and settle tracking.
-	chunk          *chunkAssembly
-	promptAborted  bool
-	settledEmitted bool
+	chunk                *chunkAssembly
+	promptAborted        bool
+	settledEmitted       bool
+	lastThinkingActivity time.Time
 }
 
 // rpcResponse is an omp command response record.
