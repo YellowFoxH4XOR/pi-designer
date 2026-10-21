@@ -55,6 +55,8 @@ Each conversation is a persistent omp session, so follow-ups keep the agent's fu
 
 The prompt lives in `internal/prompt` (stable instructions per project, per-turn context separately so provider prompt caches survive). The πDesigner tools live in `internal/agentext/pidesigner.ts`, installed into the data directory at startup and loaded with `omp --extension`. Runs launch `omp --mode rpc` with every omp tool and `--auto-approve` (runs are unattended). omp runs in the project directory with your normal omp configuration; there is no extra filesystem sandbox.
 
+MCP startup is remote-only for the servers in your omp-native `mcp.json`: HTTP/SSE endpoints remain available, while command/stdio entries (including `npx mcp-remote` wrappers) are disabled in the project's `.omp/mcp.json` before startup. Project-specific remote endpoints and headers are preserved, and your global MCP configuration is unchanged. Model discovery gets the same policy in its temporary working directory. `.omp/` is hidden from the project file list. This is a startup policy, not a filesystem sandbox: it does not stop the agent from running commands itself. Additional MCP definitions imported by omp from third-party configurations or extensions are not covered by the native-config filter.
+
 ## Observable work and Mac activity
 
 - **Current action:** the Studio activity strip shows what omp actually reports, elapsed time, and Stop. Expand it for the exact brief, submitted context, correlated tool steps, live output, results, duration and failures.

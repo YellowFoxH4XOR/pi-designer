@@ -217,3 +217,19 @@ func TestEventBackpressureDoesNotDropAndCloseUnblocks(t *testing.T) {
 		t.Fatal("blocked reader did not stop")
 	}
 }
+
+func TestLocalMCPServersFollowOmpTransportInference(t *testing.T) {
+	cfg := `{"mcpServers":{
+		"kite":{"type":"stdio","command":"npx"},
+		"serper":{"command":"npx"},
+		"tinyfish":{"type":"http","url":"https://agent.tinyfish.ai/mcp"},
+		"bare-url":{"url":"https://example.com/mcp"},
+		"legacy":{"type":"sse","url":"https://example.com/sse"},
+		"off":{"command":"npx","enabled":false},
+		"denied":{"command":"npx"}
+	},"disabledServers":["denied"]}`
+	got, err := parseLocalMCP([]byte(cfg))
+	if err != nil || strings.Join(got, ",") != "kite,serper" {
+		t.Fatalf("local servers = %v, %v", got, err)
+	}
+}

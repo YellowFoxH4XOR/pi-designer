@@ -102,6 +102,7 @@ func Start(opts Options) (*App, error) {
 	if renderer == "" {
 		log.Printf("warning: pidesigner-render not found; the agent will verify designs without rendering them")
 	}
+	models := omprun.NewCatalog(opts.OmpBin)
 	runner := api.NewRunner(st, cat, opts.OmpBin, hub, api.RunnerConfig{
 		SessionDir: filepath.Join(opts.DataDir, "sessions"),
 		RenderDir:  filepath.Join(opts.DataDir, "renders"),
@@ -115,7 +116,7 @@ func Start(opts Options) (*App, error) {
 		Hub:         hub,
 		ProjectRoot: projectRoot,
 		OmpBin:      resolvedOmp,
-		Models:      omprun.NewCatalog(opts.OmpBin),
+		Models:      models,
 	}
 
 	// Resume watching existing projects.

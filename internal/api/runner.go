@@ -215,6 +215,13 @@ func (r *Runner) execute(run model.Run, proj model.Project, req RunRequest, b *e
 		}
 	}
 
+	// Only remote MCP servers run: local ones are disabled for this project
+	// through omp's project-level MCP config.
+	if err := omprun.WriteLocalMCPPolicy(proj.Dir); err != nil {
+		r.completeRun(run, b, model.RunFailed, "Could not keep local MCP servers out of this run: "+err.Error())
+		return
+	}
+
 	systemFile, cleanup, err := r.writeSystemPrompt(proj, req)
 	if err != nil {
 		r.completeRun(run, b, model.RunFailed, err.Error())

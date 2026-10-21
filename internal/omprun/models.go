@@ -88,16 +88,19 @@ type Catalog struct {
 
 func NewCatalog(bin string) *Catalog { return &Catalog{bin: bin, levels: map[string][]string{}} }
 
-// metadataArgs start a model-metadata-only omp session: no skills, rules or
-// LSP, and an explicit one-tool allowlist. The allowlist is what keeps omp
-// from launching every configured MCP server (--no-tools does not): with it a
-// catalog query is one ~185 MB process instead of ~800 MB across eight. User
-// extensions stay loaded because they can register model providers.
-var metadataArgs = []string{"--no-skills", "--no-rules", "--no-lsp", "--tools", "read"}
+// metadataArgs start a model-metadata-only omp session: no skills, rules, LSP
+// or tools. Local MCP servers are kept out by WriteLocalMCPPolicy (omp still
+// connects remote ones; no tool flag stops MCP). User extensions stay loaded
+// because they can register model providers.
+var metadataArgs = []string{"--no-skills", "--no-rules", "--no-lsp", "--no-tools"}
 
 func (c *Catalog) start(ctx context.Context, ref string) (*Session, func(), error) {
 	dir, err := os.MkdirTemp("", "pidesigner-model-query-")
 	if err != nil {
+		return nil, nil, err
+	}
+	if err := WriteLocalMCPPolicy(dir); err != nil {
+		os.RemoveAll(dir)
 		return nil, nil, err
 	}
 	s, err := Start(ctx, Options{Bin: c.bin, Dir: dir, Model: ref, ExtraArgs: metadataArgs})
