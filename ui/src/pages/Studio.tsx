@@ -1,5 +1,5 @@
 import type { ComponentChildren } from 'preact';
-import { RunActivity } from '../components/Activity';
+import { RunActivity, RunProgress } from '../components/Activity';
 import { fromActivity, type RunState as ActivityRun } from '../activity';
 import { ModelIcon } from '../components/ModelIcon';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
@@ -107,7 +107,7 @@ export function Studio({ projectId, systems, run, onMonitor, onStart, onHome, on
   useEffect(() => {
     const el = messagesPane.current;
     if (follow.current && el) el.scrollTop = el.scrollHeight;
-  }, [messages, run?.text, run?.tools.length, run?.todos.length, run?.renders.length, run?.critiques.length]);
+  }, [messages, run?.phase, run?.text, run?.tools.length, run?.todos.length, run?.renders.length, run?.critiques.length]);
 
   // Every user turn goes through here: the composer, question forms and
   // next-step chips all submit the same way.
@@ -207,11 +207,12 @@ export function Studio({ projectId, systems, run, onMonitor, onStart, onHome, on
             <AgentMessage text={message.content} interactive={index === latestAssistantIndex && !busy && !connecting} answered={answeredFormsFor(index)} onSend={sendText}/>
           </article>;
         })}
-        {showLive && <article class="message message-assistant live-message"><div class="message-byline"><AgentMark size={20}/><strong>omp agent</strong><span class="generating-label">Working<span class="working-indicator"><i/><i/><i/></span></span></div>{run.text ? <AgentMessage text={run.text} live/> : <p class="thinking-label">Reading your brief and planning the design…</p>}</article>}
+        {showLive && <article class="message message-assistant live-message"><div class="message-byline"><AgentMark size={20}/><strong>omp agent</strong><span class="generating-label">Working<span class="working-indicator"><i/><i/><i/></span></span></div>{run.text && <AgentMessage text={run.text} live/>}</article>}
         {run?.model && run.conversationId === conversationId && <p class="run-model"><ModelIcon id={run.modelId} provider={run.provider} size={16}/>Using {run.model}</p>}
         {planTodos.length > 0 && <TodoCard todos={planTodos} live={showLive}/>}
         {planRenders.length > 0 && <RenderStrip renders={planRenders} onOpen={setPreview}/>}
         {planCritiques.length > 0 && <CritiqueCard critiques={planCritiques} live={showLive}/>}
+        {showLive && <RunProgress run={run}/>}
 
         {canContinue && <div class="continue-tasks"><button class="button secondary" onClick={() => void sendText(continueMessage(planTodos))} disabled={connecting}><Icon name="refresh" size={15}/>Continue remaining tasks<span class="continue-count">{openTodos.length}</span></button></div>}
         {run?.status === 'failed' && <div class="inline-error" role="alert"><strong>omp couldn’t finish this run.</strong><p>{run.error || 'Check your omp model configuration, then try again.'}</p></div>}

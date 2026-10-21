@@ -142,6 +142,8 @@ Preview/Code are distinct working views. CSS-only updates swap stylesheets witho
 
 A persistent Studio strip gives the reported current action, project and elapsed time, with Stop. Expanding reveals the exact submitted brief/context, ID-correlated tool steps, bounded output snapshots, durations, errors and paginated diagnostics. Labels, not a blue dot or animation alone, distinguish starting, working, reconnecting, attention, finished, failed and stopped. No invented percentages or private reasoning.
 
+Live activity stays at the end of the conversation, below plan, render and critique cards, so following a long design run keeps the latest execution visible. It shows the current reported action, total elapsed time and age of the last event, plus two recent completed tools and every running tool. File paths or commands are visible before expanding; each tool exposes output and arguments on demand. Running durations tick without requiring new events. View all activity opens and focuses the persistent strip’s full history. Reconnecting explicitly marks unavailable updates; silence is not presented as proof of continued progress.
+
 The global Activity control and project statuses reflect the same durable event journal. Completed turns with unanswered questions remain attention-needed. Source editing, model identity and preview state remain separate from transport health.
 
 ### Mac background surfaces

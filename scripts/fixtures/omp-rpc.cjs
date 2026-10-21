@@ -52,6 +52,16 @@ async function run(text) {
     send({ type: 'message_end', message: { role: 'assistant', stopReason: 'error', errorMessage: 'Fixture provider failed', content: [] } });
     finish('error', 'Fixture provider failed'); return;
   }
+  if (text.includes('THINKING_TASK')) {
+    send({type:'message_start',message:{role:'assistant'}});
+    send({type:'message_update',assistantMessageEvent:{type:'thinking_start'}});
+    for (let i=0;i<10;i++) {
+      await sleep(600);
+      if (aborted) return;
+      send({type:'message_update',assistantMessageEvent:{type:'thinking_delta',delta:'Private fixture reasoning'}});
+    }
+    send({type:'message_end',message:{role:'assistant',content:[]}});
+  }
   message('Reading the project and building a focused interface.');
   if (text.includes('SCROLL_STRESS')) {
     message(Array.from({length:120},(_,i)=>`Review note ${i+1}: keep the conversation inside its own scroll area while the canvas and composer remain fixed.`).join('\n\n'));

@@ -296,6 +296,116 @@
   font-size: 11px;
   line-height: 1.7;
 }
+.run-progress {
+  margin-top: 16px;
+  padding-top: 13px;
+  border-top: 1px solid var(--line);
+  font-size: 11px;
+}
+.run-progress-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  color: #54516e;
+  line-height: 1.5;
+}
+.run-progress-heading > .icon {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+.run-progress-heading strong {
+  flex: 1;
+  min-width: 0;
+  font-weight: 590;
+  overflow-wrap: anywhere;
+}
+.run-progress-heading > span {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.run-progress-freshness,
+.run-progress-note {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.6;
+  margin: 5px 0 0;
+}
+.run-progress-tools {
+  margin-top: 10px;
+}
+.activity-step-title {
+  flex: 1;
+}
+.activity-step-target {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font: 10px/1.6 var(--mono);
+  margin-top: 3px;
+}
+.activity-step-compact > summary {
+  align-items: flex-start;
+  font-size: 11px;
+  line-height: 1.5;
+  padding: 9px 0;
+}
+.activity-step-compact > summary > .icon {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+.activity-step-compact summary small {
+  font-size: 10px;
+}
+.run-progress-details {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  padding: 6px 0;
+  font-size: 11px;
+  color: #54516e;
+}
+.run-progress-details:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.run-progress-plan {
+  margin-top: 10px;
+  color: #54516e;
+}
+.run-progress-plan > summary {
+  cursor: pointer;
+  line-height: 1.6;
+}
+.run-progress-plan > summary strong {
+  display: block;
+  margin-top: 4px;
+  font-weight: 550;
+  overflow-wrap: anywhere;
+}
+.run-progress-plan-hint {
+  display: block;
+  font-size: 10px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.run-progress-plan[open] .run-progress-plan-hint {
+  display: none;
+}
+.run-progress-plan > .todo-card {
+  margin: 8px 0 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.run-progress-plan .todo-list {
+  max-height: 180px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
 .activity-arguments {
   font-size: 11px;
   margin-top: 10px;
