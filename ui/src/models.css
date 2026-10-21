@@ -1,5 +1,5 @@
-/* π execution identity is separate from the app tile and selected model. */
-.pi-agent-mark { display: block; flex: 0 0 auto; image-rendering: auto; }
+/* omp execution identity is separate from the app tile and selected model. */
+.agent-mark { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; border-radius: 25%; border: 1px solid #dcdae9; background: #f6f5fa; color: #545361; font-family: var(--mono); font-weight: 700; line-height: 1; letter-spacing: -0.03em; user-select: none; }
 .model-button { display: inline-flex; align-items: center; gap: 7px; padding: 7px; min-height: 34px; margin-left: auto; border-radius: 8px; color: #545361; background: #f6f5fa; border: 1px solid transparent; min-width: 0; text-align: left; }
 .model-button:hover:not(:disabled) { background: #eeedf6; border-color: #dcdae9; }
 .model-button > span { min-width: 0; }

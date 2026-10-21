@@ -9,9 +9,6 @@
   place-items: center;
   color: var(--muted);
 }
-.pi-agent-mark {
-  image-rendering: auto;
-}
 .activity-center-button {
   display: inline-flex;
   align-items: center;
@@ -152,7 +149,7 @@
 .run-activity-toggle:hover {
   background: #eeedf7;
 }
-.run-activity-toggle > span {
+.run-activity-toggle > span:not(.agent-mark) {
   min-width: 0;
   flex: 1;
 }

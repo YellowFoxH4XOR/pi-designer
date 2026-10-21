@@ -40,9 +40,9 @@ const paths: Record<IconName, ComponentChildren> = {
 export function Icon({ name, size = 19, class: className = '' }: { name: IconName; size?: number; class?: string }) {
   return <svg class={`icon ${className}`} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{paths[name]}</svg>;
 }
-// Standalone Greek π for execution; provider/model controls use ModelIcon.
-export function PiLogo({ size = 24 }: { size?: number }) {
-  return <img src="/pi.svg" width={size} height={size} class="pi-agent-mark" alt="" />;
+// Engine badge for the omp harness; provider/model controls use ModelIcon.
+export function AgentMark({ size = 24 }: { size?: number }) {
+  return <span class="agent-mark" aria-hidden="true" style={{ width: size, height: size, fontSize: Math.round(size * 0.36) }}>omp</span>;
 }
 export function Logo({ size = 32 }: { size?: number }) {
   return <img src="/brand.svg" width={size} height={size} class="brand-mark" alt="" />;

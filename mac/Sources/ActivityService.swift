@@ -126,7 +126,7 @@ final class NativeActivityController: NSObject, UNUserNotificationCenterDelegate
         let category = activity.attention ? "attention" : activity.status == "failed" ? "failure" : "completed"
         guard preferences[category] else { return }
         let content = UNMutableNotificationContent()
-        content.title = activity.attention ? "π needs your attention" : activity.status == "failed" ? "π couldn’t finish" : "π finished your task"
+        content.title = activity.attention ? "omp needs your attention" : activity.status == "failed" ? "omp couldn’t finish" : "omp finished your task"
         content.body = preferences["previews"] ? "\(activity.projectName) — \(activity.label)" : "Open πDesigner to view the project."
         content.threadIdentifier = activity.projectId
         content.userInfo = ["projectId": activity.projectId, "conversationId": activity.conversationId ?? ""]

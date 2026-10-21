@@ -60,7 +60,7 @@ func main() {
 		daemon    = flag.String("daemon", envOr("PIDESIGNER_DAEMON", defaultDaemonURL), "daemon base URL")
 		discovery = flag.String("discovery", "", "runtime discovery file written by the native app")
 		print     = flag.Bool("print-config", false, "print an MCP client config snippet and exit")
-		client    = flag.String("client", "generic", "client to print a config for (generic|claude|cursor|codex|pi)")
+		client    = flag.String("client", "generic", "client to print a config for (generic|claude|cursor|codex|omp)")
 	)
 	flag.Parse()
 
@@ -143,7 +143,7 @@ func (s *server) handle(ctx context.Context, line []byte) {
 			"serverInfo": map[string]any{"name": serverName, "version": serverVersion},
 			"instructions": "pidesigner exposes a local-first design workspace. " +
 				"Use list_design_systems + the design-system resources for brand context, " +
-				"write_file for surgical edits, and start_run to delegate a full design to the π agent.",
+				"write_file for surgical edits, and start_run to delegate a full design to the omp agent.",
 		})
 	case "notifications/initialized", "notifications/cancelled":
 		// No response for notifications.
@@ -254,7 +254,7 @@ func toolDefinitions() []toolDef {
 		},
 		{
 			Name:        "list_models",
-			Description: "List models configured in the installed π, including exact provider/id values. Credentials remain with π.",
+			Description: "List models configured in the installed omp, including exact provider/id values. Credentials remain with omp.",
 			InputSchema: objectSchema(nil),
 		},
 		{
@@ -269,7 +269,7 @@ func toolDefinitions() []toolDef {
 		},
 		{
 			Name:        "start_run",
-			Description: "Delegate a design task to the π agent running in the project directory. Returns a run id; poll get_run. Prefer this for full generation.",
+			Description: "Delegate a design task to the omp agent running in the project directory. Returns a run id; poll get_run. Prefer this for full generation.",
 			InputSchema: objectSchema(map[string]any{
 				"project":        projArg,
 				"prompt":         map[string]any{"type": "string", "description": "The design brief."},
@@ -530,8 +530,8 @@ func configSnippet(client, daemon string) string {
 		})
 	case "codex":
 		return "Add to ~/.codex/config.toml:\n\n[mcp_servers.pidesigner]\ncommand = \"" + cmd + "\"\nargs = [\"--daemon\", \"" + daemon + "\"]\n"
-	case "pi":
-		return "Add to ~/.pi/agent/mcp.json:\n\n" + prettyJSON(map[string]any{
+	case "omp":
+		return "Add to ~/.omp/agent/mcp.json:\n\n" + prettyJSON(map[string]any{
 			"mcpServers": map[string]any{"pidesigner": entry},
 		})
 	default:

@@ -1,6 +1,6 @@
 # PiDesigner desktop redesign — finish review
 
-This records the initial desktop redesign. See `model-selection-review.md` for the subsequent real Pi identity, design-centric app icon, live model picker, and inference verification.
+This records the initial desktop redesign. See `model-selection-review.md` for the subsequent app identity, design-centric app icon, live model picker, and inference verification.
 
 ## Scope and method
 
@@ -25,7 +25,7 @@ Post-fix heuristic assessment:
 
 | Heuristic | Score | Evidence / limit |
 |---|---:|---|
-| Visibility of status | 3 | Detected Pi, run polling, loading/empty/error/saved states |
+| Visibility of status | 3 | Detected omp, run polling, loading/empty/error/saved states |
 | Match to real-world tasks | 3 | Familiar workspace, project, preview, code terminology |
 | User control | 3 | Escape, stop, view/navigation guards; no project-wide undo history |
 | Consistency | 3 | Shared composer, buttons, line icons, library patterns |
@@ -78,7 +78,7 @@ Native verification:
 
 Source/build checks: TypeScript typecheck, Vite build, Go race tests, and Go vet passed. Added tests cover native endpoint discovery across restarts, preference persistence/validation, project controls, actual catalog assets, and safe bounded event replay/closure.
 
-No new live model generation was required for this visual pass. Pi remains the sole generation engine; browser testing used an explicitly labeled preview fixture in isolated temporary data, not the user's project database.
+No new live model generation was required for this visual pass. omp remains the sole generation engine; browser testing used an explicitly labeled preview fixture in isolated temporary data, not the user's project database.
 
 ## Finish-review contract
 
@@ -97,7 +97,7 @@ PRODUCT.md records the confirmed Mac-only scope. DESIGN.md and `.impeccable/desi
 | TYPE | Acceptable adaptation: Mac system UI and restrained Georgia Home display, using the supplied reference's hierarchy |
 | MATERIAL | Match: operational UI surfaces, not invented photographic or textured assets |
 | GROUND | Match to the committed light lavender-gray workspace |
-| Identity | Acceptable adaptation: PiDesk-inspired charcoal/lavender π, with a distinct pen-point terminal |
+| Identity | Acceptable adaptation: PiDesk-inspired charcoal/lavender workspace, with a distinct pen-point terminal |
 | Phone app layouts | Intentionally removed by explicit user scope; mobile artifact preview retained |
 | Sharing/accounts/media generation | Intentionally absent under product constraints |
 
@@ -111,7 +111,7 @@ None outstanding in the evaluated desktop redesign paths. The two original conce
 
 ### keep
 
-Keep the prompt-first entry, artifact-led studio, Pi-only local execution, and separation between app chrome and prototype design systems.
+Keep the prompt-first entry, artifact-led studio, omp-only local execution, and separation between app chrome and prototype design systems.
 
 ## Evidence
 

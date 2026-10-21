@@ -1,6 +1,6 @@
 //go:build !unix
 
-package pirun
+package omprun
 
 import "os/exec"
 

@@ -1,4 +1,4 @@
-package pirun
+package omprun
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-// Model deliberately excludes endpoints, headers and credentials from π's
+// Model deliberately excludes endpoints, headers and credentials from omp's
 // full model objects. Only presentation/selection metadata crosses the API.
 type Model struct {
 	ID            string `json:"id"`
@@ -45,16 +45,16 @@ func (s *Session) Command(ctx context.Context, name string, args map[string]any,
 	select {
 	case reply := <-ch:
 		if !reply.Success {
-			return fmt.Errorf("π %s: %s", name, reply.Error)
+			return fmt.Errorf("omp %s: %s", name, reply.Error)
 		}
 		if out != nil && len(reply.Data) > 0 {
 			return json.Unmarshal(reply.Data, out)
 		}
 		return nil
 	case <-ctx.Done():
-		return fmt.Errorf("π %s timed out: %w", name, ctx.Err())
+		return fmt.Errorf("omp %s timed out: %w", name, ctx.Err())
 	case <-s.done:
-		return fmt.Errorf("π exited during %s: %s", name, s.StderrTail())
+		return fmt.Errorf("omp exited during %s: %s", name, s.StderrTail())
 	}
 }
 
@@ -71,12 +71,12 @@ func (s *Session) ThinkingLevels(ctx context.Context) ([]string, error) {
 		return nil, err
 	}
 	if len(result.Levels) == 0 {
-		return nil, fmt.Errorf("π returned no supported thinking levels")
+		return nil, fmt.Errorf("omp returned no supported thinking levels")
 	}
 	return result.Levels, nil
 }
 
-// Catalog asks the installed π for its available models; it never reads auth
+// Catalog asks the installed omp for its available models; it never reads auth
 // files, calls a model provider directly, or invokes an inference request.
 type Catalog struct {
 	bin    string
@@ -93,10 +93,11 @@ func (c *Catalog) start(ctx context.Context, ref string) (*Session, func(), erro
 	if err != nil {
 		return nil, nil, err
 	}
-	// Do not connect all of the user's MCP servers just to list models. Keep
-	// user extensions (which can register providers) but ignore project code.
-	s, err := Start(ctx, Options{Bin: c.bin, Dir: dir, Model: ref, NoApprove: true,
-		ExtraArgs: []string{"--no-mcp", "--no-skills", "--no-prompt-templates", "--no-context-files"}})
+	// A metadata-only session: no skills, rules, LSP or tools. Restricting the
+	// tool set also skips MCP discovery. User extensions stay loaded because
+	// they can register model providers.
+	s, err := Start(ctx, Options{Bin: c.bin, Dir: dir, Model: ref,
+		ExtraArgs: []string{"--no-skills", "--no-rules", "--no-lsp", "--no-tools"}})
 	if err != nil {
 		os.RemoveAll(dir)
 		return nil, nil, err
@@ -178,7 +179,7 @@ func (c *Catalog) Resolve(ctx context.Context, ref string) (*Model, error) {
 			return &m, nil
 		}
 	}
-	return nil, fmt.Errorf("Model %q is not available in your installed π. Refresh the model list and choose a listed model", ref)
+	return nil, fmt.Errorf("Model %q is not available in your installed omp. Refresh the model list and choose a listed model", ref)
 }
 func (c *Catalog) Thinking(ctx context.Context, ref string) ([]string, error) {
 	if _, err := c.Resolve(ctx, ref); err != nil {
@@ -201,7 +202,7 @@ func (c *Catalog) Thinking(ctx context.Context, ref string) ([]string, error) {
 		return nil, err
 	}
 	if ref != "" && (state.Model == nil || state.Model.Ref() != ref) {
-		return nil, fmt.Errorf("π did not select the requested model %s", ref)
+		return nil, fmt.Errorf("omp did not select the requested model %s", ref)
 	}
 	levels, err := s.ThinkingLevels(ctx)
 	if err != nil {
@@ -224,7 +225,7 @@ func ValidateRef(ref string) error {
 	}
 	parts := strings.SplitN(ref, "/", 2)
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" || strings.ContainsAny(ref, "\r\n\x00") {
-		return fmt.Errorf("Choose an exact provider/model from the π model list")
+		return fmt.Errorf("Choose an exact provider/model from the omp model list")
 	}
 	return nil
 }

@@ -1,4 +1,4 @@
-// Package prompt composes the instructions πDesigner gives the π agent.
+// Package prompt composes the instructions πDesigner gives the omp agent.
 //
 // The prompt is split the way design agents need it:
 //
@@ -7,7 +7,7 @@
 //     rules, the always-on frontend-design guidance, and the project's design
 //     system and skill. It only changes when the project's design system or
 //     skill changes, so the provider's prompt cache survives across turns of a
-//     persistent π session.
+//     persistent omp session.
 //   - Turn returns the user message for one run: turn-variable context
 //     (viewport, discovery overrides, transcript replay for conversations that
 //     predate native sessions) followed by the user's request.
@@ -235,7 +235,7 @@ type TurnInput struct {
 	Viewport string
 	// SkipDiscovery forbids question forms: the caller cannot answer them.
 	SkipDiscovery bool
-	// Transcript is replayed when the conversation has no native π session.
+	// Transcript is replayed when the conversation has no omp session yet.
 	Transcript []Message
 }
 

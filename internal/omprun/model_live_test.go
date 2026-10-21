@@ -1,4 +1,4 @@
-package pirun
+package omprun
 
 import (
 	"context"
@@ -16,8 +16,8 @@ func TestLiveExplicitModelPrompt(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
-	s, err := Start(ctx, Options{Dir: t.TempDir(), Model: ref, Thinking: "low", NoApprove: true,
-		ExtraArgs: []string{"--no-mcp", "--no-skills", "--no-context-files", "--no-prompt-templates", "--no-tools"}})
+	s, err := Start(ctx, Options{Dir: t.TempDir(), Model: ref, Thinking: "low",
+		ExtraArgs: []string{"--no-skills", "--no-rules", "--no-lsp", "--no-tools"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,7 +51,7 @@ func TestLiveExplicitModelPrompt(t *testing.T) {
 				return
 			}
 		}
-		finished <- result{out.String(), "Pi exited before settling: " + failure, false}
+		finished <- result{out.String(), "omp exited before settling: " + failure, false}
 	}()
 	if _, err := s.Prompt(ctx, "Reply with exactly MODEL_SELECTION_OK. Do not use tools."); err != nil {
 		t.Fatal(err)

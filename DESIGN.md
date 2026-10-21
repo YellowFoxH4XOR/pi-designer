@@ -88,7 +88,7 @@ Key characteristics: persistent navigation, a prompt-first starting point, restr
 
 ## Colors
 
-The app mark uses vermilion `#E45F3E`, warm ivory `#FFF5E7`, and deep ink `#233137`. These are identity colors, not replacements for workspace state colors. Lavender continues to distinguish selection, focus, and π engine attribution. Charcoal carries primary actions; green and red communicate real execution state. The light workspace is the implemented design, not an automatic dark-mode system.
+The app mark uses vermilion `#E45F3E`, warm ivory `#FFF5E7`, and deep ink `#233137`. These are identity colors, not replacements for workspace state colors. Lavender continues to distinguish selection, focus, and omp engine attribution. Charcoal carries primary actions; green and red communicate real execution state. The light workspace is the implemented design, not an automatic dark-mode system.
 
 **The Artifact Boundary Rule.** Workspace colors stop at the prototype iframe. A selected design system controls the artifact’s colors; it never recolors the app shell.
 
@@ -130,9 +130,9 @@ A real textarea is paired with design-system selection, an optional device selec
 
 Search and category filters scope the full bundled catalog. Grid specimens are indicative, explicitly labeled as samples. Detail views expose real guidelines, compiled CSS, palette values, and component fixtures. The detail tabs support arrow keys, Home, and End.
 
-### π model picker
+### omp model picker
 
-The π control opens a searchable list read from the installed agent over RPC. Rows identify both model name and provider. Selection saves an exact provider/model id, checks supported thinking levels, and carries into the next run. Settings uses the same picker and only exposes supported thinking levels. Preserve loading, retry, empty-result, and failed-selection states. Credentials, endpoints, and provider headers are never model-list UI data.
+The omp control opens a searchable list read from the installed agent over RPC. Rows identify both model name and provider. Selection saves an exact provider/model id, checks supported thinking levels, and carries into the next run. Settings uses the same picker and only exposes supported thinking levels. Preserve loading, retry, empty-result, and failed-selection states. Credentials, endpoints, and provider headers are never model-list UI data.
 
 ### Studio and source editor
 
@@ -158,7 +158,7 @@ Use native HTML modal dialogs for focused system choice and renaming, with Escap
 
 - Do preserve the separation between the workspace and the generated artifact.
 - Do use the real catalog and local run state, including empty and failure cases.
-- Do keep π-only execution and local storage explicit without making it the visual focus.
+- Do keep omp-only execution and local storage explicit without making it the visual focus.
 - Do keep native keyboard conventions and visible focus.
 - Don’t add account, billing, publishing, or collaboration controls without working capabilities.
 - Don’t describe prototype frames as separate native app generators or πDesigner clients.
