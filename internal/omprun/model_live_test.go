@@ -17,7 +17,7 @@ func TestLiveExplicitModelPrompt(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 	s, err := Start(ctx, Options{Dir: t.TempDir(), Model: ref, Thinking: "low",
-		ExtraArgs: []string{"--no-skills", "--no-rules", "--no-lsp", "--no-tools"}})
+		ExtraArgs: metadataArgs})
 	if err != nil {
 		t.Fatal(err)
 	}
