@@ -38,6 +38,7 @@ export interface Activity {
     designSystemId?: string;
     viewport?: string;
     thinking?: string;
+    designRoute?: { intent: string; choices: { id: string; name: string; reason: string }[] };
   };
   startedAt: number;
   updatedAt: number;

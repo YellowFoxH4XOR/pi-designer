@@ -302,6 +302,51 @@ func (m *Manager) Rollback(id string) (Entry, error) {
 	return Entry{}, errors.New("source disappeared")
 }
 
+// Reference returns a hash-verified local document for an auto-routed task.
+// Missing guides are fetched into the unreviewed staging cache, never installed or executed.
+// The caller must label staged content unreviewed in the agent prompt.
+func (m *Manager) Reference(ctx context.Context, id string) (path, status string, err error) {
+	m.mu.Lock()
+	src, ok := m.source(id)
+	if !ok || src.DocumentURL == "" {
+		m.mu.Unlock()
+		return "", "browse-only", nil
+	}
+	e := m.data.Entries[id]
+	if e != nil {
+		for _, candidate := range []struct{ filename, digest, label string }{
+			{id + ".md", e.InstalledHash, "reviewed"},
+			{id + ".pending.txt", e.AvailableHash, "unreviewed cache"},
+		} {
+			if candidate.digest == "" {
+				continue
+			}
+			p := filepath.Join(m.Dir, candidate.filename)
+			b, readErr := os.ReadFile(p)
+			if readErr == nil && len(b) <= maxDocument && hash(b) == candidate.digest {
+				m.mu.Unlock()
+				return p, candidate.label, nil
+			}
+		}
+	}
+	m.mu.Unlock()
+	if _, err = m.Check(ctx, id); err != nil {
+		return "", "unavailable", err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	e = m.data.Entries[id]
+	if e == nil {
+		return "", "unavailable", errors.New("source disappeared")
+	}
+	p := filepath.Join(m.Dir, id+".pending.txt")
+	b, readErr := os.ReadFile(p)
+	if readErr != nil || len(b) > maxDocument || hash(b) != e.AvailableHash {
+		return "", "unavailable", errors.New("staged document failed verification")
+	}
+	return p, "unreviewed cache", nil
+}
+
 // Docs lists installed references by fixed filename, verifying they still match approved hashes.
 func (m *Manager) Docs() []string {
 	m.mu.Lock()

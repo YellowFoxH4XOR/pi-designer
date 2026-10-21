@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/akki/pidesigner/internal/content"
+	"github.com/akki/pidesigner/internal/knowledge"
 	"github.com/akki/pidesigner/internal/model"
 	"github.com/akki/pidesigner/internal/pirun"
 	"github.com/akki/pidesigner/internal/project"
@@ -86,7 +87,8 @@ type RunRequest struct {
 	// Viewport is the preview frame the user is looking at.
 	Viewport string `json:"viewport,omitempty"`
 	// SkipDiscovery is set by clients that cannot answer question forms.
-	SkipDiscovery bool `json:"skipDiscovery,omitempty"`
+	SkipDiscovery bool            `json:"skipDiscovery,omitempty"`
+	Route         knowledge.Route `json:"-"` // derived locally from the user's goal
 }
 
 // RunHandle is a started run.
@@ -118,6 +120,7 @@ func (r *Runner) Start(ctx context.Context, req RunRequest) (*RunHandle, error) 
 	if req.DesignSystemID == "" {
 		req.DesignSystemID = proj.DesignSystemID
 	}
+	req.Route = knowledge.Recommend(proj.Name+"\n"+req.Prompt, req.DesignSystemID)
 
 	now := time.Now()
 	run := model.Run{
@@ -149,7 +152,7 @@ func (r *Runner) Start(ctx context.Context, req RunRequest) (*RunHandle, error) 
 	}
 
 	b := newRunJournal(r.store, run, proj)
-	b.publish(AgentEvent{Type: "context", RunID: run.ID, Data: modelJSON(map[string]string{"skillId": req.SkillID, "designSystemId": req.DesignSystemID, "viewport": req.Viewport, "thinking": req.Thinking}), At: nowMs()})
+	b.publish(AgentEvent{Type: "context", RunID: run.ID, Data: modelJSON(map[string]any{"skillId": req.SkillID, "designSystemId": req.DesignSystemID, "viewport": req.Viewport, "thinking": req.Thinking, "designRoute": req.Route}), At: nowMs()})
 	r.mu.Lock()
 	r.journals[run.ID] = b
 	r.mu.Unlock()
@@ -199,6 +202,25 @@ func (r *Runner) execute(run model.Run, proj model.Project, req RunRequest, b *e
 	}
 
 	turn := prompt.TurnInput{Prompt: req.Prompt, Viewport: req.Viewport, SkipDiscovery: req.SkipDiscovery}
+	var routeText strings.Builder
+	fmt.Fprintf(&routeText, "The user's goal suggests %s. This is a provisional design plan, not a decision the user must make.\n", req.Route.Intent)
+	for _, choice := range req.Route.Choices {
+		fmt.Fprintf(&routeText, "- %s: %s", choice.Name, choice.Reason)
+		if r.catalog.Knowledge != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			path, status, err := r.catalog.Knowledge.Reference(ctx, choice.ID)
+			cancel()
+			if err != nil {
+				routeText.WriteString(" Guide unavailable; use bundled craft guidance instead.")
+			} else if path != "" {
+				fmt.Fprintf(&routeText, " Read %s (%s reference text) before designing when this turn builds a new interface.", path, status)
+			} else {
+				routeText.WriteString(" Browse-only: no local document was read; use the bundled guidance instead.")
+			}
+		}
+		routeText.WriteByte('\n')
+	}
+	turn.DesignRoute = routeText.String()
 	// Each conversation is one native π session, so follow-up turns keep the
 	// agent's full context: its plan, the files it read, its renders. A
 	// conversation that predates native sessions gets its transcript replayed
