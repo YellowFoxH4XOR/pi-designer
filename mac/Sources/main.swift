@@ -13,6 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     private var discardConfirmed = false
     private var activity: NativeActivityController?
 
+    private var terminationCheckInProgress = false
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Explicitly refresh the Dock mark after a locally rebuilt bundle;
         // Launch Services may otherwise keep the prior icon cached.
@@ -107,20 +108,123 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard webView != nil && !discardConfirmed else { return .terminateNow }
-        webView.evaluateJavaScript("document.documentElement.dataset.unsavedChanges === 'true'") { [weak self] value, _ in
-            guard let self else { sender.reply(toApplicationShouldTerminate: true); return }
-            let dirty = value as? Bool == true
-            let running = self.activity?.model.items.filter { $0.status == "running" }.count ?? 0
-            guard dirty || running > 0 else { sender.reply(toApplicationShouldTerminate: true); return }
-            self.showWorkspace()
-            let alert = NSAlert()
-            alert.messageText = running > 0 ? "Quit and stop \(running) active task(s)?" : "Discard unsaved source changes?"
-            alert.informativeText = dirty ? "Saved project files remain on this Mac. Unsaved source edits will be lost, and active tasks will stop." : "Closing the window keeps tasks running. Quitting stops them."
-            alert.addButton(withTitle: "Keep Working")
-            alert.addButton(withTitle: dirty ? "Discard and Quit" : "Stop Tasks and Quit")
-            alert.beginSheetModal(for: self.window) { sender.reply(toApplicationShouldTerminate: $0 == .alertSecondButtonReturn) }
+        guard !terminationCheckInProgress else { return .terminateLater }
+        terminationCheckInProgress = true
+        webView.evaluateJavaScript("document.documentElement.dataset.unsavedChanges === 'true'") { [weak self] value, error in
+            DispatchQueue.main.async {
+                guard let self else { sender.reply(toApplicationShouldTerminate: false); return }
+                guard error == nil, let dirty = value as? Bool else {
+                    self.showTerminationCheckFailure(error ?? TerminationGuardError.invalidResponse, replyTo: sender)
+                    return
+                }
+                self.checkTermination(dirty: dirty, acknowledgedRunning: nil, replyTo: sender)
+            }
         }
         return .terminateLater
+    }
+    private func checkTermination(dirty: Bool, acknowledgedRunning: Set<String>?, replyTo sender: NSApplication) {
+        fetchRunningRunIDs { [weak self] result in
+            guard let self else { sender.reply(toApplicationShouldTerminate: false); return }
+            switch result {
+            case .failure(let error):
+                self.showTerminationCheckFailure(error, replyTo: sender)
+            case .success(let running):
+                guard let acknowledgedRunning else {
+                    guard dirty || !running.isEmpty else {
+                        self.finishTermination(replyTo: sender, approve: true)
+                        return
+                    }
+                    self.confirmTermination(dirty: dirty, running: running, replyTo: sender)
+                    return
+                }
+                if running.subtracting(acknowledgedRunning).isEmpty {
+                    self.finishTermination(replyTo: sender, approve: true)
+                } else {
+                    self.confirmTermination(dirty: dirty, running: running, replyTo: sender)
+                }
+            }
+        }
+    }
+    private func confirmTermination(dirty: Bool, running: Set<String>, replyTo sender: NSApplication) {
+        showWorkspace()
+        let alert = NSAlert()
+        alert.messageText = !running.isEmpty ? "Quit and stop \(running.count) active task(s)?" : "Discard unsaved source changes?"
+        if dirty && !running.isEmpty {
+            alert.informativeText = "Saved project files remain on this Mac. Unsaved source edits will be lost, and active tasks will stop."
+        } else if dirty {
+            alert.informativeText = "Saved project files remain on this Mac. Unsaved source edits will be lost."
+        } else {
+            alert.informativeText = "Closing the window keeps tasks running. Quitting stops them."
+        }
+        alert.addButton(withTitle: "Keep Working")
+        alert.addButton(withTitle: dirty ? "Discard and Quit" : "Stop Tasks and Quit")
+        alert.beginSheetModal(for: window) { [weak self] response in
+            guard let self else { sender.reply(toApplicationShouldTerminate: false); return }
+            guard response == .alertSecondButtonReturn else {
+                self.finishTermination(replyTo: sender, approve: false)
+                return
+            }
+            // The user may have started more work while the confirmation was
+            // visible. Recheck before replying yes; newly active runs need an
+            // explicit, fresh confirmation of their cancellation.
+            self.checkTermination(dirty: dirty, acknowledgedRunning: running, replyTo: sender)
+        }
+    }
+    private func showTerminationCheckFailure(_ error: Error, replyTo sender: NSApplication) {
+        showWorkspace()
+        let alert = NSAlert()
+        alert.messageText = "Quit without verifying the workspace?"
+        alert.informativeText = "πDesigner couldn’t verify the current workspace state. Quitting may stop active tasks and discard unsaved source edits. Keep working unless you want to accept that risk.\n\n\(error.localizedDescription)"
+        alert.addButton(withTitle: "Keep Working")
+        alert.addButton(withTitle: "Quit Anyway")
+        alert.beginSheetModal(for: window) { [weak self] response in
+            guard let self else { sender.reply(toApplicationShouldTerminate: false); return }
+            self.finishTermination(replyTo: sender, approve: response == .alertSecondButtonReturn)
+        }
+    }
+    private func finishTermination(replyTo sender: NSApplication, approve: Bool) {
+        if approve { discardConfirmed = true }
+        terminationCheckInProgress = false
+        sender.reply(toApplicationShouldTerminate: approve)
+    }
+    private func fetchRunningRunIDs(completion: @escaping (Result<Set<String>, Error>) -> Void) {
+        guard let baseURL else {
+            completion(.failure(TerminationGuardError.daemonUnavailable))
+            return
+        }
+        var request = URLRequest(url: baseURL.appendingPathComponent("api/activity"))
+        request.timeoutInterval = 5
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            let result: Result<Set<String>, Error>
+            if let error {
+                result = .failure(error)
+            } else if let response = response as? HTTPURLResponse {
+                if response.statusCode != 200 {
+                    result = .failure(TerminationGuardError.httpStatus(response.statusCode))
+                } else if let data, let activity = try? JSONDecoder().decode(ActivityEnvelope.self, from: data) {
+                    result = .success(Set(activity.activities.filter { $0.status == "running" }.map(\.runId)))
+                } else {
+                    result = .failure(TerminationGuardError.invalidResponse)
+                }
+            } else {
+                result = .failure(TerminationGuardError.invalidResponse)
+            }
+            DispatchQueue.main.async { completion(result) }
+        }.resume()
+    }
+    private struct ActivityEnvelope: Decodable { let activities: [ActivitySummary] }
+    private enum TerminationGuardError: LocalizedError {
+        case daemonUnavailable
+        case invalidResponse
+        case httpStatus(Int)
+        var errorDescription: String? {
+            switch self {
+            case .daemonUnavailable: return "The workspace daemon is not connected."
+            case .invalidResponse: return "The workspace daemon returned an invalid activity response."
+            case .httpStatus(let status): return "The workspace daemon returned HTTP \(status)."
+            }
+        }
     }
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         // Close hides the workspace; it does not discard source, unload WebKit,

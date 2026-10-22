@@ -21,7 +21,7 @@ const sessionDir = arg('--session-dir');
 if (sessionDir) { fs.mkdirSync(sessionDir, { recursive: true }); fs.writeFileSync(path.join(sessionDir, 'fixture_session.jsonl'), ''); }
 const send = obj => process.stdout.write(JSON.stringify(obj) + '\n');
 const response = (req, data) => send({ type: 'response', command: req.type, id: req.id, success: true, ...(data === undefined ? {} : { data }) });
-let aborted = false; let active = false; let resolveUI; let promptId;
+let aborted = false; let active = false; let resolveUI; let promptId; let noSettleAbort = false;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const message = text => {
   send({ type: 'message_start', message: { role: 'assistant' } });
@@ -36,7 +36,12 @@ const finish = (status, error) => {
 };
 async function run(text) {
   active = true; aborted = false;
+  noSettleAbort = text.includes('ACK_ABORT_NO_SETTLE');
   send({ type: 'agent_start' });
+  if (noSettleAbort) {
+    send({ type: 'tool_execution_start', toolCallId: 'abort-ready', toolName: 'read', args: { path: 'index.html' } });
+    await new Promise(() => {});
+  }
   // omp terminal presentation state the daemon must ignore.
   send({ type: 'extension_ui_request', id: 'fixture-widget', method: 'setWidget', widgetKey: 'fixture' });
   if (text.includes('ASK_EXTENSION')) {
@@ -102,9 +107,13 @@ readline.createInterface({ input: process.stdin }).on('line', line => {
   else if (req.type === 'prompt') { promptId = req.id; response(req); void run(req.message); }
   else if (req.type === 'abort') {
     const wasActive = active;
-    aborted = true; active = false; resolveUI?.(); resolveUI = undefined;
-    if (wasActive) { send({ type: 'agent_end', messages: [] }); response(req); send({ type: 'prompt_result', id: promptId, agentInvoked: true, status: 'aborted', sessionSettled: true }); send({ type: 'session_settled' }); }
-    else response(req);
+    aborted = true;
+    if (wasActive && noSettleAbort) response(req);
+    else {
+      active = false; resolveUI?.(); resolveUI = undefined;
+      if (wasActive) { send({ type: 'agent_end', messages: [] }); response(req); send({ type: 'prompt_result', id: promptId, agentInvoked: true, status: 'aborted', sessionSettled: true }); send({ type: 'session_settled' }); }
+      else response(req);
+    }
   }
   else if (req.type === 'extension_ui_response') { resolveUI?.(); resolveUI = undefined; }
   else response(req);

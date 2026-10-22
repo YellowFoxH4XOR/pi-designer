@@ -31,7 +31,7 @@ Go daemon, SQLite projects, Preact UI, installed omp over JSONL RPC. The macOS a
 
 ## Brand Commitments
 
-The user requested the workspace structure and usability of OpenDesign Cloud, rather than the original terminal-like three-pane shell. The app logo initially took inspiration from the PiDesk logo in `/Users/akki/Desktop/Projects/omp-ui/apps/desktop/public/app-icon.svg`. An intermediate design used an artboard/nib app icon and the upstream pixel agent mark. The confirmed name is **πDesigner**, using the Greek π rather than the written “Pi”. The user subsequently rejected the πDesk-like lavender π tile and delegated a designer-specific logo redesign. The app now uses a distinct vermilion/ivory/ink pen-nib, Bézier-curve and artboard mark; no π monogram is required in the app icon. The workspace layout and its existing state colors remain unchanged. A standalone π identifies execution, while maker/provider icons identify models. Keep app, engine, model and routing-provider identities distinct.
+The user requested the workspace structure and usability of OpenDesign Cloud, rather than the original terminal-like three-pane shell. The app logo initially took inspiration from the PiDesk logo in `/Users/akki/Desktop/Projects/omp-ui/apps/desktop/public/app-icon.svg`. An intermediate design used an artboard/nib app icon and the upstream pixel agent mark. The confirmed name is **πDesigner**, using the Greek π rather than the written “Pi”. The user subsequently rejected the πDesk-like lavender π tile and delegated a designer-specific logo redesign. The app now uses a distinct vermilion/ivory/ink pen-nib, Bézier-curve and artboard mark; no π monogram is required in the app icon. The user initially selected a dark creative workspace, then corrected the preference to **light themed**. The redesigned layout remains; the implemented workspace uses cool gray navigation, an off-white canvas, white working surfaces, charcoal text, and warm coral actions. The existing app mark is retained. A standalone π identifies execution, while maker/provider icons identify models. Keep app, engine, model and routing-provider identities distinct.
 
 ## Evidence on Hand
 
@@ -51,4 +51,4 @@ The user requested the workspace structure and usability of OpenDesign Cloud, ra
 
 ## Open Decisions
 
-The light workspace and lavender PiDesk-family accent are this redesign's interpretation of the supplied references, not an assertion that the user requested a permanent light-only product.
+The user's latest preference establishes the light workspace as the implemented visual direction. An alternate dark theme and theme-switching control are not currently implemented; future theme support remains an open decision.

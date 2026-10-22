@@ -1,14 +1,14 @@
 /* omp execution identity is separate from the app tile and selected model. */
 .agent-mark { display: block; flex: 0 0 auto; }
-.model-button { display: inline-flex; align-items: center; gap: 7px; padding: 7px; min-height: 34px; margin-left: auto; border-radius: 8px; color: #545361; background: #f6f5fa; border: 1px solid transparent; min-width: 0; text-align: left; }
-.model-button:hover:not(:disabled) { background: #eeedf6; border-color: #dcdae9; }
+.model-button { display: inline-flex; align-items: center; gap: 7px; padding: 7px; min-height: 34px; margin-left: auto; border-radius: 8px; color: var(--muted); background: var(--surface); border: 1px solid transparent; min-width: 0; text-align: left; }
+.model-button:hover:not(:disabled) { background: var(--subtle); border-color: var(--line); }
 .model-button > span { min-width: 0; }
 .model-button strong { display: block; font-size: 11px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 165px; }
-.model-chevron { transform: rotate(90deg); color: #777386; }
+.model-chevron { transform: rotate(90deg); color: var(--muted); }
 .model-button.compact { gap: 5px; padding: 5px; }
 .model-button.compact strong { font-size: 9.5px; max-width: 74px; }
 .model-button.compact .model-chevron { width: 10px; }
-.model-button.settings-model { width: 100%; margin: 0; padding: 10px 12px; border: 1px solid var(--line); background: #fff; gap: 11px; min-height: 56px; }
+.model-button.settings-model { width: 100%; margin: 0; padding: 10px 12px; border: 1px solid var(--line); background: var(--surface); gap: 11px; min-height: 56px; }
 .model-button.settings-model strong { font-size: 12px; max-width: none; }
 .model-button.settings-model small { display: block; font-size: 10px; margin-top: 5px; color: var(--muted); overflow-wrap: anywhere; }
 .model-button.settings-model .model-chevron { margin-left: auto; }
@@ -21,14 +21,14 @@
 .model-picker-info .text-button { gap: 5px; font-size: 11px; }
 .model-list { max-height: 51dvh; overflow: auto; margin: 0 -5px; padding: 2px 5px; }
 .model-row { display: flex; width: 100%; align-items: center; gap: 12px; padding: 12px 10px; border-radius: 9px; text-align: left; }
-.model-row:hover:not(:disabled) { background: #f0eff7; }
-.model-row.selected { background: #eae8f9; }
+.model-row:hover:not(:disabled) { background: var(--subtle); }
+.model-row.selected { background: var(--accent-soft); }
 .model-row > span:nth-child(2) { flex: 1; min-width: 0; }
 .model-row strong { display: block; font-size: 12px; font-weight: 560; }
 .model-row small { display: block; color: var(--muted); font-size: 10px; margin-top: 5px; line-height: 1.65; }
-.model-id { display: inline; font-size: 9px; margin-left: 8px; color: #737080; overflow-wrap: anywhere; }
-.model-row-symbol { display: grid; place-items: center; width: 27px; height: 27px; flex: 0 0 auto; color: #77738c; border: 1px solid #dddbe7; border-radius: 7px; background: #f9f8fc; }
-.model-row-meta { color: #635c8e; font-size: 9px; white-space: nowrap; }
+.model-id { display: inline; font-size: 9px; margin-left: 8px; color: var(--muted); overflow-wrap: anywhere; }
+.model-row-symbol { display: grid; place-items: center; width: 27px; height: 27px; flex: 0 0 auto; color: var(--muted); border: 1px solid var(--line); border-radius: 7px; background: var(--surface); }
+.model-row-meta { color: var(--accent); font-size: 9px; white-space: nowrap; }
 .model-select-status { font-size: 11px; color: var(--accent); line-height: 1.8; margin: 14px 0 0; }
 .run-model { display: flex; align-items: center; gap: 7px; font-size: 10px; line-height: 1.65; color: var(--muted); padding: 8px 0; overflow-wrap: anywhere; }
 @media (max-width: 1190px) { .model-button:not(.settings-model) strong { max-width: 110px; }.model-button.compact strong { max-width: 58px; } }

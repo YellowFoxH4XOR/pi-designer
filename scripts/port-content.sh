@@ -2,15 +2,10 @@
 # Port the content layer (design systems, skills, templates, craft laws) out of
 # the upstream OpenDesign checkout into ./content.
 #
-# This is a one-shot vendoring step. Upstream lives in ./open-design.
-# We strip the parts that cost bytes and buy us nothing:
-#   - source/            importer audit trail, not a runtime input
-#   - DESIGN-<lang>.md   391 localized design docs (i18n we don't ship)
-#
-# Everything else -- the canonical trio (manifest.json / DESIGN.md / tokens.css),
-# component fixtures, design-tokens.json, tailwind mapping, preview pages --
-# is copied verbatim so all 154 design systems stay intact.
-set -euo pipefail
+# The existing content tree is copied to same-filesystem staging, updated there,
+# then swapped in only after every required source has been copied successfully.
+# Local skills not imported from OpenDesign, including frontend-design, survive.
+set -Eeuo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 UP="$ROOT/open-design"
@@ -34,54 +29,155 @@ TEMPLATES=(
   simple-deck
 )
 
-echo "==> design systems"
-mkdir -p "$DEST/design-systems"
-rm -rf "$DEST/design-systems"/*
+fail() {
+  printf 'port-content: %s\n' "$*" >&2
+  exit 1
+}
+
+require_dir() {
+  [[ -d "$1" && -r "$1" ]] || fail "required source directory is missing or unreadable: $1"
+}
+
+require_file() {
+  [[ -f "$1" && -r "$1" ]] || fail "required source file is missing or unreadable: $1"
+}
+
+require_nonempty_dir() {
+  local first_file
+  first_file="$(find "$1" -type f -print -quit)"
+  [[ -n "$first_file" ]] || fail "required source directory contains no files: $1"
+}
+
+require_dir "$UP/design-systems"
+require_dir "$UP/skills"
+require_dir "$UP/design-templates"
+require_dir "$UP/craft"
+require_dir "$UP/prompt-templates"
+require_nonempty_dir "$UP/craft"
+require_nonempty_dir "$UP/prompt-templates"
+
+system_count=0
 for pkg in "$UP"/design-systems/*/; do
+  [[ -d "$pkg" ]] || continue
+  [[ "$(basename "$pkg")" == "_schema" ]] && continue
+  require_file "$pkg/manifest.json"
+  require_file "$pkg/DESIGN.md"
+  require_file "$pkg/tokens.css"
+  system_count=$((system_count + 1))
+done
+(( system_count > 0 )) || fail "no complete design-system packages found in $UP/design-systems"
+
+for skill in "${SKILLS[@]}"; do
+  require_dir "$UP/skills/$skill"
+  require_file "$UP/skills/$skill/SKILL.md"
+done
+for template in "${TEMPLATES[@]}"; do
+  require_dir "$UP/design-templates/$template"
+  require_file "$UP/design-templates/$template/SKILL.md"
+done
+
+
+[[ ! -L "$DEST" ]] || fail "refusing to replace symbolic-link content directory: $DEST"
+if [[ -e "$DEST" && ! -d "$DEST" ]]; then
+  fail "content destination is not a directory: $DEST"
+fi
+
+TMP="$(mktemp -d "$ROOT/.port-content.XXXXXX")"
+STAGED="$TMP/content"
+BACKUP="$TMP/content.previous"
+
+cleanup() {
+  local status=$?
+  trap - EXIT INT TERM
+  if [[ -e "$BACKUP" && ! -e "$DEST" ]]; then
+    if ! mv "$BACKUP" "$DEST"; then
+      printf 'port-content: failed to restore the previous catalog; backup retained at %s\n' "$BACKUP" >&2
+      status=1
+      exit "$status"
+    fi
+  fi
+  if ! rm -rf "$TMP"; then
+    printf 'port-content: failed to remove temporary staging directory %s\n' "$TMP" >&2
+    status=1
+  fi
+  exit "$status"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+mkdir "$STAGED"
+if [[ -d "$DEST" ]]; then
+  cp -R "$DEST/." "$STAGED/"
+fi
+
+echo "==> design systems"
+rm -rf "$STAGED/design-systems"
+mkdir -p "$STAGED/design-systems"
+for pkg in "$UP"/design-systems/*/; do
+  [[ -d "$pkg" ]] || continue
   slug="$(basename "$pkg")"
-  [ "$slug" = "_schema" ] && continue
-  out="$DEST/design-systems/$slug"
+  [[ "$slug" == "_schema" ]] && continue
+  out="$STAGED/design-systems/$slug"
   mkdir -p "$out"
-  # copy everything except the two stripped trees
   (cd "$pkg" && find . -mindepth 1 -maxdepth 1 \
       ! -name 'source' ! -name 'assets' ! -name 'fonts' \
       -exec cp -R {} "$out/" \;)
-  # assets/fonts only when present, but skip large binaries we can't use
   for keepdir in assets fonts; do
-    [ -d "$pkg/$keepdir" ] && cp -R "$pkg/$keepdir" "$out/"
+    [[ ! -d "$pkg/$keepdir" ]] || cp -R "$pkg/$keepdir" "$out/"
   done
-  # strip localized design docs
   find "$out" -maxdepth 1 -name 'DESIGN-*.md' -delete
 done
 
 echo "==> skills"
-mkdir -p "$DEST/skills"
-# frontend-design is Anthropic's always-on design skill, vendored separately
-# from claude-plugins-official; it is not part of the OpenDesign checkout.
-find "$DEST/skills" -mindepth 1 -maxdepth 1 ! -name frontend-design -exec rm -rf {} +
-for s in "${SKILLS[@]}"; do
-  [ -d "$UP/skills/$s" ] || { echo "  skip (missing): $s"; continue; }
-  cp -R "$UP/skills/$s" "$DEST/skills/$s"
+mkdir -p "$STAGED/skills"
+PRESERVE="$TMP/preserved-web-clone"
+mkdir -p "$PRESERVE/scripts"
+if [[ -f "$STAGED/skills/web-clone/SKILL.md" ]]; then
+  cp -p "$STAGED/skills/web-clone/SKILL.md" "$PRESERVE/SKILL.md"
+fi
+if [[ -f "$STAGED/skills/web-clone/scripts/init-clone.mjs" ]]; then
+  cp -p "$STAGED/skills/web-clone/scripts/init-clone.mjs" "$PRESERVE/scripts/init-clone.mjs"
+fi
+for skill in "${SKILLS[@]}"; do
+  rm -rf "$STAGED/skills/$skill"
+  cp -R "$UP/skills/$skill" "$STAGED/skills/$skill"
 done
+if [[ -f "$PRESERVE/SKILL.md" ]]; then
+  cp -p "$PRESERVE/SKILL.md" "$STAGED/skills/web-clone/SKILL.md"
+fi
+if [[ -f "$PRESERVE/scripts/init-clone.mjs" ]]; then
+  mkdir -p "$STAGED/skills/web-clone/scripts"
+  cp -p "$PRESERVE/scripts/init-clone.mjs" "$STAGED/skills/web-clone/scripts/init-clone.mjs"
+fi
 
 echo "==> design templates"
-mkdir -p "$DEST/design-templates"
-rm -rf "$DEST/design-templates"/*
-for t in "${TEMPLATES[@]}"; do
-  [ -d "$UP/design-templates/$t" ] || { echo "  skip (missing): $t"; continue; }
-  cp -R "$UP/design-templates/$t" "$DEST/design-templates/$t"
+rm -rf "$STAGED/design-templates"
+mkdir -p "$STAGED/design-templates"
+for template in "${TEMPLATES[@]}"; do
+  cp -R "$UP/design-templates/$template" "$STAGED/design-templates/$template"
 done
 
 echo "==> craft laws"
-rm -rf "$DEST/craft"
-cp -R "$UP/craft" "$DEST/craft"
+rm -rf "$STAGED/craft"
+cp -R "$UP/craft" "$STAGED/craft"
 
 echo "==> prompt templates"
-rm -rf "$DEST/prompt-templates"
-mkdir -p "$DEST/prompt-templates"
-cp -R "$UP/prompt-templates/." "$DEST/prompt-templates/" 2>/dev/null || true
+rm -rf "$STAGED/prompt-templates"
+mkdir -p "$STAGED/prompt-templates"
+cp -R "$UP/prompt-templates/." "$STAGED/prompt-templates/"
+
+if [[ -e "$DEST" ]]; then
+  mv "$DEST" "$BACKUP"
+fi
+if ! mv "$STAGED" "$DEST"; then
+  if [[ -e "$BACKUP" ]]; then
+    mv "$BACKUP" "$DEST" || fail "could not restore $DEST after the staged catalog replacement failed"
+  fi
+  fail "could not replace $DEST with the completed staged catalog"
+fi
 
 echo
 echo "==> done"
-du -sh "$DEST"/design-systems "$DEST"/skills "$DEST"/design-templates "$DEST"/craft 2>/dev/null
-echo "design systems: $(find "$DEST/design-systems" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ') packages"
+du -sh "$DEST"/design-systems "$DEST"/skills "$DEST"/design-templates "$DEST"/craft || true
+printf 'design systems: %s packages\n' "$(find "$DEST/design-systems" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')"

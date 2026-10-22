@@ -81,13 +81,18 @@ App display/bundle names change to πDesigner; the existing bundle identifier, `
   agent/             πDesigner's omp extension (rewritten at startup)
   preferences.json   model and thinking choices
   runtime.json       current private loopback endpoint for MCP discovery
+  .daemon.lock       exclusive ownership of this data directory (not deleted on shutdown)
 ```
 
 `sessions/<conversationId>/` is one omp session directory per conversation; omp writes `<timestamp>_<uuid>.jsonl` files inside it.
 
+Only one daemon may own a data directory. A second instance fails before opening the database, recovering runs, or replacing discovery. A failed project-file cleanup retains its database row and slug for retry; a new project cannot reuse a directory while deletion is in progress.
+
 The native AppKit/WKWebView shell launches a bundled Go daemon on an available loopback port. The daemon launches the installed `omp --mode rpc`; it does not call a model provider itself. Closing or minimizing the workspace keeps the daemon and active tasks running. The menu bar and optional notch panel remain available in the background. Explicit Quit closes the daemon pipe and shuts down the agent process tree.
 
-The internal HTTP server is implementation infrastructure for the app and MCP server. It is not intended as a public or network-exposed service.
+The internal HTTP server is local-only implementation infrastructure for the app and MCP server. Bind addresses and request Hosts must be loopback; foreign and opaque browser Origins are rejected for API and WebSocket requests. Native HTTP/MCP clients without an Origin remain supported. These checks protect the browser boundary, not against other processes already running as your user.
+
+Project HTTP/MCP file operations and preview serving use rooted filesystem handles; links escaping the configured project root are rejected, and file deletion cannot remove that root. Embedded and standalone preview documents both have a response-level sandbox without same-origin privileges. Read-only preview asset requests have narrowly scoped opaque-origin support for scripts, modules, styles, fonts, and media; that exception never grants API access. These restrictions do not sandbox the separately launched, auto-approved omp agent.
 
 ## Connect a coding editor
 
@@ -98,6 +103,8 @@ The internal HTTP server is implementation infrastructure for the app and MCP se
 Both executables are bundled in the app. The configuration points to a runtime discovery file, so the editor follows the Mac app after a port change or restart. Generate the configuration after moving the app to its permanent location. Keep the app running while using MCP.
 
 The MCP server supports project/file reading and writing, artifact retrieval, skills/design-system discovery, generation through omp, polling, and cancellation. An omitted `project` uses the project currently open in Studio; explicit project IDs or names override that selection. Leaving Studio clears the default, and calls without a selection return an actionable error rather than choosing an arbitrary project. The selection is daemon-session state, not persisted across restarts. The editor can either edit files directly or delegate a task to omp. `pidesigner-mcp --print-config --client omp` prints the config for `~/.omp/agent/mcp.json`.
+
+`get_artifact` returns canonical project-relative keys in `files`. Each value is `{ "encoding": "utf-8" | "base64", "content": "...", "mimeType": "..." }`: text is UTF-8, binary assets are base64, and decoding preserves the original bytes. HTML references resolve against the entry document's directory (or the project root for leading `/`); missing local dependencies return an error instead of an incomplete bundle. Resource-read failures use top-level JSON-RPC errors, and `search_files.limit` is honored.
 
 `list_models` exposes the installed omp catalog to editors. Runs that omit a model use the choice saved in πDesigner. A selected model is passed with an explicit provider and checked through omp’s reported state; provider failures are reported as failures, not successful generation.
 
@@ -120,6 +127,8 @@ The app is **πDesigner**, using the Greek letter π in its name. Its independen
 go test -race ./...
 go vet ./...
 (cd ui && npm test && npx tsc --noEmit && npm run build)
+node --test scripts/tests/*.test.cjs
+go build -o bin/pidesigner ./cmd/pidesigner
 node scripts/review-activity.cjs
 swiftc -o /tmp/pidesigner-native-tests mac/Sources/ActivityModels.swift mac/Tests/main.swift
 /tmp/pidesigner-native-tests
@@ -127,7 +136,9 @@ swiftc -o /tmp/pidesigner-native-tests mac/Sources/ActivityModels.swift mac/Test
 codesign --verify --deep --strict build/πDesigner.app
 ```
 
-The local browser review helper `scripts/review-ui.cjs` exercises the embedded interface against an isolated real daemon, without starting a model generation. It needs an existing Playwright package (`PLAYWRIGHT_PACKAGE`) and system Chrome (`CHROME_PATH`, optional on this Mac). Its temporary metadata file is provided by `PIDESIGNER_REVIEW_META`; it records the test daemon URL and fixture project id.
+The browser helper `scripts/review-ui.cjs` connects to the daemon URL in the JSON file supplied by `PIDESIGNER_REVIEW_META` (default `/tmp/pidesigner-design-review.json`). Use an isolated test daemon. The helper creates and edits its own labeled fixture; it never deletes a supplied project ID or rewrites the metadata file, leaves model preferences unchanged, and restores the previous active-project selection. Its fixture remains afterward. It starts no model generation and needs `playwright-core` (`PLAYWRIGHT_PACKAGE` to override) and system Chrome (`CHROME_PATH` to override).
+
+`scripts/e2e.sh` does run real inference against `PIDESIGNER_E2E_BASE` (default `http://127.0.0.1:7457`). It exits nonzero on request, stream, run, artifact, or preview failures. Outputs are isolated per run and removed on exit; set `PIDESIGNER_E2E_KEEP_OUTPUTS=1` to retain the printed directory. `scripts/port-content.sh` validates and stages a complete upstream catalog before replacement, preserving separately vendored/local skills and πDesigner's web-clone adaptations.
 
 Native WebKit snapshots can be taken without capturing the desktop or other applications:
 

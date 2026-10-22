@@ -2,14 +2,20 @@ package api
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"mime"
+	"net/http"
+	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/akki/pidesigner/internal/content"
 	"github.com/akki/pidesigner/internal/model"
@@ -33,6 +39,7 @@ type Runner struct {
 	mu              sync.Mutex
 	wg              sync.WaitGroup
 	shuttingDown    bool
+	sessionSettled  map[string]chan struct{}
 	sessions        map[string]*omprun.Session
 	journals        map[string]*eventJournal
 	active          map[string]string
@@ -73,6 +80,7 @@ func NewRunner(st *store.Store, cat *content.Catalog, ompBin string, hub FileCha
 		active:          map[string]string{},
 		deleting:        map[string]bool{},
 		cancelRequested: map[string]bool{},
+		sessionSettled:  map[string]chan struct{}{},
 		hub:             hub,
 	}
 }
@@ -124,6 +132,13 @@ func (r *Runner) Start(ctx context.Context, req RunRequest) (*RunHandle, error) 
 	}
 
 	now := time.Now()
+	var userMessage *model.Message
+	if req.ConversationID != "" {
+		userMessage = &model.Message{
+			ID: newID("msg"), ConversationID: req.ConversationID,
+			Role: model.RoleUser, Content: req.Prompt, CreatedAt: now,
+		}
+	}
 	run := model.Run{
 		ID:             newID("run"),
 		ProjectID:      proj.ID,
@@ -148,12 +163,18 @@ func (r *Runner) Start(ctx context.Context, req RunRequest) (*RunHandle, error) 
 	r.active[proj.ID] = run.ID
 	r.wg.Add(1)
 	r.mu.Unlock()
-	if err := r.store.CreateRun(run); err != nil {
+	var persistErr error
+	if userMessage != nil {
+		persistErr = r.store.CreateRunWithMessage(run, userMessage)
+	} else {
+		persistErr = r.store.CreateRun(run)
+	}
+	if persistErr != nil {
 		r.wg.Done()
 		r.mu.Lock()
 		delete(r.active, proj.ID)
 		r.mu.Unlock()
-		return nil, err
+		return nil, persistErr
 	}
 
 	b := newRunJournal(r.store, run, proj)
@@ -161,14 +182,6 @@ func (r *Runner) Start(ctx context.Context, req RunRequest) (*RunHandle, error) 
 	r.mu.Lock()
 	r.journals[run.ID] = b
 	r.mu.Unlock()
-
-	// Record the user's turn.
-	if req.ConversationID != "" {
-		_ = r.store.AppendMessage(model.Message{
-			ID: newID("msg"), ConversationID: req.ConversationID,
-			Role: model.RoleUser, Content: req.Prompt, CreatedAt: now,
-		})
-	}
 
 	go r.execute(run, proj, req, b)
 	return &RunHandle{RunID: run.ID}, nil
@@ -258,6 +271,10 @@ func (r *Runner) execute(run model.Run, proj model.Project, req RunRequest, b *e
 		r.completeRun(run, b, model.RunFailed, err.Error())
 		return
 	}
+	settled := make(chan bool, 1)
+	settledSignal := make(chan struct{})
+	processGone := make(chan struct{})
+	events := sess.Events()
 	r.mu.Lock()
 	if r.shuttingDown || r.cancelRequested[run.ID] {
 		r.mu.Unlock()
@@ -267,18 +284,17 @@ func (r *Runner) execute(run model.Run, proj model.Project, req RunRequest, b *e
 		return
 	}
 	r.sessions[run.ID] = sess
+	r.sessionSettled[run.ID] = settledSignal
 	r.mu.Unlock()
 	defer func() {
 		r.mu.Lock()
 		delete(r.sessions, run.ID)
+		delete(r.sessionSettled, run.ID)
 		r.mu.Unlock()
 		sess.Close()
 	}()
 
 	// Subscribe before prompting so a fast completion is not missed.
-	events := sess.Events()
-	settled := make(chan bool, 1)
-	processGone := make(chan struct{})
 	var assistantText strings.Builder
 	var messageText strings.Builder
 	var providerFailure string
@@ -398,6 +414,7 @@ func (r *Runner) execute(run model.Run, proj model.Project, req RunRequest, b *e
 				b.publish(AgentEvent{Type: "error", RunID: run.ID, Text: ev.Text, At: nowMs()})
 			case omprun.EventSettled:
 				settled <- ev.Aborted
+				close(settledSignal)
 				return
 			}
 			if b.persistenceError() != nil {
@@ -454,6 +471,8 @@ func (r *Runner) execute(run model.Run, proj model.Project, req RunRequest, b *e
 		aborted bool
 		failure string
 	)
+	runTimer := time.NewTimer(2 * time.Hour)
+	defer runTimer.Stop()
 	select {
 	case aborted = <-settled:
 	default:
@@ -469,7 +488,7 @@ func (r *Runner) execute(run model.Run, proj model.Project, req RunRequest, b *e
 					failure += ": " + tail
 				}
 			}
-		case <-time.After(2 * time.Hour):
+		case <-runTimer.C:
 			failure = "timeout"
 		}
 	}
@@ -493,10 +512,12 @@ func (r *Runner) execute(run model.Run, proj model.Project, req RunRequest, b *e
 	w := work.snapshot()
 	_ = r.store.SaveRunWork(run.ID, w.todos, w.renders, w.critiques)
 	if txt := strings.TrimSpace(assistantText.String()); txt != "" && run.ConversationID != "" {
-		_ = r.store.AppendMessage(model.Message{
+		if err := r.store.AppendMessage(model.Message{
 			ID: newID("msg"), ConversationID: run.ConversationID,
 			Role: model.RoleAssistant, Content: txt, CreatedAt: time.Now(),
-		})
+		}); err != nil {
+			failure = "Assistant transcript could not be saved: " + err.Error()
+		}
 	}
 
 	// Keep the project's entry file fresh.
@@ -550,15 +571,28 @@ func (r *Runner) Cancel(runID string) error {
 	}
 	r.cancelRequested[runID] = true
 	sess := r.sessions[runID]
+	settled := r.sessionSettled[runID]
 	r.mu.Unlock()
 	if sess == nil {
 		return nil
 	} // execute observes cancellation before prompting
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if sess.Abort(ctx) != nil {
+	if err := sess.Abort(ctx); err != nil {
 		sess.CloseWith()
-	} // accepted cancellation still stops a wedged RPC process
+		return nil
+	}
+
+	timer := time.NewTimer(500 * time.Millisecond)
+	defer timer.Stop()
+	select {
+	case <-settled:
+	case <-sess.Done():
+	case <-timer.C:
+		// An abort acknowledgment is not completion. Kill this session if
+		// omp has not reported a settled prompt within the grace period.
+		sess.CloseWith()
+	}
 	return nil
 }
 
@@ -782,13 +816,20 @@ func readFile(path string) string {
 	return string(b)
 }
 
-// ArtifactBundle is the full set of files an artifact needs.
-type ArtifactBundle struct {
-	EntryFile string            `json:"entryFile"`
-	Files     map[string]string `json:"files"`
+// ArtifactFile transports file bytes without lossy binary-to-string conversion.
+type ArtifactFile struct {
+	Encoding string `json:"encoding"`
+	Content  string `json:"content"`
+	MIMEType string `json:"mimeType"`
 }
 
-// BuildArtifact collects the entry file plus every sibling it references.
+// ArtifactBundle is the full set of files an artifact needs.
+type ArtifactBundle struct {
+	EntryFile string                  `json:"entryFile"`
+	Files     map[string]ArtifactFile `json:"files"`
+}
+
+// BuildArtifact collects the entry file plus every local asset it references.
 func BuildArtifact(pm *project.Manager, entry string) (*ArtifactBundle, error) {
 	if entry == "" {
 		entry = pm.FindEntryFile()
@@ -796,54 +837,126 @@ func BuildArtifact(pm *project.Manager, entry string) (*ArtifactBundle, error) {
 	if entry == "" {
 		return nil, fmt.Errorf("no artifact entry file found")
 	}
-	html, err := pm.Read(entry)
+	entryPath, local, err := canonicalArtifactPath(entry, "")
+	if err != nil {
+		return nil, fmt.Errorf("invalid artifact entry %q: %w", entry, err)
+	}
+	if !local {
+		return nil, fmt.Errorf("artifact entry %q is not a local project file", entry)
+	}
+	entryBytes, err := pm.ReadBytes(entryPath)
+	if err != nil {
+		return nil, fmt.Errorf("artifact entry %q: %w", entryPath, err)
+	}
+	files := map[string]ArtifactFile{entryPath: artifactFile(entryPath, entryBytes)}
+
+	refs, err := referencedAssets(string(entryBytes), entryPath)
 	if err != nil {
 		return nil, err
 	}
-	files := map[string]string{entry: html}
-
-	// Pull in referenced local assets (css, js, images, fonts).
-	for _, ref := range referencedAssets(html) {
+	for _, ref := range refs {
 		if _, ok := files[ref]; ok {
 			continue
 		}
-		if content, err := pm.Read(ref); err == nil {
-			files[ref] = content
+		data, err := pm.ReadBytes(ref)
+		if err != nil {
+			return nil, fmt.Errorf("artifact dependency %q referenced by %q: %w", ref, entryPath, err)
 		}
+		files[ref] = artifactFile(ref, data)
 	}
-	return &ArtifactBundle{EntryFile: entry, Files: files}, nil
+	return &ArtifactBundle{EntryFile: entryPath, Files: files}, nil
 }
 
-// referencedAssets extracts same-directory asset references from an HTML doc.
-func referencedAssets(html string) []string {
-	// Matches href/src with a quoted or unquoted value.
-	re := regexp.MustCompile(`(?i)\b(?:href|src)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>"'` + "`" + `]+))`)
+func artifactFile(filePath string, data []byte) ArtifactFile {
+	mediaType := mime.TypeByExtension(strings.ToLower(filepath.Ext(filePath)))
+	if mediaType == "" {
+		mediaType = http.DetectContentType(data)
+	}
+	if parsed, _, err := mime.ParseMediaType(mediaType); err == nil {
+		mediaType = parsed
+	}
 
+	if utf8.Valid(data) && textualArtifactMIME(mediaType) {
+		return ArtifactFile{Encoding: "utf-8", Content: string(data), MIMEType: mediaType}
+	}
+	return ArtifactFile{
+		Encoding: "base64",
+		Content:  base64.StdEncoding.EncodeToString(data),
+		MIMEType: mediaType,
+	}
+}
+
+func textualArtifactMIME(mediaType string) bool {
+	switch {
+	case strings.HasPrefix(mediaType, "text/"):
+		return true
+	case mediaType == "application/json",
+		mediaType == "application/javascript",
+		mediaType == "application/x-javascript",
+		mediaType == "application/xml",
+		mediaType == "application/xhtml+xml",
+		mediaType == "image/svg+xml":
+		return true
+	default:
+		return false
+	}
+}
+
+// canonicalArtifactPath resolves a URL-like project reference. Query strings
+// and fragments do not identify distinct files in the project tree.
+func canonicalArtifactPath(raw, entryDir string) (string, bool, error) {
+	ref, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return "", false, fmt.Errorf("invalid URL %q: %w", raw, err)
+	}
+	if ref.Scheme != "" || ref.Host != "" {
+		return "", false, nil
+	}
+	target := ref.Path
+	if target == "" {
+		return "", false, nil
+	}
+	if strings.HasPrefix(target, "/") {
+		target = strings.TrimLeft(target, "/")
+	} else if entryDir != "" {
+		target = path.Join(entryDir, target)
+	}
+	target = path.Clean(target)
+	if target == "." || target == ".." || strings.HasPrefix(target, "../") || strings.HasPrefix(target, "/") {
+		return "", true, fmt.Errorf("path escapes the project directory")
+	}
+	return target, true, nil
+}
+
+var artifactReferencePattern = regexp.MustCompile(`(?i)\b(?:href|src)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>"'` + "`" + `]+))`)
+
+// referencedAssets extracts canonical local href/src targets from an HTML doc.
+func referencedAssets(html, entryPath string) ([]string, error) {
 	var out []string
 	seen := map[string]bool{}
-	for _, m := range re.FindAllStringSubmatch(html, -1) {
-		raw := m[1]
+	entryDir := path.Dir(entryPath)
+	for _, match := range artifactReferencePattern.FindAllStringSubmatch(html, -1) {
+		raw := match[1]
 		if raw == "" {
-			raw = m[2]
+			raw = match[2]
 		}
 		if raw == "" {
-			raw = m[3]
+			raw = match[3]
 		}
-		raw = strings.TrimSpace(raw)
-		if raw == "" || strings.HasPrefix(raw, "http://") || strings.HasPrefix(raw, "https://") ||
-			strings.HasPrefix(raw, "//") || strings.HasPrefix(raw, "data:") || strings.HasPrefix(raw, "#") ||
-			strings.HasPrefix(raw, "mailto:") || strings.HasPrefix(raw, "tel:") {
+		if strings.TrimSpace(raw) == "" {
 			continue
 		}
-		raw = strings.SplitN(raw, "?", 2)[0]
-		raw = strings.SplitN(raw, "#", 2)[0]
-		if raw == "" || seen[raw] {
+		target, local, err := canonicalArtifactPath(raw, entryDir)
+		if err != nil {
+			return nil, fmt.Errorf("artifact reference %q: %w", raw, err)
+		}
+		if !local || seen[target] {
 			continue
 		}
-		seen[raw] = true
-		out = append(out, raw)
+		seen[target] = true
+		out = append(out, target)
 	}
-	return out
+	return out, nil
 }
 
 func nowMs() int64 { return time.Now().UnixMilli() }

@@ -3,37 +3,42 @@
   display: block;
   flex: 0 0 auto;
   object-fit: contain;
+  background: #f4f3ef;
+  border-radius: 4px;
+  padding: 2px;
 }
 .model-icon-fallback {
   display: grid;
   place-items: center;
   color: var(--muted);
+  background: transparent;
+  padding: 0;
 }
 .activity-center-button {
   display: inline-flex;
   align-items: center;
   gap: 7px;
   padding: 7px 10px;
-  border: 1px solid #d7d8e4;
+  border: 1px solid var(--line);
   border-radius: 7px;
-  background: #f9f9fc;
-  color: #4c4b61;
+  background: var(--surface);
+  color: var(--muted);
   font-size: 12px;
 }
 .activity-center-button:hover {
   background: var(--accent-soft);
-  border-color: #bdbed7;
+  border-color: var(--line);
 }
 .needs-attention .activity-center-button,
 .activity-center-button.needs-attention {
-  color: #805221;
-  background: #fff7e8;
+  color: var(--warning);
+  background: var(--warning-soft);
 }
 .project-status {
   display: inline-flex;
   gap: 5px;
   align-items: center;
-  color: #4b6655;
+  color: var(--success);
   font-size: 11px;
   line-height: 1.5;
   min-width: 0;
@@ -44,10 +49,10 @@
   white-space: nowrap;
 }
 .project-status.is-running {
-  color: #5556a0;
+  color: var(--accent);
 }
 .project-status.is-attention {
-  color: #805221;
+  color: var(--warning);
 }
 .project-status.is-failed {
   color: var(--error);
@@ -119,15 +124,15 @@
   flex-direction: column;
   flex: 0 1 auto;
   min-height: 0;
-  background: #f9f9fc;
-  border: 1px solid #d8d9e6;
+  background: var(--surface);
+  border: 1px solid var(--line);
   border-radius: 10px;
   margin: 0 3px 8px;
   overflow: hidden;
 }
 .run-activity.needs-attention {
-  background: #fffaf0;
-  border-color: #e3cfad;
+  background: var(--warning-soft);
+  border-color: var(--line);
 }
 .run-activity-top {
   flex: 0 0 auto;
@@ -147,7 +152,7 @@
   border-radius: 6px;
 }
 .run-activity-toggle:hover {
-  background: #eeedf7;
+  background: var(--subtle);
 }
 .run-activity-toggle > span {
   min-width: 0;
@@ -157,14 +162,14 @@
   display: block;
   font-size: 12px;
   font-weight: 590;
-  color: #383744;
+  color: var(--ink);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .run-activity-toggle small {
   display: block;
-  color: #64616f;
+  color: var(--muted);
   font-size: 11px;
   margin-top: 4px;
   overflow: hidden;
@@ -180,17 +185,17 @@
   align-items: center;
   gap: 4px;
   padding: 8px;
-  color: #67515c;
+  color: var(--error);
   font-size: 11px;
   border-radius: 6px;
 }
 .run-stop:hover {
-  background: #f4e8ec;
+  background: var(--error-soft);
 }
 .run-activity-details {
   flex: 0 1 auto;
   min-height: 0;
-  border-top: 1px solid #dfdfea;
+  border-top: 1px solid var(--line);
   padding: 12px;
   max-height: min(36dvh, 330px);
   overflow: auto;
@@ -214,7 +219,7 @@
 .brief-details summary,
 .activity-arguments summary {
   cursor: pointer;
-  color: #54516e;
+  color: var(--muted);
 }
 .brief-details > p {
   white-space: pre-wrap;
@@ -239,7 +244,7 @@
   margin: 0;
 }
 .activity-step {
-  border-top: 1px solid #e2e2eb;
+  border-top: 1px solid var(--line);
   font-size: 12px;
 }
 .activity-step > summary {
@@ -254,7 +259,7 @@
   display: none;
 }
 .activity-step > summary > .icon {
-  color: #57715f;
+  color: var(--success);
 }
 .activity-step.is-running > summary > .icon {
   color: var(--accent);
@@ -275,7 +280,7 @@
 }
 .activity-step-body {
   padding: 0 0 12px 21px;
-  color: #585562;
+  color: var(--muted);
 }
 .activity-step-body > code {
   display: block;
@@ -284,7 +289,7 @@
 }
 .activity-step-body pre {
   font: 11px/1.65 var(--mono);
-  background: #eeedf4;
+  background: var(--subtle);
   border-radius: 6px;
   padding: 10px;
   max-height: 220px;
@@ -306,7 +311,7 @@
   display: flex;
   align-items: flex-start;
   gap: 7px;
-  color: #54516e;
+  color: var(--muted);
   line-height: 1.5;
 }
 .run-progress-heading > .icon {
@@ -366,7 +371,7 @@
   margin-top: 6px;
   padding: 6px 0;
   font-size: 11px;
-  color: #54516e;
+  color: var(--muted);
 }
 .run-progress-details:hover {
   text-decoration: underline;
@@ -374,7 +379,7 @@
 }
 .run-progress-plan {
   margin-top: 10px;
-  color: #54516e;
+  color: var(--muted);
 }
 .run-progress-plan > summary {
   cursor: pointer;
@@ -418,7 +423,7 @@
 }
 .run-diagnostics > summary {
   cursor: pointer;
-  color: #54516e;
+  color: var(--muted);
 }
 .run-diagnostics > p {
   line-height: 1.6;
@@ -430,7 +435,7 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   font: 10px/1.65 var(--mono);
-  background: #eeedf4;
+  background: var(--subtle);
   padding: 9px;
   border-radius: 6px;
 }
@@ -445,8 +450,8 @@
 }
 .extension-question {
   padding: 12px;
-  background: #fff;
-  border: 1px solid #ddd4c4;
+  background: var(--surface);
+  border: 1px solid var(--line);
   border-radius: 7px;
   margin-bottom: 12px;
 }
@@ -466,8 +471,8 @@
 .extension-question select,
 .extension-question textarea {
   width: 100%;
-  border: 1px solid #d0ceda;
-  background: #fff;
+  border: 1px solid var(--line);
+  background: var(--surface);
   border-radius: 6px;
   padding: 8px;
 }

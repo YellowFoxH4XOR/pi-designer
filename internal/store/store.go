@@ -370,6 +370,34 @@ func (s *Store) CreateRun(r model.Run) error {
 	return err
 }
 
+// CreateRunWithMessage inserts a run and its opening user message atomically.
+// A failed transcript write must not leave a run that appears to be in progress.
+func (s *Store) CreateRunWithMessage(r model.Run, message *model.Message) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`INSERT INTO runs (id,project_id,conversation_id,status,prompt,error,started_at,ended_at)
+		VALUES (?,?,?,?,?,?,?,?)`,
+		r.ID, r.ProjectID, r.ConversationID, r.Status, r.Prompt, r.Error,
+		r.StartedAt.UnixMilli(), nil); err != nil {
+		return err
+	}
+	if message != nil {
+		if _, err := tx.Exec(`INSERT INTO messages (id,conversation_id,role,content,created_at) VALUES (?,?,?,?,?)`,
+			message.ID, message.ConversationID, message.Role, message.Content, message.CreatedAt.UnixMilli()); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`UPDATE conversations SET updated_at=? WHERE id=?`, time.Now().UnixMilli(), message.ConversationID); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
 // FinishRun marks a run terminal.
 func (s *Store) FinishRun(id, status, errMsg string) error {
 	s.mu.Lock()

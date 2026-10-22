@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -34,17 +35,50 @@ func (m *Manager) EnsureDir() error { return os.MkdirAll(m.root, 0o755) }
 // Resolve turns a client-supplied relative path into an absolute path inside
 // the project, or an error if it would escape.
 func (m *Manager) Resolve(rel string) (string, error) {
-	if rel == "" {
-		return "", fmt.Errorf("empty path")
+	clean, err := rootedPath(rel)
+	if err != nil {
+		return "", err
 	}
-	clean := filepath.Clean("/" + filepath.ToSlash(rel))
-	abs := filepath.Join(m.root, clean)
-	// Defence in depth: verify the resolved path is still under root.
+	abs := filepath.Join(m.root, filepath.FromSlash(clean))
 	relCheck, err := filepath.Rel(m.root, abs)
 	if err != nil || relCheck == ".." || strings.HasPrefix(relCheck, ".."+string(filepath.Separator)) {
 		return "", fmt.Errorf("path %q escapes the project directory", rel)
 	}
 	return abs, nil
+}
+
+// rootedPath cleans a project-relative path without allowing leading ".."
+// components to be normalized away. Leading slashes remain root-relative for
+// compatibility with Resolve's historical behavior.
+func rootedPath(rel string) (string, error) {
+	if rel == "" {
+		return "", fmt.Errorf("empty path")
+	}
+	input := rel
+	if filepath.VolumeName(rel) != "" {
+		return "", fmt.Errorf("path %q escapes the project directory", input)
+	}
+	rel = strings.TrimLeft(filepath.ToSlash(rel), "/")
+	depth := 0
+	for _, part := range strings.Split(rel, "/") {
+		switch part {
+		case "", ".":
+		case "..":
+			if depth == 0 {
+				return "", fmt.Errorf("path %q escapes the project directory", input)
+			}
+			depth--
+		default:
+			depth++
+		}
+	}
+	return path.Clean(rel), nil
+}
+
+// The configured project root is trusted; OpenRoot establishes confinement
+// beneath it, including when following links below the root.
+func (m *Manager) openRoot() (*os.Root, error) {
+	return os.OpenRoot(m.root)
 }
 
 // Rel converts an absolute path back to a project-relative slash path.
@@ -58,10 +92,19 @@ func (m *Manager) Rel(abs string) string {
 
 // List walks the project tree and returns file metadata.
 func (m *Manager) List() ([]model.File, error) {
+	root, err := m.openRoot()
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
+
 	var out []model.File
-	err := filepath.WalkDir(m.root, func(path string, d fs.DirEntry, err error) error {
+	err = fs.WalkDir(root.FS(), ".", func(rel string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return nil // skip unreadable entries rather than failing the whole listing
+		}
+		if rel == "." {
+			return nil
 		}
 		if d.IsDir() {
 			switch d.Name() {
@@ -74,7 +117,7 @@ func (m *Manager) List() ([]model.File, error) {
 		if err != nil {
 			return nil
 		}
-		rel := m.Rel(path)
+		rel = filepath.ToSlash(rel)
 		out = append(out, model.File{
 			Name: d.Name(),
 			Path: rel,
@@ -93,36 +136,59 @@ func (m *Manager) List() ([]model.File, error) {
 
 // Read returns a file's contents.
 func (m *Manager) Read(rel string) (string, error) {
-	abs, err := m.Resolve(rel)
-	if err != nil {
-		return "", err
-	}
-	b, err := os.ReadFile(abs)
+	b, err := m.ReadBytes(rel)
 	if err != nil {
 		return "", err
 	}
 	return string(b), nil
 }
 
-// Write creates or overwrites a file, creating parent directories as needed.
-func (m *Manager) Write(rel, content string) error {
-	abs, err := m.Resolve(rel)
+// ReadBytes returns a file's contents without converting binary data to text.
+func (m *Manager) ReadBytes(rel string) ([]byte, error) {
+	name, err := rootedPath(rel)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
-		return err
+	root, err := m.openRoot()
+	if err != nil {
+		return nil, err
 	}
-	return os.WriteFile(abs, []byte(content), 0o644)
+	defer root.Close()
+	return root.ReadFile(name)
 }
 
-// Delete removes a file or directory.
-func (m *Manager) Delete(rel string) error {
-	abs, err := m.Resolve(rel)
+// Write creates or overwrites a file, creating parent directories as needed.
+func (m *Manager) Write(rel, content string) error {
+	name, err := rootedPath(rel)
 	if err != nil {
 		return err
 	}
-	return os.RemoveAll(abs)
+	root, err := m.openRoot()
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	if err := root.MkdirAll(path.Dir(name), 0o755); err != nil {
+		return err
+	}
+	return root.WriteFile(name, []byte(content), 0o644)
+}
+
+// Delete removes a file or directory, but never the project root itself.
+func (m *Manager) Delete(rel string) error {
+	name, err := rootedPath(rel)
+	if err != nil {
+		return err
+	}
+	if name == "." {
+		return fmt.Errorf("cannot delete the project root")
+	}
+	root, err := m.openRoot()
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	return root.RemoveAll(name)
 }
 
 // Search returns files whose contents match the query (case-insensitive).
@@ -139,13 +205,19 @@ func (m *Manager) Search(query string, limit int) ([]model.File, error) {
 	if err != nil {
 		return nil, err
 	}
+	root, err := m.openRoot()
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
+
 	var out []model.File
 	for _, f := range files {
 		if len(out) >= limit {
 			break
 		}
 		if f.Kind == "code" || f.Kind == "text" || f.Kind == "markdown" {
-			b, err := os.ReadFile(filepath.Join(m.root, filepath.FromSlash(f.Path)))
+			b, err := root.ReadFile(f.Path)
 			if err != nil {
 				continue
 			}

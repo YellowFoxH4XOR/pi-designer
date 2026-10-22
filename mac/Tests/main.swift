@@ -17,6 +17,33 @@ let failed = try JSONDecoder().decode(ActivitySummary.self, from: Data(json.repl
 check(failed.outcome == "failed", "Failure has its own notification outcome")
 let canceled = try JSONDecoder().decode(ActivitySummary.self, from: Data(json.replacingOccurrences(of: "\"attention\":true", with: "\"attention\":false").replacingOccurrences(of: "succeeded", with: "canceled").utf8))
 check(canceled.outcome == nil, "Cancellation never sends a completion notification")
+
+let attentionKey = ActivityNotificationQueue.key(for: a)!
+var retryQueue = ActivityNotificationQueue()
+check(retryQueue.enqueue(a, enabled: true), "Enabled outcomes enter the pending notification queue")
+check(!retryQueue.delivered.contains(attentionKey), "An enabled outcome is not marked delivered before scheduling")
+let attemptTime = Date(timeIntervalSince1970: 100)
+check(retryQueue.takeNext(now: attemptTime, isEnabled: { _ in true })?.runId == a.runId, "Pending notification can be scheduled")
+check(!retryQueue.complete(key: attentionKey, succeeded: false, now: attemptTime), "Failed scheduling does not mark an outcome delivered")
+check(!retryQueue.delivered.contains(attentionKey), "Failed scheduling remains retryable")
+check(retryQueue.enqueue(a, enabled: true) && retryQueue.pendingCount == 1, "Repeated outcomes do not duplicate pending notification ownership")
+check(retryQueue.takeNext(now: attemptTime.addingTimeInterval(29), isEnabled: { _ in true })?.runId == nil, "Retry backoff prevents rapid rescheduling")
+check(retryQueue.takeNext(now: attemptTime.addingTimeInterval(30), isEnabled: { _ in true })?.runId == a.runId, "Failed scheduling becomes retryable after backoff")
+check(retryQueue.complete(key: attentionKey, succeeded: true, now: attemptTime.addingTimeInterval(30)), "Successful scheduling records the delivered outcome")
+check(retryQueue.delivered.contains(attentionKey) && retryQueue.pendingCount == 0, "Successful delivery clears retry ownership")
+var relaunchedAfterDelivery = ActivityNotificationQueue(delivered: retryQueue.delivered)
+check(relaunchedAfterDelivery.enqueue(a, enabled: true) && relaunchedAfterDelivery.pendingCount == 0, "Persisted successful delivery prevents duplicate scheduling after relaunch")
+
+var mutedQueue = ActivityNotificationQueue()
+let completedKey = ActivityNotificationQueue.key(for: completed)!
+check(mutedQueue.enqueue(completed, enabled: false), "Disabled notification preference deliberately consumes an outcome")
+check(mutedQueue.delivered.contains(completedKey) && mutedQueue.pendingCount == 0, "Disabled outcome is suppressed without scheduling")
+var relaunchedQueue = ActivityNotificationQueue(delivered: mutedQueue.delivered)
+check(relaunchedQueue.enqueue(completed, enabled: true) && relaunchedQueue.pendingCount == 0, "Persisted suppression prevents replay after preferences change or relaunch")
+
+let later = try JSONDecoder().decode(ActivitySummary.self, from: Data(json.replacingOccurrences(of: "\"runId\":\"r\"", with: "\"runId\":\"later\"").utf8))
+var boundedQueue = ActivityNotificationQueue(maximumPending: 1)
+check(boundedQueue.enqueue(a, enabled: true) && !boundedQueue.enqueue(later, enabled: true), "A full pending queue reports backpressure instead of advancing ownership")
 let suite = "dev.pidesigner.native-tests.\(UUID().uuidString)"
 let defaults = UserDefaults(suiteName: suite)!
 defer { defaults.removePersistentDomain(forName: suite) }

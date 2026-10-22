@@ -9,7 +9,7 @@ enum Config {
         return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("PiDesigner", isDirectory: true)
     }
-    static let background = NSColor(srgbRed: 236/255, green: 238/255, blue: 243/255, alpha: 1)
+    static let background = NSColor(srgbRed: 244/255, green: 245/255, blue: 247/255, alpha: 1)
 }
 
 final class Daemon {

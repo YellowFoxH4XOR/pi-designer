@@ -15,10 +15,6 @@ import (
 // agent would keep writing files and activity for a project that is gone.
 var ErrProjectBusy = errors.New("omp is working in this project. Stop the run before deleting it.")
 
-// errFilesRemain reports a deletion whose rows are gone but whose files are
-// not; the project no longer exists either way.
-var errFilesRemain = errors.New("the project was removed, but some of its files could not be deleted")
-
 // DeleteProject removes a project and everything πDesigner keeps for it: the
 // database rows (conversations, messages, runs and their activity cascade),
 // the project files, its preview renders and each conversation's omp session.
@@ -41,13 +37,10 @@ func (r *Runner) DeleteProject(proj model.Project) error {
 		r.mu.Unlock()
 	}()
 
-	// Session directories are keyed by conversation, so collect them before
-	// the rows cascade away.
+	// Keep the row (and its unique slug) until every directory is removed.
+	// A concurrent create must not reuse the path while RemoveAll is running.
 	convs, err := r.store.ListConversations(proj.ID)
 	if err != nil {
-		return err
-	}
-	if err := r.store.DeleteProject(proj.ID); err != nil {
 		return err
 	}
 
@@ -67,9 +60,9 @@ func (r *Runner) DeleteProject(proj model.Project) error {
 		}
 	}
 	if err := errors.Join(errs...); err != nil {
-		return fmt.Errorf("%w: %w", errFilesRemain, err)
+		return fmt.Errorf("delete project files (project retained for retry): %w", err)
 	}
-	return nil
+	return r.store.DeleteProject(proj.ID)
 }
 
 func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
@@ -93,9 +86,6 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 		status := http.StatusInternalServerError
 		if errors.Is(err, ErrProjectBusy) {
 			status = http.StatusConflict
-		}
-		if errors.Is(err, errFilesRemain) {
-			s.forgetProject(proj.ID)
 		}
 		writeErr(w, status, err.Error())
 		return

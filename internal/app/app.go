@@ -16,12 +16,14 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/akki/pidesigner/internal/agentext"
 	"github.com/akki/pidesigner/internal/api"
 	"github.com/akki/pidesigner/internal/content"
+	"github.com/akki/pidesigner/internal/httpguard"
 	"github.com/akki/pidesigner/internal/knowledge"
 	"github.com/akki/pidesigner/internal/omprun"
 	"github.com/akki/pidesigner/internal/preview"
@@ -55,6 +57,7 @@ type App struct {
 	ompBin        string
 	discoveryPath string
 	stopUpdates   context.CancelFunc
+	dataLock      *os.File
 }
 
 // OmpBin reports the resolved omp executable path, or empty when unresolved.
@@ -66,12 +69,28 @@ func Start(opts Options) (*App, error) {
 	if host == "" {
 		host = "127.0.0.1"
 	}
+	if host != "localhost" {
+		ip := net.ParseIP(host)
+		if ip == nil || !ip.IsLoopback() {
+			return nil, errors.New("πDesigner must bind to localhost or a loopback IP address")
+		}
+	}
 	if opts.DataDir == "" {
 		return nil, errors.New("DataDir is required")
 	}
 	if err := os.MkdirAll(opts.DataDir, 0o755); err != nil {
 		return nil, err
 	}
+	dataLock, err := lockDataDir(opts.DataDir)
+	if err != nil {
+		return nil, err
+	}
+	started := false
+	defer func() {
+		if !started {
+			_ = dataLock.Close()
+		}
+	}()
 	projectRoot := filepath.Join(opts.DataDir, "projects")
 	if err := os.MkdirAll(projectRoot, 0o755); err != nil {
 		return nil, err
@@ -146,7 +165,7 @@ func Start(opts Options) (*App, error) {
 		}
 	}
 
-	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", host, opts.Port))
+	listener, err := net.Listen("tcp", net.JoinHostPort(host, strconv.Itoa(opts.Port)))
 	if err != nil {
 		st.Close()
 		return nil, fmt.Errorf("listen: %w", err)
@@ -154,13 +173,13 @@ func Start(opts Options) (*App, error) {
 	addr := listener.Addr().(*net.TCPAddr)
 
 	httpSrv := &http.Server{
-		Handler:           mux,
+		Handler:           httpguard.Protect(mux),
 		ReadHeaderTimeout: 10 * time.Second,
 		// No write timeout: SSE streams stay open for the length of a run.
 	}
 
 	a := &App{
-		URL:           fmt.Sprintf("http://%s:%d", host, addr.Port),
+		URL:           "http://" + net.JoinHostPort(host, strconv.Itoa(addr.Port)),
 		Server:        httpSrv,
 		Store:         st,
 		Catalog:       cat,
@@ -169,6 +188,7 @@ func Start(opts Options) (*App, error) {
 		listener:      listener,
 		ompBin:        resolvedOmp,
 		discoveryPath: filepath.Join(opts.DataDir, "runtime.json"),
+		dataLock:      dataLock,
 	}
 	// A stable discovery file lets MCP follow the native app across random
 	// loopback ports. It contains no credentials and is private to this user.
@@ -198,6 +218,7 @@ func Start(opts Options) (*App, error) {
 			log.Printf("server error: %v", err)
 		}
 	}()
+	started = true
 
 	return a, nil
 }
@@ -219,7 +240,7 @@ func (a *App) Shutdown(ctx context.Context) error {
 	if err := a.Server.Shutdown(ctx); err != nil {
 		return err
 	}
-	return a.Store.Close()
+	return errors.Join(a.Store.Close(), a.dataLock.Close())
 }
 
 // withStatic serves the built UI, falling back to index.html for SPA routes.

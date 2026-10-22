@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 // Real API + browser, isolated data, fixture RPC. No accounts or inference.
-const { chromium } = require('../ui/node_modules/playwright-core');
 const { spawn, execFileSync } = require('node:child_process');
 const fs = require('node:fs/promises');
 const path = require('node:path');
@@ -8,9 +7,18 @@ const os = require('node:os');
 const assert = require('node:assert/strict');
 (async () => {
  const root = path.resolve(__dirname, '..');
+ const daemon = path.join(root, 'bin/pidesigner');
+ const quoteShell = value => `'${value.replace(/'/g, "'\\''")}'`;
+ try {
+  const info = await fs.stat(daemon);
+  if (!info.isFile() || (info.mode & 0o111) === 0) throw new Error('not an executable file');
+ } catch {
+  throw new Error(`Missing executable daemon at ${daemon}.\nBuild it with: cd ${quoteShell(root)} && go build -o bin/pidesigner ./cmd/pidesigner`);
+ }
+ const { chromium } = require('../ui/node_modules/playwright-core');
  const data = await fs.mkdtemp(path.join(os.tmpdir(), 'omp-activity-review-'));
  const out = path.join(root, '.impeccable/review'); await fs.mkdir(out, { recursive: true });
- const child = spawn(path.join(root, 'bin/pidesigner'), ['--port','0','--print-url','--data',data,'--content',path.join(root,'content'),'--ui',path.join(root,'ui/dist'),'--omp',path.join(root,'scripts/fixtures/omp-rpc.cjs')], { stdio: ['ignore','pipe','pipe'] });
+ const child = spawn(daemon, ['--port','0','--print-url','--data',data,'--content',path.join(root,'content'),'--ui',path.join(root,'ui/dist'),'--omp',path.join(root,'scripts/fixtures/omp-rpc.cjs')], { stdio: ['ignore','pipe','pipe'] });
  let logs = ''; child.stderr.on('data', chunk => { logs += chunk; });
  let browser;
  const checks = []; const pass = name => { checks.push(name); console.log('PASS',name); };
@@ -82,6 +90,41 @@ const assert = require('node:assert/strict');
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
   assert.ok(await page.getByLabel('Refine your design').isVisible());await page.screenshot({path:path.join(out,'activity-studio-900.png')});
   pass('Activity, composer and preview fit the minimum Mac window');
+  await page.setViewportSize({width:1440,height:900});
+  for(const [file,content] of [['a.txt','A original'],['b.txt','B original']]) {
+    const response=await fetch(`${base}/api/projects/${projectId}/file`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:file,content})});
+    assert.equal(response.status,200);
+  }
+  await page.goto(base+'/#project/'+projectId);
+  await page.getByRole('button',{name:'Code',exact:true}).click();
+  await page.getByRole('button',{name:'a.txt',exact:true}).click();
+  await page.getByRole('textbox',{name:'Source for a.txt',exact:true}).fill('A snapshot');
+  let releaseSave;
+  const saveGate=new Promise(resolve=>{releaseSave=resolve;});
+  const fileRoute=`**/api/projects/${projectId}/file`;
+  await page.route(fileRoute,async route=>{
+    if(route.request().method()!=='PUT'){await route.continue();return;}
+    const response=await route.fetch();await saveGate;await route.fulfill({response});
+  });
+  await page.getByRole('button',{name:'Save changes',exact:true}).click();
+  assert.ok(await page.getByRole('button',{name:'b.txt',exact:true}).isDisabled());
+  await page.getByRole('textbox',{name:'Source for a.txt',exact:true}).fill('A newer edit');
+  releaseSave();
+  await page.waitForFunction(()=>!document.querySelector('.source-toolbar button').disabled);
+  assert.equal(await page.getByRole('textbox',{name:'Source for a.txt',exact:true}).inputValue(),'A newer edit');
+  assert.ok(await page.getByRole('button',{name:'Save changes',exact:true}).isEnabled());
+  assert.equal((await api(`/api/projects/${projectId}/file?path=a.txt`)).content,'A snapshot');
+  await page.unroute(fileRoute);
+  await page.getByRole('button',{name:'Save changes',exact:true}).click();
+  await page.waitForFunction(()=>document.documentElement.dataset.unsavedChanges==='false');
+  await page.getByRole('button',{name:'b.txt',exact:true}).click();
+  await page.getByRole('textbox',{name:'Source for b.txt',exact:true}).fill('A snapshot');
+  await page.waitForFunction(()=>document.documentElement.dataset.unsavedChanges==='true');
+  assert.ok(await page.getByRole('button',{name:'Save changes',exact:true}).isEnabled());
+  await page.getByRole('button',{name:'Save changes',exact:true}).click();
+  await page.waitForFunction(()=>document.documentElement.dataset.unsavedChanges==='false');
+  assert.equal((await api(`/api/projects/${projectId}/file?path=b.txt`)).content,'A snapshot');
+  pass('Pending saves lock file selection, preserve newer edits, and cannot mark another file clean');
   const stress=await api('/api/projects',{name:'Scroll containment fixture',skillId:'web-prototype'});
   const stressRun=await api(`/api/projects/${stress.project.id}/chat`,{prompt:'SCROLL_STRESS',conversationId:stress.conversationId,model:'openai/gpt-fixture',thinking:'medium'});
   await waitForRun(stressRun.runId,'succeeded');

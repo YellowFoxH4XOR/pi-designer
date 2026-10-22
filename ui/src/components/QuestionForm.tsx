@@ -1,5 +1,4 @@
 import { useRef, useState } from 'preact/hooks';
-import { Icon } from './Icon';
 import {
   OTHER_VALUE, formatFormAnswers, isAnswered, resolveDefault,
   type FormAnswers, type FormValue, type Question, type QuestionFormData,
@@ -198,8 +197,7 @@ export function QuestionForm({ form, disabled = false, onSubmit }: {
 
   return <form ref={formRef} class="question-form" onSubmit={submit} noValidate aria-label={form.title || 'Questions from omp'}>
     <div class="question-form-head">
-      <span class="question-form-kicker"><Icon name="skills" size={15}/>A few quick questions</span>
-      {form.title && <h3 class="question-form-title">{form.title}</h3>}
+      <h3 class="question-form-title">{form.title || 'Questions from omp'}</h3>
     </div>
     {form.questions.map((question, index) => {
       const error = errors[question.id];
