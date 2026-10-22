@@ -27,10 +27,10 @@ final class NativeActivityController: NSObject, UNUserNotificationCenterDelegate
     private var initialized = false
     private var generation = 0
     private var outcomeCursor: Int64?
-    private var delivered: Set<String>
+    private var notificationQueue: ActivityNotificationQueue
 
     override init() {
-        delivered = Set(preferences.defaults.stringArray(forKey: "activity.delivered") ?? [])
+        notificationQueue = ActivityNotificationQueue(delivered: Set(preferences.defaults.stringArray(forKey: "activity.delivered") ?? []))
         super.init()
         UNUserNotificationCenter.current().delegate = self
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -56,6 +56,7 @@ final class NativeActivityController: NSObject, UNUserNotificationCenterDelegate
         }
         globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .leftMouseDown) { [weak self] _ in self?.collapseIfOutside() }
     }
+
     deinit {
         timer?.invalidate(); request?.cancel()
         if let monitor = localMonitor { NSEvent.removeMonitor(monitor) }
@@ -93,15 +94,23 @@ final class NativeActivityController: NSObject, UNUserNotificationCenterDelegate
                 }
                 self.model.disconnected = false
                 self.model.items = result.activities.sorted { a, b in a.active != b.active ? a.active : a.startedAt > b.startedAt }
-                for activity in result.activities {
-                    // Baseline historical results do not cause a notification storm.
-                    if !self.initialized, let outcome = activity.outcome { self.recordDelivered(activity.runId + ":" + outcome) }
+                // Baseline snapshots establish a cursor without replaying history.
+                // A reconnect must still preserve and retry any outcomes already
+                // queued in memory.
+                var outcomesCaptured = true
+                if self.initialized {
+                    for outcome in result.outcomes ?? [] {
+                        if !self.notifyIfNeeded(outcome) {
+                            outcomesCaptured = false
+                            break
+                        }
+                    }
                 }
-                // Cursor-based outcomes include rapid completions superseded by
-                // another run between polls; latest-project snapshots alone cannot.
-                if self.initialized { for outcome in result.outcomes ?? [] { self.notifyIfNeeded(outcome) } }
-                self.outcomeCursor = result.cursor
+                // On queue saturation, keep this journal page readable until
+                // pending ownership frees capacity; do not lose later outcomes.
+                if !self.initialized || outcomesCaptured { self.outcomeCursor = result.cursor }
                 self.initialized = true
+                self.schedulePendingNotification()
                 let active = result.activities.filter { $0.active }
                 self.statusItem?.button?.title = active.isEmpty ? "" : " \(active.count)"
                 self.statusItem?.button?.toolTip = active.first.map { "\($0.projectName) — \($0.label)" } ?? "πDesigner — no active tasks"
@@ -110,29 +119,49 @@ final class NativeActivityController: NSObject, UNUserNotificationCenterDelegate
         }
         request?.resume()
     }
-    private func recordDelivered(_ key: String) {
-        delivered.insert(key)
-        // Bounded across app launches; IDs are stable and notifications dedupe.
-        if delivered.count > 1024 { delivered = Set(delivered.sorted().suffix(512)) }
-        preferences.defaults.set(Array(delivered), forKey: "activity.delivered")
+    private func persistDeliveredIfChanged(from previous: Set<String>) {
+        guard previous != notificationQueue.delivered else { return }
+        preferences.defaults.set(Array(notificationQueue.delivered), forKey: "activity.delivered")
     }
-    private func notifyIfNeeded(_ activity: ActivitySummary) {
-        guard let outcome = activity.outcome else { return }
-        let key = activity.runId + ":" + outcome
-        guard !delivered.contains(key) else { return }
-        // Record semantic transition even when disabled so enabling notifications
-        // later doesn't replay old results. Failed delivery is reported in settings.
-        recordDelivered(key)
-        let category = activity.attention ? "attention" : activity.status == "failed" ? "failure" : "completed"
-        guard preferences[category] else { return }
+
+    private func notificationCategory(for activity: ActivitySummary) -> String {
+        activity.attention ? "attention" : activity.status == "failed" ? "failure" : "completed"
+    }
+
+    @discardableResult
+    private func notifyIfNeeded(_ activity: ActivitySummary) -> Bool {
+        guard activity.outcome != nil else { return true }
+        let previous = notificationQueue.delivered
+        let accepted = notificationQueue.enqueue(activity, enabled: preferences[notificationCategory(for: activity)])
+        persistDeliveredIfChanged(from: previous)
+        return accepted
+    }
+
+    private func schedulePendingNotification() {
+        let previous = notificationQueue.delivered
+        guard let activity = notificationQueue.takeNext(now: Date(), isEnabled: { self.preferences[self.notificationCategory(for: $0)] }) else {
+            persistDeliveredIfChanged(from: previous)
+            return
+        }
+        persistDeliveredIfChanged(from: previous)
+        guard let key = ActivityNotificationQueue.key(for: activity) else { return }
+
         let content = UNMutableNotificationContent()
         content.title = activity.attention ? "omp needs your attention" : activity.status == "failed" ? "omp couldn’t finish" : "omp finished your task"
         content.body = preferences["previews"] ? "\(activity.projectName) — \(activity.label)" : "Open πDesigner to view the project."
         content.threadIdentifier = activity.projectId
         content.userInfo = ["projectId": activity.projectId, "conversationId": activity.conversationId ?? ""]
         if preferences["sound"] { content.sound = .default }
-        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: key, content: content, trigger: nil)) { error in
-            if let error { NSLog("πDesigner notification unavailable: %@", error.localizedDescription) }
+        let request = UNNotificationRequest(identifier: key, content: content, trigger: nil)
+        UNUserNotificationCenter.current().add(request) { [weak self] error in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                let previous = self.notificationQueue.delivered
+                _ = self.notificationQueue.complete(key: key, succeeded: error == nil, now: Date())
+                self.persistDeliveredIfChanged(from: previous)
+                if let error { NSLog("πDesigner notification unavailable: %@", error.localizedDescription) }
+                self.schedulePendingNotification()
+            }
         }
     }
     func requestNotificationPermission(completion: @escaping () -> Void) {

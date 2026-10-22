@@ -3,6 +3,7 @@ import { api, previewURL, type FileEntry, type Project } from '../api';
 import { frames, type Frame } from '../state';
 import { Empty, IconButton } from './common';
 import { Icon } from './Icon';
+import { completeSourceSave } from '../source-editor-save';
 
 export interface FileChange { path: string; kind: string; stamp: string }
 export function PreviewPane({ project, files, frame, onFrame, changes, busy, activityLabel, onError }: {
@@ -59,8 +60,20 @@ function SourceEditor({ projectId, files, defaultFile, busy, onDirty, onError }:
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [failure, setFailure] = useState('');
+  const selectedRef = useRef(selected);
+  selectedRef.current = selected;
+  const projectIdRef = useRef(projectId);
+  projectIdRef.current = projectId;
+  const contentRef = useRef(content);
+  contentRef.current = content;
+  const originalRef = useRef(original);
+  originalRef.current = original;
+  const editorGeneration = useRef(0);
+  const savingRef = useRef(false);
+  const mountedRef = useRef(true);
   const dirty = content !== original;
   const editableFiles = files.filter((f) => ['code', 'markdown', 'text'].includes(f.kind));
+  useEffect(() => () => { mountedRef.current = false; }, []);
   useEffect(() => {
     onDirty(dirty);
     document.documentElement.dataset.unsavedChanges = String(dirty);
@@ -78,22 +91,62 @@ function SourceEditor({ projectId, files, defaultFile, busy, onDirty, onError }:
       window.removeEventListener('beforeunload', beforeUnload);
     };
   }, [dirty]);
+  function chooseFile(path: string) {
+    if (savingRef.current || path === selectedRef.current) return;
+    if (dirty && !confirm('Discard unsaved changes to this file?')) return;
+    selectedRef.current = path;
+    editorGeneration.current += 1;
+    setSelected(path);
+  }
   useLayoutEffect(() => {
+    editorGeneration.current += 1;
     let active = true;
     if (!editableFiles.some((f) => f.path === selected)) {
       if (editableFiles.length) setSelected(editableFiles[0].path);
       return;
     }
     setLoading(true); setFailure('');
-    api.file(projectId, selected).then((d) => { if (active) { setContent(d.content); setOriginal(d.content); } }).catch((e) => { if (active) setFailure(e.message); }).finally(() => { if (active) setLoading(false); });
+    api.file(projectId, selected).then((d) => {
+      if (active) {
+        contentRef.current = d.content;
+        originalRef.current = d.content;
+        setContent(d.content);
+        setOriginal(d.content);
+      }
+    }).catch((e) => { if (active) setFailure(e.message); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [projectId, selected]);
   async function save() {
-    if (!dirty || saving || busy) return;
+    if (!dirty || savingRef.current || busy) return;
+    const request = {
+      projectId,
+      filePath: selected,
+      generation: editorGeneration.current,
+      content,
+    };
+    savingRef.current = true;
     setSaving(true);
-    try { await api.writeFile(projectId, selected, content); setOriginal(content); }
-    catch (e) { onError(String(e)); }
-    finally { setSaving(false); }
+    try {
+      await api.writeFile(request.projectId, request.filePath, request.content);
+      if (!mountedRef.current) return;
+      const current = {
+        projectId: projectIdRef.current,
+        filePath: selectedRef.current,
+        generation: editorGeneration.current,
+        content: contentRef.current,
+        original: originalRef.current,
+      };
+      const completed = completeSourceSave(current, request);
+      if (completed !== current) {
+        originalRef.current = completed.original;
+        setOriginal(completed.original);
+      }
+    } catch (e) {
+      if (mountedRef.current) onError(String(e));
+    } finally {
+      savingRef.current = false;
+      if (mountedRef.current) setSaving(false);
+    }
   }
-  return <div class="source-editor"><aside class="source-tree" aria-label="Project files"><h3>Files</h3>{files.map((f) => <button key={f.path} disabled={!editableFiles.includes(f)} class={f.path === selected ? 'active' : ''} onClick={() => { if (!dirty || confirm('Discard unsaved changes to this file?')) setSelected(f.path); }}><Icon name="file" size={14}/><span>{f.path}</span></button>)}</aside><div class="source-main"><div class="source-toolbar"><span>{selected}{dirty ? ' · Unsaved' : ''}</span><button class="button primary small" disabled={!dirty || saving || busy || loading} onClick={save}>{saving ? 'Saving…' : 'Save changes'}</button></div>{failure ? <p class="inline-error" role="alert">{failure}</p> : loading ? <div class="loading-state">Loading source…</div> : !editableFiles.length ? <Empty icon="code" title="No source files yet"><p>Files appear here as omp builds your design.</p></Empty> : <textarea class="code-input" aria-label={`Source for ${selected}`} spellcheck={false} readOnly={busy} value={content} onInput={(e) => setContent(e.currentTarget.value)} onKeyDown={(e) => { if (e.key === 's' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void save(); } }}/>}</div></div>;
+  return <div class="source-editor"><aside class="source-tree" aria-label="Project files"><h3>Files</h3>{files.map((f) => <button key={f.path} disabled={!editableFiles.includes(f) || saving} class={f.path === selected ? 'active' : ''} onClick={() => chooseFile(f.path)}><Icon name="file" size={14}/><span>{f.path}</span></button>)}</aside><div class="source-main"><div class="source-toolbar"><span>{selected}{dirty ? ' · Unsaved' : ''}</span><button class="button primary small" disabled={!dirty || saving || busy || loading} onClick={save}>{saving ? 'Saving…' : 'Save changes'}</button></div>{failure ? <p class="inline-error" role="alert">{failure}</p> : loading ? <div class="loading-state">Loading source…</div> : !editableFiles.length ? <Empty icon="code" title="No source files yet"><p>Files appear here as omp builds your design.</p></Empty> : <textarea class="code-input" aria-label={`Source for ${selected}`} spellcheck={false} readOnly={busy} value={content} onInput={(e) => { contentRef.current = e.currentTarget.value; setContent(e.currentTarget.value); }} onKeyDown={(e) => { if (e.key === 's' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void save(); } }}/>}</div></div>;
 }

@@ -42,6 +42,8 @@ export function Studio({ projectId, systems, run, onMonitor, onStart, onHome, on
   const [preview, setPreview] = useState<Render | null>(null);
   const messagesPane = useRef<HTMLDivElement>(null);
   const follow = useRef(true);
+  const conversationTransition = useRef(false);
+  const appliedInitialConversation = useRef('');
   const busy = run?.status === 'running';
   const monitor = useRef(onMonitor); monitor.current = onMonitor;
 
@@ -64,7 +66,18 @@ export function Studio({ projectId, systems, run, onMonitor, onStart, onHome, on
     return () => { active = false; };
   }, [conversationId, run?.id, run?.status]);
 
-  useEffect(() => { if (initialConversation && conversations.some(c => c.id === initialConversation)) setConversationId(initialConversation); }, [initialConversation, conversations]);
+  useEffect(() => {
+    if (!initialConversation) {
+      appliedInitialConversation.current = '';
+      return;
+    }
+    const key = `${projectId}\0${initialConversation}`;
+    if (conversationTransition.current || appliedInitialConversation.current === key) return;
+    if (conversations.some((c) => c.id === initialConversation)) {
+      appliedInitialConversation.current = key;
+      setConversationId(initialConversation);
+    }
+  }, [initialConversation, conversations, projectId, connecting]);
   useEffect(() => {
     let active = true;
     setHistoryActivity(null);
@@ -115,7 +128,8 @@ export function Studio({ projectId, systems, run, onMonitor, onStart, onHome, on
   // next-step chips all submit the same way.
   async function sendText(value: string): Promise<boolean> {
     const text = value.trim();
-    if (!project || !text || busy || connecting) return false;
+    if (!project || !text || busy || connecting || conversationTransition.current) return false;
+    conversationTransition.current = true;
     setConnecting(true);
     try {
       let id = conversationId;
@@ -128,7 +142,10 @@ export function Studio({ projectId, systems, run, onMonitor, onStart, onHome, on
       follow.current = true;
       return true;
     } catch (e) { onError(String(e)); return false; }
-    finally { setConnecting(false); }
+    finally {
+      conversationTransition.current = false;
+      setConnecting(false);
+    }
   }
   async function send() {
     if (!prompt.trim()) return;
@@ -138,9 +155,19 @@ export function Studio({ projectId, systems, run, onMonitor, onStart, onHome, on
     if (!sent) setPrompt(text);
   }
   async function newConversation() {
-    if (!project || busy) return;
-    try { const c = await api.createConversation(project.id); setConversations((all) => [c.conversation, ...all]); setConversationId(c.conversation.id); setMessages([]); }
-    catch (e) { onError(String(e)); }
+    if (!project || busy || connecting || conversationTransition.current) return;
+    conversationTransition.current = true;
+    setConnecting(true);
+    try {
+      const c = await api.createConversation(project.id);
+      setConversations((all) => [c.conversation, ...all]);
+      setConversationId(c.conversation.id);
+      setMessages([]);
+    } catch (e) { onError(String(e)); }
+    finally {
+      conversationTransition.current = false;
+      setConnecting(false);
+    }
   }
   const answeredAt = useMemo(() => {
     const positions = new Map<string, number>();
@@ -184,7 +211,7 @@ export function Studio({ projectId, systems, run, onMonitor, onStart, onHome, on
 
   return <div class="studio-shell">
     <header class="studio-header"><IconButton icon="home" label="Back to home" onClick={onHome}/><Logo size={26}/><button class="project-title" onClick={() => { setName(project.name); setRenaming(true); }} title="Rename project" aria-label="Rename project">{project.name}<Icon name="chevron" size={14}/></button><span class="studio-workflow">{skillNames[project.skillId || ''] || 'Prototype'}</span><div class="studio-header-end">{activityControl}<span class="local-label"><span class="status-dot"/>Local workspace</span><button class="button secondary small" onClick={() => setPickingSystem(true)} disabled={busy}><Icon name="palette" size={16}/>{system?.name || 'Design system'}</button><IconButton icon="trash" label="Delete project" onClick={() => setDeleting(true)}/></div></header>
-    <div class="studio-content"><section class="conversation-pane" aria-label="Design conversation"><div class="conversation-toolbar"><label><span class="sr-only">Conversation</span><select value={conversationId} disabled={busy} onChange={(e) => { setConversationId(e.currentTarget.value); follow.current = true; }}>{conversations.map((c, i) => <option key={c.id} value={c.id}>{c.title === 'Main' ? 'Design conversation' : `${c.title} ${conversations.length - i}`}</option>)}</select></label><IconButton icon="plus" label="New conversation" onClick={newConversation} disabled={busy}/></div>
+    <div class="studio-content"><section class="conversation-pane" aria-label="Design conversation"><div class="conversation-toolbar"><label><span class="sr-only">Conversation</span><select value={conversationId} disabled={busy || connecting} onChange={(e) => { if (busy || connecting || conversationTransition.current) return; setConversationId(e.currentTarget.value); follow.current = true; }}>{conversations.map((c, i) => <option key={c.id} value={c.id}>{c.title === 'Main' ? 'Design conversation' : `${c.title} ${conversations.length - i}`}</option>)}</select></label><IconButton icon="plus" label="New conversation" onClick={newConversation} disabled={busy || connecting}/></div>
       {displayedActivity && <RunActivity key={displayedActivity.id} run={displayedActivity} workflow={skillNames[project.skillId || ''] || 'Prototype'} system={system?.name} onError={onError}/>}
       <div class="conversation-messages" ref={messagesPane} onScroll={(e) => { const el = e.currentTarget; follow.current = el.scrollHeight - el.scrollTop - el.clientHeight < 100; }}>
         {!messages.length && !showLive && <div class="conversation-welcome"><Logo size={36}/><h2>Let’s make it yours.</h2><p>Describe the design you have in mind. We’ll build it here, together.</p></div>}

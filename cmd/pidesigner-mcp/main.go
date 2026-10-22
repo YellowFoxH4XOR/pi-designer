@@ -15,9 +15,11 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -221,7 +223,7 @@ func toolDefinitions() []toolDef {
 		},
 		{
 			Name:        "get_artifact",
-			Description: "Get the artifact entry file plus every sibling asset it references, in one call. Prefer this over multiple get_file calls.",
+			Description: "Get the artifact entry file plus every sibling asset it references, in one call. Prefer this over multiple get_file calls. Each files[path] value is an object with encoding (utf-8 or base64), content (text or base64-encoded bytes), and mimeType.",
 			InputSchema: objectSchema(map[string]any{
 				"project": projArg,
 				"entry":   map[string]any{"type": "string", "description": "Entry file. Optional: defaults to the project's entry file."},
@@ -233,7 +235,7 @@ func toolDefinitions() []toolDef {
 			InputSchema: objectSchema(map[string]any{
 				"project": projArg,
 				"query":   map[string]any{"type": "string", "description": "Search query."},
-				"limit":   map[string]any{"type": "integer", "description": "Max results (default 100)."},
+				"limit":   map[string]any{"type": "integer", "description": "Optional maximum number of results (default 100)."},
 			}),
 		},
 		{
@@ -320,7 +322,10 @@ func (s *server) callTool(ctx context.Context, req rpcRequest) {
 	}
 	args := map[string]any{}
 	if len(p.Arguments) > 0 {
-		_ = json.Unmarshal(p.Arguments, &args)
+		if err := json.Unmarshal(p.Arguments, &args); err != nil {
+			s.respond(req, toolError("invalid tool arguments: "+err.Error()))
+			return
+		}
 	}
 
 	projectRef := strings.TrimSpace(argStr(args, "project"))
@@ -340,7 +345,16 @@ func (s *server) callTool(ctx context.Context, req rpcRequest) {
 	case "get_artifact":
 		s.proxy(ctx, req, http.MethodGet, projectURL+"/artifact?entry="+url.QueryEscape(argStr(args, "entry")), nil)
 	case "search_files":
-		s.proxy(ctx, req, http.MethodGet, projectURL+"/search?q="+url.QueryEscape(argStr(args, "query")), nil)
+		path := projectURL + "/search?q=" + url.QueryEscape(argStr(args, "query"))
+		if rawLimit, provided := args["limit"]; provided {
+			limit, ok := integerArg(rawLimit)
+			if !ok {
+				s.respond(req, toolError("search_files limit must be an integer"))
+				return
+			}
+			path += "&limit=" + strconv.Itoa(limit)
+		}
+		s.proxy(ctx, req, http.MethodGet, path, nil)
 	case "write_file":
 		s.proxy(ctx, req, http.MethodPut, projectURL+"/file", map[string]any{
 			"path": argStr(args, "path"), "content": argStr(args, "content"),
@@ -425,6 +439,18 @@ func argStr(args map[string]any, key string) string {
 	return ""
 }
 
+func integerArg(value any) (int, bool) {
+	n, ok := value.(float64)
+	if !ok || math.IsNaN(n) || math.IsInf(n, 0) || math.Trunc(n) != n {
+		return 0, false
+	}
+	intLimit := math.Ldexp(1, strconv.IntSize-1)
+	if n < -intLimit || n >= intLimit {
+		return 0, false
+	}
+	return int(n), true
+}
+
 // ---------------------------------------------------------- resource layer
 
 func (s *server) resources(ctx context.Context) []map[string]any {
@@ -477,44 +503,87 @@ func (s *server) readResource(ctx context.Context, req rpcRequest) {
 	var p struct {
 		URI string `json:"uri"`
 	}
-	if err := json.Unmarshal(req.Params, &p); err != nil {
-		s.respond(req, rpcResponse{JSONRPC: "2.0", ID: req.ID, Error: &rpcError{Code: -32602, Message: "invalid params"}})
+	if err := json.Unmarshal(req.Params, &p); err != nil || strings.TrimSpace(p.URI) == "" {
+		s.respondError(req, -32602, "invalid params: uri is required")
 		return
 	}
-	text := ""
+
+	var (
+		endpoint       string
+		isDesignSystem bool
+	)
 	switch {
 	case strings.HasPrefix(p.URI, "od://design-systems/") && strings.HasSuffix(p.URI, "/DESIGN.md"):
 		id := strings.TrimSuffix(strings.TrimPrefix(p.URI, "od://design-systems/"), "/DESIGN.md")
-		resp, err := s.http.Get(s.baseURL() + "/api/design-systems/" + id + "/context")
-		if err == nil {
-			defer resp.Body.Close()
-			var ctxPayload struct {
-				DesignMD string `json:"designMd"`
-			}
-			if json.NewDecoder(resp.Body).Decode(&ctxPayload) == nil {
-				text = ctxPayload.DesignMD
-			}
+		if id == "" || strings.Contains(id, "/") {
+			s.respondError(req, -32002, "resource not found: "+p.URI)
+			return
 		}
-	case strings.HasPrefix(p.URI, "od://skills/"):
+		endpoint = "/api/design-systems/" + url.PathEscape(id) + "/context"
+		isDesignSystem = true
+	case strings.HasPrefix(p.URI, "od://skills/") && strings.HasSuffix(p.URI, "/SKILL.md"):
 		id := strings.TrimSuffix(strings.TrimPrefix(p.URI, "od://skills/"), "/SKILL.md")
-		resp, err := s.http.Get(s.baseURL() + "/api/skills/" + id + "/document")
-		if err == nil {
-			defer resp.Body.Close()
-			var payload struct {
-				Content string `json:"content"`
-			}
-			if resp.StatusCode == http.StatusOK && json.NewDecoder(resp.Body).Decode(&payload) == nil {
-				text = payload.Content
-			}
+		if id == "" || strings.Contains(id, "/") {
+			s.respondError(req, -32002, "resource not found: "+p.URI)
+			return
 		}
-	}
-	if text == "" {
-		s.respond(req, rpcResponse{JSONRPC: "2.0", ID: req.ID, Error: &rpcError{Code: -32602, Message: "resource not found: " + p.URI}})
+		endpoint = "/api/skills/" + url.PathEscape(id) + "/document"
+	default:
+		s.respondError(req, -32002, "resource not found: "+p.URI)
 		return
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, s.baseURL()+endpoint, nil)
+	if err != nil {
+		s.respondError(req, -32603, "resource retrieval failed: "+err.Error())
+		return
+	}
+	resp, err := s.http.Do(httpReq)
+	if err != nil {
+		s.respondError(req, -32603, "resource retrieval failed: "+err.Error())
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusNotFound {
+		s.respondError(req, -32002, "resource not found: "+p.URI)
+		return
+	}
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		body, _ := io.ReadAll(resp.Body)
+		s.respondError(req, -32603, fmt.Sprintf("resource retrieval failed: daemon returned %d: %s", resp.StatusCode, strings.TrimSpace(string(body))))
+		return
+	}
+
+	var text string
+	if isDesignSystem {
+		var payload struct {
+			DesignMD string `json:"designMd"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+			s.respondError(req, -32603, "resource retrieval failed: invalid design-system response: "+err.Error())
+			return
+		}
+		text = payload.DesignMD
+	} else {
+		var payload struct {
+			Content string `json:"content"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+			s.respondError(req, -32603, "resource retrieval failed: invalid skill response: "+err.Error())
+			return
+		}
+		text = payload.Content
 	}
 	s.respond(req, map[string]any{
 		"contents": []map[string]any{{"uri": p.URI, "mimeType": "text/markdown", "text": text}},
 	})
+}
+
+func (s *server) respondError(req rpcRequest, code int, message string) {
+	if len(req.ID) == 0 {
+		return
+	}
+	s.write(rpcResponse{JSONRPC: "2.0", ID: req.ID, Error: &rpcError{Code: code, Message: message}})
 }
 
 // ------------------------------------------------------------- client setup

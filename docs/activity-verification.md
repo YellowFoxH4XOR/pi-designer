@@ -33,6 +33,19 @@ A direct rendered smoke check at 900×620 with a live 60-step plan verified that
 
 The combined todo/activity view was also exercised with a live 60-step plan at 900×620: the summary reported 20/60 completed and the actual in-progress step, expanding displayed all 60 todo rows inside a 180px scrolling list, and the document remained 620px high. The activity integration suite, five frontend tests, TypeScript check, mechanical UI detector and rebuilt signed Mac bundle passed after this change.
 
+## Audit hardening verification — 2026-10-22
+
+- Passed `go test -race ./...` and `go vet ./...`, including rooted I/O, request-origin/Host, WebSocket, duplicate-daemon, delete retry/reservation, transcript transaction failure, cancellation and MCP error/limit regressions.
+- Passed eight frontend tests, TypeScript checking and the production UI build. Nineteen script-safety tests exercised actual clone/import/E2E programs against temporary fixtures and a local mock API; no real model request was made.
+- Built and ad-hoc-signature-verified the complete Mac bundle in an isolated build tree, without overwriting or restarting the user's running app. All 31 native model/preferences/notification-queue assertions passed.
+- All 13 activity/browser/native-WebKit review checks passed, including a permanent delayed-save regression, reconnection, cancellation, long-plan containment and real WebKit rendering at normal, minimum and reduced heights. The general UI review also passed against a daemon with pre-existing projects; the prior project, metadata, model preferences and active selection survived unchanged.
+- Direct isolated probes rejected foreign/null Origin API calls and rebinding Hosts, while preserving same-origin/native/dev-proxy authority. Embedded and standalone preview scripts could not read the API or open its WebSocket; classic JavaScript, ES modules, CSS and the main-origin watch connection still worked.
+- External-symlink reads/writes/deletes/previews were denied and outside files were unchanged. Root-equivalent file deletion was rejected even while a run was active. A second OS process using the same data directory failed before changing the live run or discovery.
+- An abort-acknowledging, never-settling fixture was canceled and released in approximately 0.56 seconds; a subsequent run succeeded. Nested artifact dependencies used the correct directory and PNG bytes survived a base64 roundtrip. MCP resource failures had top-level error envelopes.
+- Browser delay probes confirmed file selection is disabled while saving, edits typed during the request remain dirty, a different file cannot inherit a false-clean baseline, and navigation still asks before discarding edits. Conversation selection/creation is locked during pending creation; a failed creation retains the selected conversation and restores controls.
+
+Native OS notification authorization/banner delivery and the actual Quit confirmation dialog were not automated in this pass. Pending notification retries are intentionally in-memory and do not survive app exit. All temporary browser tabs, fixture daemons and build workspaces were removed after verification; no installed app or user data was changed.
+
 ## Manual checks / known limits
 
 - Enable notifications in Settings, then check the macOS authorization prompt, real banner delivery and notification-click restoration. Automation deliberately did not grant permission. Permission denial does not disable in-app/menu-bar/notch activity.

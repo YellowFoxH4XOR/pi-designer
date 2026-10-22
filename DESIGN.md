@@ -1,36 +1,48 @@
 ---
 name: πDesigner
-description: A focused local design workspace with a distinct designer-tool identity
+description: A light local design workspace with cool neutral layers and warm coral actions
 colors:
   brand-coral: "#E45F3E"
   brand-paper: "#FFF5E7"
   brand-ink: "#233137"
-  primary: "#5c61b6"
-  primary-soft: "#eeedfb"
-  lavender: "#a8b1ff"
-  shell: "#eceef3"
-  rail: "#e9ebf1"
-  canvas: "#fcfcfd"
-  white: "#ffffff"
-  ink: "#23242b"
-  muted: "#646673"
-  line: "#e2e3ea"
-  selected: "#dedff0"
-  action: "#26262d"
-  success: "#3b7956"
+  accent: "#9d452d"
+  accent-soft: "#f9ece6"
+  action: "#bd5033"
+  on-action: "#ffffff"
+  shell: "#f4f5f7"
+  rail: "#eef0f3"
+  canvas: "#fbfbfc"
+  surface: "#ffffff"
+  raised: "#e9ecf0"
+  ink: "#24272e"
+  muted: "#626873"
+  faint: "#666d78"
+  line: "#dce0e6"
+  subtle: "#f2f3f5"
+  selected: "#e0e4eb"
+  success: "#33734b"
+  success-soft: "#edf6f0"
+  warning: "#8b5c1b"
+  warning-soft: "#fff5e5"
   error: "#a13c3a"
+  error-soft: "#fdf0ee"
 typography:
   display:
-    fontFamily: "Georgia, 'Times New Roman', serif"
-    fontSize: "clamp(34px, 3.3vw, 47px)"
-    fontWeight: 500
-    lineHeight: 1.16
-    letterSpacing: "-1.6px"
+    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+    fontSize: "40px"
+    fontWeight: 550
+    lineHeight: 1.18
+    letterSpacing: "-1.3px"
   headline:
     fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
     fontSize: "25px"
     fontWeight: 620
     letterSpacing: "-0.7px"
+  title:
+    fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+    fontSize: "18px"
+    fontWeight: 600
+    letterSpacing: "-0.4px"
   body:
     fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
     fontSize: "14px"
@@ -44,11 +56,13 @@ typography:
     fontSize: "11px"
     lineHeight: 1.85
 rounded:
+  field: "6px"
   control: "7px"
   button: "9px"
+  starter: "10px"
   card: "11px"
-  canvas: "16px"
-  composer: "17px"
+  composer: "13px"
+  dialog: "15px"
 spacing:
   compact: "8px"
   control: "12px"
@@ -58,73 +72,117 @@ spacing:
 components:
   button-primary:
     backgroundColor: "{colors.action}"
-    textColor: "{colors.white}"
+    textColor: "{colors.on-action}"
     rounded: "{rounded.button}"
     padding: "11px 17px"
+    height: "40px"
   button-secondary:
-    backgroundColor: "{colors.white}"
+    backgroundColor: "{colors.surface}"
     textColor: "{colors.ink}"
     rounded: "{rounded.button}"
     padding: "11px 17px"
   navigation-selected:
     backgroundColor: "{colors.selected}"
+    textColor: "{colors.ink}"
     rounded: "{rounded.button}"
     height: "43px"
   workflow-selected:
-    backgroundColor: "{colors.primary-soft}"
-    rounded: "{rounded.button}"
-    padding: "9px 12px"
+    textColor: "{colors.ink}"
+    padding: "10px 1px"
+  composer:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.ink}"
+    rounded: "{rounded.composer}"
+    padding: "20px 18px 14px"
 ---
 
 # Design System: πDesigner
 
 ## Overview
 
-**Creative North Star: "A place for ideas to take shape"**
+**Creative North Star: "The light creative studio"**
 
-A light, operational Mac workspace with its own designer-tool identity: a pen nib shapes a Bézier curve on an ivory artboard, set against vermilion. The workspace shell keeps its existing lavender-gray tonal separation; the artifact sits on a clean canvas. The app mark deliberately departs from πDesk rather than repeating its π tile. The reference informs familiar workspace hierarchy and density, not cloud accounts, invented sharing features, or another product’s identity.
+A focused Mac workspace with cool gray navigation, an off-white canvas, white working surfaces, and restrained warm coral actions. The user's latest correction establishes a light theme while preserving the redesigned layout and behavior. Fine borders and tonal layers separate the brief, conversation, and artifact without glows or decorative motion.
 
-Key characteristics: persistent navigation, a prompt-first starting point, restrained typography, and an artifact-led studio. The interface is desktop-only. Device frames describe generated prototypes, not app clients.
+The retained vermilion, ivory, and ink pen-nib mark gives the product its designer-tool identity. Its editable Bézier curve appears as a small authored illustration on Home. Prototype specimens may show other palettes inside their own bounds; the workspace remains consistent around them. The native window uses aqua with the shell background, so web content and AppKit form one light workspace.
+
+**Key Characteristics:**
+- Cool neutral layers and fine rules.
+- Restrained warm coral actions and visible focus.
+- Persistent navigation and a brief-first creation surface.
+- An artifact-led Studio with faithful execution states.
 
 ## Colors
 
-The app mark uses vermilion `#E45F3E`, warm ivory `#FFF5E7`, and deep ink `#233137`. These are identity colors, not replacements for workspace state colors. Lavender continues to distinguish selection, focus, and omp engine attribution. Charcoal carries primary actions; green and red communicate real execution state. The light workspace is the implemented design, not an automatic dark-mode system.
+Warm coral carries action and focus; light neutral layers carry structure. The frontmatter is the normative palette, matching the CSS custom properties except for the retained logo's own identity colors.
+
+### Primary
+
+- **Deep Coral** (`accent`): focus rings, selected workflow underline, chosen resources, and reported working state.
+- **Warm Action** (`action`, `on-action`): primary and send actions pair a warm coral fill with white text. The observed hover fill is `#ae472c`.
+- **Coral Tint** (`accent-soft`): selected resources and subtle emphasis, not a broad page background.
+
+### Secondary
+
+- **Brand Vermilion, Ivory, and Deep Ink** (`brand-coral`, `brand-paper`, `brand-ink`): retained app-mark colors, not replacements for shell state colors.
+
+### Neutral
+
+- **Shell Mist** (`shell`) and **Rail Gray** (`rail`): outer window and persistent navigation.
+- **Off-white Canvas** (`canvas`): internally scrolling workspace and dialogs.
+- **Working White** (`surface`), **Raised Gray** (`raised`), and **Subtle Gray** (`subtle`): controls, composer, hover layers, and bounded message/code regions.
+- **Selected Gray** (`selected`): active navigation.
+- **Charcoal Ink** (`ink`), **Muted Slate** (`muted`), and **Faint Slate** (`faint`): primary, secondary, and tertiary content.
+- **Cool Gray Rule** (`line`): panel boundaries and dividers.
+
+Success green, warning amber, and failure rose each have a soft light counterpart. They communicate real execution outcomes alongside explicit text labels.
 
 **The Artifact Boundary Rule.** Workspace colors stop at the prototype iframe. A selected design system controls the artifact’s colors; it never recolors the app shell.
 
 ## Typography
 
-The Mac system stack carries navigation, controls, and conversations. Georgia is reserved for the Home heading. Monospace is reserved for source, paths, and measured dimensions.
+The Mac system stack carries navigation, headings, controls, and conversations. Monospace is reserved for source, paths, and measured dimensions. The frontmatter captures the implemented roles; Home's display role is an observed surface choice, not a requirement to use display typography on every page.
 
-The hierarchy steps from the Home display to library headings, section titles, body text, and compact labels. Desktop utility text is deliberately denser than the creation surface. Long agent messages render as paragraphs, lists, emphasis, and fenced code rather than raw Markdown.
+The Home heading is left aligned and steps down to 36px at the compact desktop breakpoint and 32px at the minimum desktop breakpoint. Library headings use the headline role; dialogs use the title role. Body text is 14px at the root; navigation, tools, and conversation regions use denser 11–13px working text. Long agent messages render as paragraphs, lists, emphasis, and fenced code rather than raw Markdown.
 
 ## Layout
 
-The sidebar is 232px at the normal desktop width, 212px on narrower windows, and 190px at the minimum width. The workspace is a rounded, internally scrolling canvas beneath a 49px utility header. Home has a centered, constrained content column; libraries use searchable grids or task-oriented lists.
+The sidebar is 224px at the normal desktop width, 212px on narrower windows, and 190px at the minimum width. A 60px utility header and 29px footer frame a flat, internally scrolling canvas. The document itself remains viewport-bound; named panels own scrolling. AppKit owns the native minimum size so page zoom does not create document overflow.
 
-Studio has a 350px conversation column and a flexible preview column, adjusting to 310px on narrower windows and 390px on wide windows. The native content minimum is 900×620. Browser and phone app distributions are not supported.
+Home uses a centered container capped at 1080px with left-aligned content and 64px horizontal padding at the normal width. Its heading and small editable-curve illustration precede workflow tabs, the full-width composer, three visual starter briefs, and recent projects. Compact windows reduce page padding; the starter grid retains three columns while recent projects become one column. Libraries use searchable grids or task-oriented lists.
+
+Studio removes the navigation rail and has a 350px conversation column beside a flexible preview column, adjusting to 310px on narrower windows and 390px on wide windows. The native content minimum is 900×620. Breakpoints are 900px, 1190px, and 1600px; these adapt the Mac workspace, not separate clients.
 
 Prototype frames retain their actual CSS viewport (1440×900 web, 1280×800 desktop, 390×844 mobile), then scale to fit the canvas. Scaling must not be replaced with a fluid iframe width that changes the generated layout.
 
 ## Elevation & Depth
 
-Tonal layers and fine rules establish hierarchy. Shadows are soft and offset: low elevation under the workspace/composer, stronger elevation for modal selection and the prototype frame. There are no decorative colored glows.
+Tonal layers and fine rules establish hierarchy. The canvas is flat; the composer has low ambient elevation, modal dialogs have stronger elevation, and prototype frames separate the artifact from light chrome. Exact shadows live in the sidecar. There are no decorative colored glows.
 
-Focus is a visible two-pixel accent outline with a three-pixel offset. Reduced motion retains text and state labels while disabling the working-dot animation.
+Focus uses a visible two-pixel accent outline with a three-pixel offset; the search field uses a two-pixel offset and the composer uses its accent border. Reduced motion disables animation and transitions while retaining status text.
+
+**The Labeled State Rule.** Color and working dots reinforce execution labels; they never replace the reported state or transport health.
 
 ## Shapes
 
-Controls have compact curves, cards and panels use medium curves, and the main canvas/composer have larger curves. πDesigner’s app mark is an authored vermilion tile with a folded ivory artboard, an editable Bézier curve/anchor and a deep-ink pen nib. There is no π monogram in the app mark; π stays in the product name and engine attribution. A simplified, transparent-cutout nib is the native menu-bar template. The native activity header uses the actual app icon, not a lavender π. A standalone lavender π identifies the execution engine; model controls instead show the relevant locally bundled maker/provider mark. Opus and Sonnet use Claude/Anthropic, not DeepSeek. Unknown models use a neutral fallback. App, engine, model and routing-provider identity are never conflated.
+Compact controls use small curves, cards and panels use medium curves, and the composer and dialogs use larger curves. Most boundaries are one-pixel rules. The Home canvas is an edge-to-edge tonal plane, with bordered white working surfaces inside it. Prototype phone frames retain their device silhouette without changing artifact dimensions.
+
+πDesigner’s retained app mark is an authored vermilion tile with an ivory artboard, an editable Bézier curve/anchor and a deep-ink pen nib. There is no π monogram in the app mark; π stays in the product name and engine attribution. A simplified transparent-cutout nib is the native menu-bar template. The native activity header uses the actual app icon. A standalone π identifies execution; model controls show the relevant locally bundled maker/provider mark. Opus and Sonnet use Claude/Anthropic, not DeepSeek. Unknown models use a neutral fallback. App, engine, model and routing-provider identity remain distinct.
 
 ## Components
 
+### Buttons and fields
+
+Primary actions use Warm Action with white on-action text. Secondary actions use Working White and a fine rule; hover shifts toward Subtle Gray. Disabled controls remain visible and cannot act. Search fields use the same surface and rule, with an explicit accent focus outline. A chosen design-system control uses Coral Tint with Deep Coral text.
+
+
 ### Navigation
 
-Text labels accompany consistent authored line icons. Selected navigation uses a lavender-gray field; recent projects remain secondary. Settings and editor connection are placed at the foot of the rail.
+Text labels accompany consistent authored line icons. Selected navigation uses the cool gray selected field and charcoal text; recent projects remain secondary. A bordered New project action sits above the main destinations. Settings and editor connection are placed at the foot of the rail.
 
 ### Composer
 
-A real textarea is paired with design-system selection, an optional device select, a model/provider icon and selected-model control, and a single send action. The Home composer starts a project; the compact Studio composer refines it. Empty prompts cannot submit. During generation, the send action becomes a stop control.
+A white container with a deep coral focus border holds a real textarea paired with design-system selection, an optional device select, a model/provider icon and selected-model control, and a single send action. The Home composer starts a project; the compact Studio composer refines it. Empty prompts cannot submit. During generation, the send action becomes a stop control.
 
 ### Design-system library
 
@@ -158,10 +216,17 @@ Use native HTML modal dialogs for focused system choice and renaming, with Escap
 
 ## Do's and Don'ts
 
+### Do:
+
 - Do preserve the separation between the workspace and the generated artifact.
 - Do use the real catalog and local run state, including empty and failure cases.
 - Do keep omp-only execution and local storage explicit without making it the visual focus.
 - Do keep native keyboard conventions and visible focus.
-- Don’t add account, billing, publishing, or collaboration controls without working capabilities.
-- Don’t describe prototype frames as separate native app generators or πDesigner clients.
-- Don’t imply the light theme has a complete dark-mode counterpart.
+- Do use light neutral layers and warm coral actions consistently across shell, library, Studio, and dialogs.
+
+### Don't:
+
+- Don't add account, billing, publishing, or collaboration controls without working capabilities.
+- Don't describe prototype frames as separate native app generators or πDesigner clients.
+- Don't recolor prototype content to match the light workspace.
+- Don't imply the light workspace has a complete alternate dark theme or theme-switching control.

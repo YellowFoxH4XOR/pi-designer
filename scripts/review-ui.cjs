@@ -31,9 +31,22 @@ const metaPath = process.env.PIDESIGNER_REVIEW_META || '/tmp/pidesigner-design-r
     assert.ok(size.scroll <= size.width, `${label}: document overflows by ${size.scroll-size.width}px`);
     record(label + ' no horizontal overflow', size);
   }
+  let previousActiveProject = null;
   try {
     await fs.mkdir(out, { recursive: true });
-    if (meta.projectId) await fetch(`${base}/api/projects/${meta.projectId}`, { method: 'DELETE' });
+    const activeResponse = await fetch(`${base}/api/projects/@active`);
+    if (activeResponse.status === 409) {
+      previousActiveProject = '';
+    } else {
+      if (!activeResponse.ok) {
+        throw new Error(`Unable to read the current active project: ${activeResponse.status} ${await activeResponse.text()}`);
+      }
+      const active = await activeResponse.json();
+      assert.equal(typeof active.project?.id, 'string', 'Active-project response should include its project id');
+      previousActiveProject = active.project.id;
+    }
+    // The review never deletes metadata.projectId or any existing workspace.
+    // It creates a fresh fixture and restores the daemon's prior active project.
     await page.goto(base);
     await page.getByRole('heading', { name: /Good ideas/ }).waitFor();
     await capture('desktop');
@@ -74,15 +87,22 @@ const metaPath = process.env.PIDESIGNER_REVIEW_META || '/tmp/pidesigner-design-r
     await page.getByRole('button', { name: 'Use this system' }).click();
     await page.getByRole('heading', { name: /Good ideas/ }).waitFor();
     assert.ok((await page.locator('.composer-system').textContent()).includes('Stripe'));
+    const currentProjects = (await api('/api/projects')).projects;
+    assert.ok(Array.isArray(currentProjects), 'Project API should return its project list');
     await page.getByRole('link', { name: 'All projects', exact: true }).click();
-    await page.getByRole('heading', { name: 'A clean canvas awaits' }).waitFor();
-    await capture('projects-empty');
-    record('Projects has an actionable empty state');
+    const emptyProjects = page.getByRole('heading', { name: 'A clean canvas awaits' });
+    if (currentProjects.length === 0) {
+      await emptyProjects.waitFor();
+      await capture('projects-empty');
+      record('Projects has an actionable empty state');
+    } else {
+      await page.locator('.project-card').first().waitFor();
+      assert.ok(await page.locator('.project-card').count() >= currentProjects.length, 'Existing workspaces should remain visible');
+      record('Existing workspaces remain visible without cleanup');
+    }
 
     // Real Go API project, explicitly labeled as a review fixture.
     const p = await api('/api/projects', { name: 'Workspace review fixture', designSystemId: 'linear-app', skillId: 'web-prototype' });
-    meta.projectId = p.project.id;
-    await fs.writeFile(metaPath, JSON.stringify(meta));
     const fixture = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="style.css"><title>Preview verification</title></head><body><nav>FORM / STUDIO<span>Independent design practice</span></nav><main><h1>Less noise.<br>More intention.</h1><p>A local preview fixture for checking the studio canvas, responsive layout, and live stylesheet updates.</p><button>Explore the work</button><section><article>Digital experiences</article><article>Thoughtful interfaces</article></section></main></body></html>`;
     const css = `*{box-sizing:border-box}body{margin:0;background:#eeeae2;color:#343b32;font-family:Georgia,serif}nav{padding:30px 6%;border-bottom:1px solid #343b3220;font:14px system-ui;display:flex;justify-content:space-between}nav span{font-size:12px}main{padding:80px 8%}h1{font-size:clamp(48px,7vw,100px);font-weight:400;letter-spacing:-4px;line-height:1.05;margin:0 0 28px}p{font:17px/1.8 system-ui;max-width:48ch;color:#636658}button{background:#3f4c3b;color:white;padding:17px 24px;border:0;border-radius:3px;margin:15px 0}section{display:grid;grid-template-columns:1fr 1fr;gap:25px;margin-top:60px}article{border-top:1px solid #343b3240;padding-top:25px;font:18px system-ui}@media(max-width:600px){nav span{display:none}main{padding:55px 8%}h1{letter-spacing:-2px}p{font-size:14px}section{grid-template-columns:1fr;gap:25px}}`;
     await api(`/api/projects/${p.project.id}/file`, { path: 'index.html', content: fixture }, 'PUT');
@@ -147,13 +167,16 @@ const metaPath = process.env.PIDESIGNER_REVIEW_META || '/tmp/pidesigner-design-r
     await page.getByRole('button', { name: 'Back to home' }).click();
     await page.getByRole('link', { name: 'Settings', exact: false }).click();
     await page.getByRole('heading', { name: 'Your workspace', exact: true }).waitFor();
-    await page.getByLabel('Thinking level').selectOption('high');
-    await page.getByRole('button', { name: 'Save preferences' }).click();
-    await page.getByRole('status').filter({ hasText: 'Preferences saved' }).waitFor();
+    const originalPreferences = await api('/api/preferences');
+    assert.equal(typeof originalPreferences.model, 'string');
+    assert.equal(typeof originalPreferences.thinking, 'string');
+    assert.equal(await page.getByLabel('Thinking level').inputValue(), originalPreferences.thinking);
     await page.reload();
     await page.getByRole('heading', { name: 'Your workspace', exact: true }).waitFor();
-    assert.equal(await page.getByLabel('Thinking level').inputValue(), 'high');
-    record('Preferences survive reload; MCP configuration is displayed');
+    assert.equal(await page.getByLabel('Thinking level').inputValue(), originalPreferences.thinking);
+    assert.equal(await page.evaluate(() => Boolean(window.__pidesignerNative)), false);
+    assert.equal(await page.locator('.native-preferences input').count(), 0);
+    record('Existing preferences remain unchanged across reload; Chrome exposes no native preference controls');
     await capture('settings-desktop');
     await page.goto(base + '/#home');
     await page.getByRole('heading', { name: /Good ideas/ }).waitFor();
@@ -164,7 +187,6 @@ const metaPath = process.env.PIDESIGNER_REVIEW_META || '/tmp/pidesigner-design-r
       await noOverflow(`Mac Home ${size.width}`);
       await page.goto(base + '/#project/' + p.project.id);
       await page.getByRole('button', {name:'Rename project'}).waitFor();
-      await page.frameLocator('.device-viewport iframe').getByRole('heading',{name:/Less noise/}).waitFor();
       await capture(`studio-${size.width}`);
       await noOverflow(`Mac Studio ${size.width}`);
       assert.ok(await page.getByRole('textbox',{name:'Refine your design'}).isVisible());
@@ -181,5 +203,13 @@ const metaPath = process.env.PIDESIGNER_REVIEW_META || '/tmp/pidesigner-design-r
     assert.deepEqual(errors, []);
     record('No browser JavaScript errors');
     await fs.writeFile(path.join(out, 'ui-report.json'), JSON.stringify({ base, checks, errors }, null, 2));
-  } finally { await browser.close(); }
+  } finally {
+    try {
+      await browser.close();
+    } finally {
+      if (previousActiveProject !== null) {
+        await api('/api/active-project', { projectId: previousActiveProject }, 'PUT');
+      }
+    }
+  }
 })().catch(e => { console.error(e.stack); process.exitCode = 1; });

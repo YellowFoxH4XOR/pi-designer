@@ -6,12 +6,11 @@ function usage() {
   console.log(`Usage:
   node scripts/init-clone.mjs <slug> [--url <url>] [--mode <mode>] [--level <L1-L6>] [--root <dir>] [--in-place]
 
-Creates:
-  <root>/<slug>-clone/
-  <root>/<slug>-clone/NOTES.md
-  <root>/<slug>-clone/RECON/screenshots/
+Creates the project directory and RECON/screenshots/. Creates NOTES.md only if
+it does not already exist and ensures the required entries are in .gitignore.
 
-With --in-place, creates NOTES.md and RECON/screenshots/ in <root> itself.
+With --in-place, existing NOTES.md is preserved and missing ignore entries are
+appended without replacing existing .gitignore rules.
 `);
 }
 
@@ -39,6 +38,59 @@ function cleanSlug(input) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
 }
+
+function ensureIgnoreEntries(file, required) {
+  let stats;
+  try {
+    stats = fs.lstatSync(file);
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
+  if (stats?.isSymbolicLink()) {
+    throw new Error(`Refusing to update a symbolic-link .gitignore: ${file}`);
+  }
+  if (stats && !stats.isFile()) {
+    throw new Error(`Refusing to update a non-file .gitignore: ${file}`);
+  }
+  const content = stats ? fs.readFileSync(file, "utf8") : "";
+  const normalize = (rule) =>
+    rule
+      .trim()
+      .replace(/^!/, "")
+      .replace(/^\/+/, "")
+      .replace(/\/+$/, "")
+      .replace(/^\*\*\//, "");
+  const lines = content.split(/\r?\n/);
+  const missing = required.filter((entry) => {
+    let ignored = false;
+    for (const line of lines) {
+      const rule = line.trim();
+      if (!rule || rule.startsWith("#")) continue;
+      const normalized = normalize(rule);
+      if (normalized === entry) ignored = !rule.startsWith("!");
+    }
+    return !ignored;
+  });
+  if (missing.length === 0) return;
+
+  const newline = content.includes("\r\n") ? "\r\n" : "\n";
+  const separator = content && !content.endsWith("\n") ? newline : "";
+  fs.appendFileSync(file, `${separator}${missing.join(newline)}${newline}`, {
+    flag: stats ? "a" : "ax",
+  });
+}
+
+function writeNotesIfMissing(file, contents) {
+  if (fs.existsSync(file)) {
+    const stats = fs.lstatSync(file);
+    if (!stats.isFile() && !stats.isSymbolicLink()) {
+      throw new Error(`Refusing to replace a non-file NOTES.md: ${file}`);
+    }
+    return;
+  }
+  fs.writeFileSync(file, contents, { flag: "wx" });
+}
+
 
 function notesTemplate({ name, url, mode, level }) {
   return `# ${name} · 克隆笔记
@@ -119,9 +171,11 @@ try {
     throw new Error(`Project already exists: ${project}`);
   }
 
+  const notesPath = path.join(project, "NOTES.md");
+  const ignorePath = path.join(project, ".gitignore");
   fs.mkdirSync(path.join(project, "RECON", "screenshots"), { recursive: true });
-  fs.writeFileSync(
-    path.join(project, "NOTES.md"),
+  writeNotesIfMissing(
+    notesPath,
     notesTemplate({
       name,
       url: args.url,
@@ -129,7 +183,7 @@ try {
       level: args.level,
     })
   );
-  fs.writeFileSync(path.join(project, ".gitignore"), "node_modules/\n.DS_Store\n");
+  ensureIgnoreEntries(ignorePath, ["node_modules", ".DS_Store"]);
 
   console.log(project);
 } catch (error) {

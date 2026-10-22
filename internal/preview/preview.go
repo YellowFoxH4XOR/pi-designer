@@ -8,13 +8,17 @@
 package preview
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha1"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
+	"mime"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -239,9 +243,8 @@ func (h *Hub) broadcast(project string, msg Message) {
 
 // ServeWS upgrades an HTTP request to a websocket and streams change events.
 func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request, project string) {
-	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
-		InsecureSkipVerify: true, // dev server, loopback only
-	})
+	// Keep the library's default same-origin Origin verification enabled.
+	conn, err := websocket.Accept(w, r, nil)
 	if err != nil {
 		return
 	}
@@ -267,43 +270,151 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request, project string) {
 // into HTML responses.
 func (h *Hub) FileHandler(dir string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		rel := strings.TrimPrefix(r.URL.Path, "/")
-		if rel == "" {
-			rel = "index.html"
+		w.Header().Set("Content-Security-Policy", "sandbox allow-scripts allow-forms")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("Cache-Control", "no-store")
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			w.Header().Set("Allow", "GET, HEAD")
+			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+			return
 		}
-		abs := filepath.Join(dir, filepath.FromSlash(rel))
-		// Guard against traversal.
-		if !strings.HasPrefix(abs, filepath.Clean(dir)+string(filepath.Separator)) && abs != filepath.Clean(dir) {
+
+		name, ok := cleanPreviewPath(r.URL.Path)
+		if !ok {
 			http.NotFound(w, r)
 			return
 		}
-		fi, err := os.Stat(abs)
+		// The configured project root is trusted; OpenRoot confines access
+		// beneath it while allowing only links that stay within the boundary.
+		root, err := os.OpenRoot(dir)
 		if err != nil {
 			http.NotFound(w, r)
 			return
 		}
-		if fi.IsDir() {
-			abs = filepath.Join(abs, "index.html")
-			if _, err := os.Stat(abs); err != nil {
-				http.NotFound(w, r)
-				return
-			}
+		defer root.Close()
+
+		file, err := root.Open(name)
+		if err != nil {
+			http.NotFound(w, r)
+			return
 		}
-		switch strings.ToLower(filepath.Ext(abs)) {
-		case ".html", ".htm":
-			b, err := os.ReadFile(abs)
+		info, err := file.Stat()
+		if err != nil {
+			_ = file.Close()
+			http.NotFound(w, r)
+			return
+		}
+		if info.IsDir() {
+			_ = file.Close()
+			name = path.Join(name, "index.html")
+			file, err = root.Open(name)
 			if err != nil {
 				http.NotFound(w, r)
 				return
 			}
-			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			w.Header().Set("Cache-Control", "no-store")
-			_, _ = w.Write(InjectBridge(b))
-		default:
-			w.Header().Set("Cache-Control", "no-store")
-			http.ServeFile(w, r, abs)
+			info, err = file.Stat()
+			if err != nil {
+				_ = file.Close()
+				http.NotFound(w, r)
+				return
+			}
 		}
+		defer file.Close()
+		if !info.Mode().IsRegular() {
+			http.NotFound(w, r)
+			return
+		}
+
+		setPreviewCORS(w, r, name)
+		if typ := previewContentType(name); typ != "" {
+			w.Header().Set("Content-Type", typ)
+		}
+		if isHTML(name) {
+			doc, err := io.ReadAll(file)
+			if err != nil {
+				http.NotFound(w, r)
+				return
+			}
+			http.ServeContent(w, r, name, info.ModTime(), bytes.NewReader(InjectBridge(doc)))
+			return
+		}
+		http.ServeContent(w, r, name, info.ModTime(), file)
 	})
+}
+
+func cleanPreviewPath(raw string) (string, bool) {
+	rel := filepath.ToSlash(raw)
+	rel = strings.TrimPrefix(rel, "/")
+	if strings.HasPrefix(rel, "/") {
+		return "", false
+	}
+	if rel == "" {
+		return "index.html", true
+	}
+	depth := 0
+	for _, part := range strings.Split(rel, "/") {
+		switch part {
+		case "", ".":
+		case "..":
+			if depth == 0 {
+				return "", false
+			}
+			depth--
+		default:
+			depth++
+		}
+	}
+	name := path.Clean(rel)
+	if name == "." {
+		name = "index.html"
+	}
+	return name, true
+}
+
+func isHTML(name string) bool {
+	switch strings.ToLower(filepath.Ext(name)) {
+	case ".html", ".htm":
+		return true
+	default:
+		return false
+	}
+}
+
+func previewContentType(name string) string {
+	switch strings.ToLower(filepath.Ext(name)) {
+	case ".html", ".htm":
+		return "text/html; charset=utf-8"
+	case ".css":
+		return "text/css; charset=utf-8"
+	case ".js", ".mjs", ".cjs":
+		return "text/javascript; charset=utf-8"
+	case ".svg":
+		return "image/svg+xml"
+	case ".woff":
+		return "font/woff"
+	case ".woff2":
+		return "font/woff2"
+	case ".ttf":
+		return "font/ttf"
+	case ".otf":
+		return "font/otf"
+	case ".eot":
+		return "application/vnd.ms-fontobject"
+	default:
+		return mime.TypeByExtension(filepath.Ext(name))
+	}
+}
+
+func setPreviewCORS(w http.ResponseWriter, r *http.Request, name string) {
+	origins := r.Header.Values("Origin")
+	if (r.Method != http.MethodGet && r.Method != http.MethodHead) || len(origins) != 1 || origins[0] != "null" {
+		return
+	}
+	switch strings.ToLower(filepath.Ext(name)) {
+	case ".css", ".js", ".mjs", ".cjs", ".json", ".woff", ".woff2", ".ttf", ".otf", ".eot", ".wasm":
+		w.Header().Set("Access-Control-Allow-Origin", "null")
+		w.Header().Add("Vary", "Origin")
+	}
 }
 
 // bridgeScript is injected into every previewed HTML document. It listens for

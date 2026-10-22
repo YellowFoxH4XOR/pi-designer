@@ -50,7 +50,7 @@ od:
 node scripts/init-clone.mjs <站名> --url <原站URL> --in-place
 ```
 
-该脚本会在当前项目内创建 `NOTES.md`、`RECON/screenshots/`，避免每次手工漏掉产物。
+该脚本会在当前项目内创建 `RECON/screenshots/`；只有 `NOTES.md` 不存在时才会生成模板，并会把缺少的必需忽略规则追加到 `.gitignore`，不会覆盖已有笔记或删除现有忽略规则。
 
 ### Step 1 · 先去 GitHub 搜源码，别急着抓站
 
