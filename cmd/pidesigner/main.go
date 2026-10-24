@@ -1,5 +1,5 @@
 // Command pidesigner runs the design workspace daemon: projects, files, chat
-// runs driven by the locally installed omp agent, and the live preview.
+// runs driven by the locally installed pi agent, and the live preview.
 package main
 
 import (
@@ -22,7 +22,7 @@ func main() {
 		host       = flag.String("host", "127.0.0.1", "bind address")
 		dataDir    = flag.String("data", defaultDataDir(), "data directory")
 		contentDir = flag.String("content", defaultContentDir(), "content catalog directory")
-		ompBin     = flag.String("omp", "", "path to the omp executable (default: resolve from PATH and omp install locations)")
+		piBin      = flag.String("pi", "", "path to the pi executable (default: resolve from PATH and pi install locations)")
 		uiDir      = flag.String("ui", defaultUIDir(), "built UI directory to serve")
 		ready      = flag.Bool("print-url", false, "print the serving URL to stdout as soon as it is bound")
 		exitOnEOF  = flag.Bool("exit-on-stdin-close", false, "exit when stdin closes (parent-death guard for app shells)")
@@ -37,7 +37,7 @@ func main() {
 		Port:       *port,
 		DataDir:    *dataDir,
 		ContentDir: *contentDir,
-		OmpBin:     *ompBin,
+		PiBin:      *piBin,
 		UIDir:      *uiDir,
 		Renderer:   *renderer,
 	})
@@ -51,7 +51,7 @@ func main() {
 		_ = os.Stdout.Sync()
 	}
 	log.Printf("listening on %s", a.URL)
-	log.Printf("omp agent: %s", a.OmpBin())
+	log.Printf("pi agent: %s", a.PiBin())
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

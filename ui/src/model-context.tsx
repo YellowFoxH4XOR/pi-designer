@@ -19,7 +19,7 @@ interface ModelContextValue {
 const ModelContext = createContext<ModelContextValue | null>(null);
 export function useModels() {
   const value = useContext(ModelContext);
-  if (!value) throw new Error('omp model controls require the model provider');
+  if (!value) throw new Error('pi model controls require the model provider');
   return value;
 }
 export function ModelProvider({ children }: { children: ComponentChildren }) {
@@ -62,7 +62,7 @@ export function ModelProvider({ children }: { children: ComponentChildren }) {
     try {
       const { levels } = await api.thinkingLevels(ref);
       const thinking = levels.includes(preferences.thinking) ? preferences.thinking : levels.includes('medium') ? 'medium' : levels[0];
-      if (!thinking) throw new Error('omp returned no thinking levels for this model.');
+      if (!thinking) throw new Error('pi returned no thinking levels for this model.');
       await save({ model: ref, thinking });
       setLevels(levels); setOpened(false);
     } catch (e) { setSelectionError(String(e).replace(/^Error: /, '')); }
@@ -76,21 +76,21 @@ export function ModelProvider({ children }: { children: ComponentChildren }) {
 export function ModelButton({ compact = false, disabled = false, settings = false }: { compact?: boolean; disabled?: boolean; settings?: boolean }) {
   const { preferences, catalog, open, ready } = useModels();
   const selected = catalog?.models.find((m) => modelRef(m) === preferences.model);
-  const label = preferences.model ? selected?.name || preferences.model.split('/').slice(1).join('/') : 'omp default';
-  const provider = selected ? providerName(selected.provider) : catalog?.current ? `${catalog.current.name} · ${providerName(catalog.current.provider)}` : 'Your installed omp';
-  return <button type="button" class={`model-button ${compact ? 'compact' : ''} ${settings ? 'settings-model' : ''}`} onClick={open} disabled={disabled || !ready} aria-label="Choose omp model" aria-haspopup="dialog" title={`${label} · ${provider}`}><ModelIcon id={selected?.id || (preferences.model ? preferences.model.split('/').slice(1).join('/') : catalog?.current?.id)} provider={selected?.provider || (preferences.model ? preferences.model.split('/')[0] : catalog?.current?.provider)} size={settings ? 28 : 22}/><span><strong>{label}</strong>{settings && <small>{provider}</small>}</span><Icon name="chevron" size={13} class="model-chevron"/></button>;
+  const label = preferences.model ? selected?.name || preferences.model.split('/').slice(1).join('/') : 'pi default';
+  const provider = selected ? providerName(selected.provider) : catalog?.current ? `${catalog.current.name} · ${providerName(catalog.current.provider)}` : 'Your installed pi';
+  return <button type="button" class={`model-button ${compact ? 'compact' : ''} ${settings ? 'settings-model' : ''}`} onClick={open} disabled={disabled || !ready} aria-label="Choose pi model" aria-haspopup="dialog" title={`${label} · ${provider}`}><ModelIcon id={selected?.id || (preferences.model ? preferences.model.split('/').slice(1).join('/') : catalog?.current?.id)} provider={selected?.provider || (preferences.model ? preferences.model.split('/')[0] : catalog?.current?.provider)} size={settings ? 28 : 22}/><span><strong>{label}</strong>{settings && <small>{provider}</small>}</span><Icon name="chevron" size={13} class="model-chevron"/></button>;
 }
 function ModelDialog({ catalog, selected, loading, error, selecting, onRefresh, onSelect, onClose }: { catalog: ModelCatalog | null; selected: string; loading: boolean; error: string; selecting: string | null; onRefresh: () => void; onSelect: (ref: string) => void; onClose: () => void }) {
   const [query, setQuery] = useState('');
   const filtered = (catalog?.models || []).filter((m) => `${m.name} ${m.provider} ${m.id}`.toLowerCase().includes(query.toLowerCase()));
   const current = catalog?.current;
-  return <Dialog title="Choose an omp model" onClose={onClose} class="model-picker">
-    <p class="dialog-intro">Available models from your installed omp. Accounts and credentials stay with omp.</p>
+  return <Dialog title="Choose an pi model" onClose={onClose} class="model-picker">
+    <p class="dialog-intro">Available models from your installed pi. Accounts and credentials stay with pi.</p>
     <SearchField value={query} onInput={setQuery} placeholder="Search models or providers"/>
-    <div class="model-picker-info"><span>{catalog ? `${catalog.models.length} models available` : 'Reading your omp configuration…'}</span><button class="text-button" onClick={onRefresh} disabled={loading || selecting !== null}><Icon name="refresh" size={13}/>{loading ? 'Refreshing…' : 'Refresh'}</button></div>
+    <div class="model-picker-info"><span>{catalog ? `${catalog.models.length} models available` : 'Reading your pi configuration…'}</span><button class="text-button" onClick={onRefresh} disabled={loading || selecting !== null}><Icon name="refresh" size={13}/>{loading ? 'Refreshing…' : 'Refresh'}</button></div>
     {error && <p class="inline-error" role="alert">{error}</p>}
-    {!catalog && loading ? <div class="loading-state">Starting omp to discover your models…</div> : <div class="model-list">
-      {!query && <button class={`model-row ${!selected ? 'selected' : ''}`} onClick={() => onSelect('')} disabled={selecting !== null}><ModelIcon id={current?.id} provider={current?.provider} size={27}/><span><strong>omp default</strong><small>{current ? `${current.name} · ${providerName(current.provider)}` : 'Use the default configured in omp'}</small></span>{!selected && <Icon name="check" size={17}/>}</button>}
+    {!catalog && loading ? <div class="loading-state">Starting pi to discover your models…</div> : <div class="model-list">
+      {!query && <button class={`model-row ${!selected ? 'selected' : ''}`} onClick={() => onSelect('')} disabled={selecting !== null}><ModelIcon id={current?.id} provider={current?.provider} size={27}/><span><strong>pi default</strong><small>{current ? `${current.name} · ${providerName(current.provider)}` : 'Use the default configured in pi'}</small></span>{!selected && <Icon name="check" size={17}/>}</button>}
       {filtered.map((m) => { const ref = modelRef(m); return <button key={ref} data-model-ref={ref} class={`model-row ${ref === selected ? 'selected' : ''}`} onClick={() => onSelect(ref)} disabled={selecting !== null}><ModelIcon id={m.id} provider={m.provider} size={27}/><span><strong>{m.name}</strong><small>{providerName(m.provider)}<span class="model-id">{m.id}</span></small></span><span class="model-row-meta">{selecting === ref ? 'Selecting…' : ref === selected ? <Icon name="check" size={17}/> : m.reasoning ? 'Reasoning' : ''}</span></button>; })}
       {catalog && !filtered.length && <p class="no-results">No models match “{query}”. Try a model or provider name.</p>}
     </div>}

@@ -3,7 +3,8 @@ import { RunActivity, RunProgress } from '../components/Activity';
 import { fromActivity, type RunState as ActivityRun } from '../activity';
 import { ModelIcon } from '../components/ModelIcon';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { api, type Conversation, type DesignSystem, type FileEntry, type Message, type Project, type Render, type Run } from '../api';
+import { api, type ArtifactVersion, type Conversation, type DesignSystem, type FileEntry, type Message, type Project, type Render, type Run } from '../api';
+import { ArtifactCard, ArtifactCardLive } from '../components/ArtifactCard';
 import { AgentMessage } from '../components/AgentMessage';
 import { Composer } from '../components/Composer';
 import { CritiqueCard } from '../components/CritiqueCard';
@@ -40,6 +41,10 @@ export function Studio({ projectId, systems, run, onMonitor, onStart, onHome, on
   const [historyRun, setHistoryRun] = useState<Run | null>(null);
   const [historyActivity, setHistoryActivity] = useState<ActivityRun | null>(null);
   const [preview, setPreview] = useState<Render | null>(null);
+  const [versions, setVersions] = useState<ArtifactVersion[]>([]);
+  // null shows the live project files; a number shows that saved version.
+  const [viewing, setViewing] = useState<number | null>(null);
+  const [canvas, setCanvas] = useState<'open' | 'closed' | 'expanded'>('open');
   const messagesPane = useRef<HTMLDivElement>(null);
   const follow = useRef(true);
   const conversationTransition = useRef(false);
@@ -119,6 +124,27 @@ export function Studio({ projectId, systems, run, onMonitor, onStart, onHome, on
   useEffect(() => {
     if (!busy) api.files(projectId).then((d) => setFiles(d.files)).catch(() => {});
   }, [busy]);
+  // A finished turn records a version; reload the history whenever a run settles.
+  useEffect(() => {
+    let active = true;
+    api.versions(projectId).then((d) => { if (active) setVersions(d.versions); }).catch(() => {});
+    return () => { active = false; };
+  }, [projectId, run?.id, run?.status]);
+  // A new turn always builds on the latest files, so follow it.
+  useEffect(() => { if (busy) setViewing(null); }, [busy]);
+  function openVersion(n: number | null) {
+    setViewing(n !== null && n === versions[versions.length - 1]?.n ? null : n);
+    if (canvas === 'closed') setCanvas('open');
+  }
+  async function restoreVersion(n: number) {
+    if (!project) return;
+    try {
+      await api.restoreVersion(project.id, n);
+      const d = await api.versions(project.id);
+      setVersions(d.versions); setViewing(null);
+      setFiles((await api.files(project.id)).files);
+    } catch (e) { onError(e instanceof Error ? e.message : String(e)); }
+  }
   useEffect(() => {
     const el = messagesPane.current;
     if (follow.current && el) el.scrollTop = el.scrollHeight;
@@ -195,6 +221,9 @@ export function Studio({ projectId, systems, run, onMonitor, onStart, onHome, on
   const openTodos = planTodos.filter((todo) => todo.status !== 'completed');
   const canContinue = !busy && !connecting && openTodos.length > 0 && !awaitingAnswers;
   const displayedActivity = conversationRun || historyActivity;
+  const latestVersion = versions[versions.length - 1];
+  const versionByMessage = new Map(versions.filter((v) => v.messageId).map((v) => [v.messageId!, v]));
+  const shownVersion = viewing ?? latestVersion?.n;
 
   function answeredFormsFor(index: number) {
     const message = messages[index];
@@ -209,8 +238,8 @@ export function Studio({ projectId, systems, run, onMonitor, onStart, onHome, on
     return forms;
   }
 
-  return <div class="studio-shell">
-    <header class="studio-header"><IconButton icon="home" label="Back to home" onClick={onHome}/><Logo size={26}/><button class="project-title" onClick={() => { setName(project.name); setRenaming(true); }} title="Rename project" aria-label="Rename project">{project.name}<Icon name="chevron" size={14}/></button><span class="studio-workflow">{skillNames[project.skillId || ''] || 'Prototype'}</span><div class="studio-header-end">{activityControl}<span class="local-label"><span class="status-dot"/>Local workspace</span><button class="button secondary small" onClick={() => setPickingSystem(true)} disabled={busy}><Icon name="palette" size={16}/>{system?.name || 'Design system'}</button><IconButton icon="trash" label="Delete project" onClick={() => setDeleting(true)}/></div></header>
+  return <div class={`studio-shell canvas-${canvas}`}>
+    <header class="studio-header"><IconButton icon="home" label="Back to home" onClick={onHome}/><Logo size={26}/><button class="project-title" onClick={() => { setName(project.name); setRenaming(true); }} title="Rename project" aria-label="Rename project">{project.name}<Icon name="chevron" size={14}/></button><span class="studio-workflow">{skillNames[project.skillId || ''] || 'Prototype'}</span><div class="studio-header-end">{activityControl}<span class="local-label"><span class="status-dot"/>Local workspace</span><button class="button secondary small" onClick={() => setPickingSystem(true)} disabled={busy}><Icon name="palette" size={16}/>{system?.name || 'Design system'}</button>{canvas === 'closed' && <IconButton icon="panel" label="Show the canvas" onClick={() => setCanvas('open')}/>}<IconButton icon="trash" label="Delete project" onClick={() => setDeleting(true)}/></div></header>
     <div class="studio-content"><section class="conversation-pane" aria-label="Design conversation"><div class="conversation-toolbar"><label><span class="sr-only">Conversation</span><select value={conversationId} disabled={busy || connecting} onChange={(e) => { if (busy || connecting || conversationTransition.current) return; setConversationId(e.currentTarget.value); follow.current = true; }}>{conversations.map((c, i) => <option key={c.id} value={c.id}>{c.title === 'Main' ? 'Design conversation' : `${c.title} ${conversations.length - i}`}</option>)}</select></label><IconButton icon="plus" label="New conversation" onClick={newConversation} disabled={busy || connecting}/></div>
       {displayedActivity && <RunActivity key={displayedActivity.id} run={displayedActivity} workflow={skillNames[project.skillId || ''] || 'Prototype'} system={system?.name} onError={onError}/>}
       <div class="conversation-messages" ref={messagesPane} onScroll={(e) => { const el = e.currentTarget; follow.current = el.scrollHeight - el.scrollTop - el.clientHeight < 100; }}>
@@ -232,11 +261,12 @@ export function Studio({ projectId, systems, run, onMonitor, onStart, onHome, on
             return <article key={message.id} class="message message-user"><div class="message-byline"><span>You</span></div><RichText text={message.content}/></article>;
           }
           return <article key={message.id} class="message message-assistant">
-            <div class="message-byline"><AgentMark size={20}/><strong>omp agent</strong></div>
+            <div class="message-byline"><AgentMark size={20}/><strong>pi agent</strong></div>
             <AgentMessage text={message.content} interactive={index === latestAssistantIndex && !busy && !connecting} answered={answeredFormsFor(index)} onSend={sendText}/>
+            {versionByMessage.has(message.id) && (() => { const v = versionByMessage.get(message.id)!; return <ArtifactCard version={v} latest={v === latestVersion} active={canvas !== 'closed' && !busy && shownVersion === v.n} onOpen={() => openVersion(v.n)}/>; })()}
           </article>;
         })}
-        {showLive && <article class="message message-assistant live-message"><div class="message-byline"><AgentMark size={20}/><strong>omp agent</strong><span class="generating-label">Working<span class="working-indicator"><i/><i/><i/></span></span></div>{run.text && <AgentMessage text={run.text} live/>}</article>}
+        {showLive && <article class="message message-assistant live-message"><div class="message-byline"><AgentMark size={20}/><strong>pi agent</strong><span class="generating-label">Working<span class="working-indicator"><i/><i/><i/></span></span></div>{run.text && <AgentMessage text={run.text} live/>}<ArtifactCardLive entry={project.entryFile} onOpen={() => openVersion(null)}/></article>}
         {run?.model && run.conversationId === conversationId && <p class="run-model"><ModelIcon id={run.modelId} provider={run.provider} size={16}/>Using {run.model}</p>}
         {planTodos.length > 0 && <TodoCard todos={planTodos} live={showLive}/>}
         {planRenders.length > 0 && <RenderStrip renders={planRenders} onOpen={setPreview}/>}
@@ -244,12 +274,12 @@ export function Studio({ projectId, systems, run, onMonitor, onStart, onHome, on
         {showLive && <RunProgress run={run}/>}
 
         {canContinue && <div class="continue-tasks"><button class="button secondary" onClick={() => void sendText(continueMessage(planTodos))} disabled={connecting}><Icon name="refresh" size={15}/>Continue remaining tasks<span class="continue-count">{openTodos.length}</span></button></div>}
-        {run?.status === 'failed' && <div class="inline-error" role="alert"><strong>omp couldn’t finish this run.</strong><p>{run.error || 'Check your omp model configuration, then try again.'}</p></div>}
-        {run?.status === 'canceled' && <p class="run-status">Generation stopped. Your existing files are unchanged unless omp saved an edit before stopping.</p>}
+        {run?.status === 'failed' && <div class="inline-error" role="alert"><strong>pi couldn’t finish this run.</strong><p>{run.error || 'Check your pi model configuration, then try again.'}</p></div>}
+        {run?.status === 'canceled' && <p class="run-status">Generation stopped. Your existing files are unchanged unless pi saved an edit before stopping.</p>}
         {run?.status === 'succeeded' && !run.attention && <p class="run-status"><Icon name="check" size={15}/>{files.some((file) => /\.html?$/i.test(file.path)) ? 'Finished. Your design is ready to explore.' : 'Finished. Response saved to this conversation.'}</p>}
       </div>
-      <div class="studio-composer"><Composer compact value={prompt} onChange={setPrompt} onSubmit={send} busy={busy} disabled={connecting} onStop={() => { if (run) api.cancelRun(run.id).catch((e) => onError(e.message)); }} systemName={system?.name} onSystem={() => setPickingSystem(true)} frame={frame} onFrame={setFrame}/><p>omp can edit project files and run commands on your Mac.</p></div>
-    </section><PreviewPane project={project} files={files} frame={frame} onFrame={setFrame} changes={changes} busy={busy} activityLabel={displayedActivity?.label} onError={onError}/></div>
+      <div class="studio-composer"><Composer compact value={prompt} onChange={setPrompt} onSubmit={send} busy={busy} disabled={connecting} onStop={() => { if (run) api.cancelRun(run.id).catch((e) => onError(e.message)); }} systemName={system?.name} onSystem={() => setPickingSystem(true)} frame={frame} onFrame={setFrame}/><p>pi can edit project files and run commands on your Mac.</p></div>
+    </section>{canvas !== 'closed' && <PreviewPane project={project} files={files} frame={frame} onFrame={setFrame} changes={changes} busy={busy} activityLabel={displayedActivity?.label} onError={onError} versions={versions} viewing={viewing} onView={setViewing} onRestore={restoreVersion} expanded={canvas === 'expanded'} onExpand={() => setCanvas(canvas === 'expanded' ? 'open' : 'expanded')} onClose={() => setCanvas('closed')}/>}</div>
     {pickingSystem && <SystemPicker systems={systems} selected={project.designSystemId || ''} onClose={() => setPickingSystem(false)} onSelect={async (id) => { try { const d = await api.updateProject({ ...project, designSystemId: id }); setProject(d.project); setPickingSystem(false); } catch (e) { onError(String(e)); } }}/>}
     {preview && <Dialog title={`${renderLabel(preview)} render`} onClose={() => setPreview(null)} class="render-dialog"><RenderDialogBody render={preview}/></Dialog>}
     {renaming && <Dialog title="Rename project" onClose={() => setRenaming(false)}><form class="rename-form" onSubmit={async (e) => { e.preventDefault(); try { const d = await api.updateProject({ ...project, name }); setProject(d.project); setRenaming(false); } catch (e) { onError(String(e)); } }}><label>Project name<input autoFocus value={name} onInput={(e) => setName(e.currentTarget.value)} required/></label><button class="button primary" disabled={!name.trim()}>Save name</button></form></Dialog>}

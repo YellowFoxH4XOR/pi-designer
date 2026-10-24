@@ -3,7 +3,7 @@ import { frames } from '../state';
 import { Icon } from './Icon';
 
 export function renderLabel(render: Render): string {
-  const slide = render.slide ? ` · slide ${render.slide}` : '';
+  const slide = render.slide ? ` · slide ${render.slide}` : render.at ? ` · ${(render.at / 1000).toFixed(1)}s` : '';
   if (render.viewport === 'web' || render.viewport === 'desktop' || render.viewport === 'mobile') {
     return frames[render.viewport].label + slide;
   }

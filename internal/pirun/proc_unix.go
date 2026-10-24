@@ -1,6 +1,6 @@
 //go:build unix
 
-package omprun
+package pirun
 
 import (
 	"os/exec"
@@ -13,18 +13,16 @@ func setProcessGroup(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 }
 
-// killProcessGroup signals the child's whole process group.
+// killProcessGroup signals the child's whole process group. setProcessGroup
+// makes the child its group leader, so the group id is its pid; that stays
+// valid after pi itself has exited and lets leftover descendants (servers or
+// watchers a tool started in the background) be reaped too.
 func killProcessGroup(cmd *exec.Cmd) {
 	if cmd.Process == nil {
 		return
 	}
-	pgid, err := syscall.Getpgid(cmd.Process.Pid)
-	if err != nil {
-		_ = cmd.Process.Kill()
-		return
-	}
 	// Negative pid == "signal the process group".
-	if err := syscall.Kill(-pgid, syscall.SIGKILL); err != nil {
+	if err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL); err != nil {
 		_ = cmd.Process.Kill()
 	}
 }

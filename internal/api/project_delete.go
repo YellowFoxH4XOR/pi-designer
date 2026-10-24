@@ -11,13 +11,14 @@ import (
 	"github.com/akki/pidesigner/internal/model"
 )
 
-// ErrProjectBusy rejects deleting a project while omp is working in it: the
+// ErrProjectBusy rejects deleting a project while pi is working in it: the
 // agent would keep writing files and activity for a project that is gone.
-var ErrProjectBusy = errors.New("omp is working in this project. Stop the run before deleting it.")
+var ErrProjectBusy = errors.New("pi is working in this project. Stop the run before deleting it.")
 
 // DeleteProject removes a project and everything πDesigner keeps for it: the
 // database rows (conversations, messages, runs and their activity cascade),
-// the project files, its preview renders and each conversation's omp session.
+// the project files, its preview renders, its version history and each
+// conversation's pi session.
 // No run can start in the project while it is being deleted.
 func (r *Runner) DeleteProject(proj model.Project) error {
 	r.mu.Lock()
@@ -56,6 +57,11 @@ func (r *Runner) DeleteProject(proj model.Project) error {
 	var errs []error
 	for _, dir := range dirs {
 		if err := os.RemoveAll(dir); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if r.cfg.Versions != nil {
+		if err := r.cfg.Versions.Delete(proj.ID); err != nil {
 			errs = append(errs, err)
 		}
 	}

@@ -11,7 +11,7 @@ export const workflows = [
   { id: 'web-prototype', name: 'Prototype', icon: 'web' as const, description: 'A working interface, built from your brief.' },
   { id: 'motion-design', name: 'Motion design', icon: 'motion' as const, description: 'Bring a page or interaction to life.' },
   { id: 'simple-deck', name: 'Slide deck', icon: 'deck' as const, description: 'A swipeable presentation, slide by slide.' },
-  { id: 'web-clone', name: 'Website clone', icon: 'clone' as const, description: 'Rebuild a reference website with omp.' },
+  { id: 'web-clone', name: 'Website clone', icon: 'clone' as const, description: 'Rebuild a reference website with pi.' },
 ];
 export const skillNames: Record<string, string> = {
   'web-prototype': 'Prototype', 'web-artifacts-builder': 'Prototype', 'motion-design': 'Motion design', 'web-clone': 'Website clone',

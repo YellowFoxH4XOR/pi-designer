@@ -533,3 +533,13 @@
     gap: 7px;
   }
 }
+/* The independent jury decides a round; pi's own panel follows it. */
+.critique-jury { margin: 12px 0; padding: 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); }
+.critique-jury-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.critique-jury-head h4 { margin: 0; font-size: 12px; font-weight: 600; }
+.critique-jury-head span { font-size: 10.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.critique-jury-scores { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin: 10px 0 6px; }
+.critique-jury-scores div { padding: 6px 8px; background: var(--subtle); border-radius: 6px; }
+.critique-jury-scores dt { font-size: 10px; color: var(--muted); text-transform: capitalize; }
+.critique-jury-scores dd { margin: 2px 0 0; font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.critique-jury-issues { margin: 6px 0 0; padding-left: 16px; font-size: 11.5px; line-height: 1.5; color: var(--ink); }

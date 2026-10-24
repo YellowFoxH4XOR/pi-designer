@@ -25,9 +25,10 @@ import (
 	"github.com/akki/pidesigner/internal/content"
 	"github.com/akki/pidesigner/internal/httpguard"
 	"github.com/akki/pidesigner/internal/knowledge"
-	"github.com/akki/pidesigner/internal/omprun"
+	"github.com/akki/pidesigner/internal/pirun"
 	"github.com/akki/pidesigner/internal/preview"
 	"github.com/akki/pidesigner/internal/store"
+	"github.com/akki/pidesigner/internal/versions"
 )
 
 // Options configure the daemon.
@@ -36,7 +37,7 @@ type Options struct {
 	Port       int    // 0 picks a free port
 	DataDir    string // SQLite + projects/
 	ContentDir string // catalog
-	OmpBin     string // omp executable, empty resolves automatically
+	PiBin      string // pi executable, empty resolves automatically
 	UIDir      string // built UI directory, empty disables static serving
 	Quiet      bool   // suppress request logging
 	// Renderer is the pidesigner-render executable. Empty looks beside the
@@ -54,14 +55,15 @@ type App struct {
 	Hub     *preview.Hub
 
 	listener      net.Listener
-	ompBin        string
+	piBin         string
 	discoveryPath string
 	stopUpdates   context.CancelFunc
+	updatesDone   chan struct{}
 	dataLock      *os.File
 }
 
-// OmpBin reports the resolved omp executable path, or empty when unresolved.
-func (a *App) OmpBin() string { return a.ompBin }
+// PiBin reports the resolved pi executable path, or empty when unresolved.
+func (a *App) PiBin() string { return a.piBin }
 
 // Start binds the listener and serves in the background.
 func Start(opts Options) (*App, error) {
@@ -114,9 +116,9 @@ func Start(opts Options) (*App, error) {
 	}
 	cat.Knowledge = updates
 
-	resolvedOmp, ompErr := omprun.ResolveBin(opts.OmpBin)
-	if ompErr != nil {
-		log.Printf("warning: %v", ompErr)
+	piRuntime := pirun.Detect(context.Background(), opts.PiBin)
+	if piRuntime.Error != "" {
+		log.Printf("warning: %s", piRuntime.Error)
 	}
 
 	hub := preview.NewHub()
@@ -129,12 +131,14 @@ func Start(opts Options) (*App, error) {
 	if renderer == "" {
 		log.Printf("warning: pidesigner-render not found; the agent will verify designs without rendering them")
 	}
-	models := omprun.NewCatalog(opts.OmpBin)
-	runner := api.NewRunner(st, cat, opts.OmpBin, hub, api.RunnerConfig{
+	models := pirun.NewCatalog(opts.PiBin)
+	history := &versions.Store{Root: filepath.Join(opts.DataDir, "versions")}
+	runner := api.NewRunner(st, cat, opts.PiBin, hub, api.RunnerConfig{
 		SessionDir: filepath.Join(opts.DataDir, "sessions"),
 		RenderDir:  filepath.Join(opts.DataDir, "renders"),
 		Extension:  extension,
 		Renderer:   renderer,
+		Versions:   history,
 	})
 	srv := &api.Server{
 		Store:       st,
@@ -143,9 +147,11 @@ func Start(opts Options) (*App, error) {
 		Runner:      runner,
 		Hub:         hub,
 		ProjectRoot: projectRoot,
-		OmpBin:      resolvedOmp,
+		PiExplicit:  opts.PiBin,
 		Models:      models,
+		Versions:    history,
 	}
+	srv.SetPiRuntime(piRuntime)
 
 	// Resume watching existing projects.
 	if projects, err := st.ListProjects(); err == nil {
@@ -186,7 +192,7 @@ func Start(opts Options) (*App, error) {
 		Runner:        runner,
 		Hub:           hub,
 		listener:      listener,
-		ompBin:        resolvedOmp,
+		piBin:         piRuntime.Bin,
 		discoveryPath: filepath.Join(opts.DataDir, "runtime.json"),
 		dataLock:      dataLock,
 	}
@@ -201,17 +207,10 @@ func Start(opts Options) (*App, error) {
 
 	updateCtx, stopUpdates := context.WithCancel(context.Background())
 	a.stopUpdates = stopUpdates
+	a.updatesDone = make(chan struct{})
 	go func() {
-		ticker := time.NewTicker(24 * time.Hour)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-updateCtx.Done():
-				return
-			case <-ticker.C:
-				srv.CheckForUpdates(updateCtx)
-			}
-		}
+		defer close(a.updatesDone)
+		runReferenceUpdates(updateCtx, updates, 24*time.Hour)
 	}()
 	go func() {
 		if err := httpSrv.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -227,6 +226,7 @@ func Start(opts Options) (*App, error) {
 func (a *App) Shutdown(ctx context.Context) error {
 	if a.stopUpdates != nil {
 		a.stopUpdates()
+		<-a.updatesDone
 	}
 	if b, err := os.ReadFile(a.discoveryPath); err == nil {
 		var v struct {
@@ -237,10 +237,13 @@ func (a *App) Shutdown(ctx context.Context) error {
 		}
 	}
 	a.Runner.Shutdown()
-	if err := a.Server.Shutdown(ctx); err != nil {
-		return err
+	drainErr := a.Server.Shutdown(ctx)
+	if drainErr != nil {
+		// A stream outlived the drain deadline. Force-close connections so no
+		// handler touches SQLite after it is closed, then still release it.
+		drainErr = errors.Join(drainErr, a.Server.Close())
 	}
-	return errors.Join(a.Store.Close(), a.dataLock.Close())
+	return errors.Join(drainErr, a.Store.Close(), a.dataLock.Close())
 }
 
 // withStatic serves the built UI, falling back to index.html for SPA routes.

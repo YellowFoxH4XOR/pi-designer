@@ -4,7 +4,7 @@ const { mkdtempSync, rmSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 const { execFileSync } = require("node:child_process");
-const dir = mkdtempSync(join(tmpdir(), "omp-activity-tests-"));
+const dir = mkdtempSync(join(tmpdir(), "pi-activity-tests-"));
 execFileSync(process.execPath, [
   "node_modules/typescript/bin/tsc",
   "src/activity.ts",
@@ -17,7 +17,7 @@ execFileSync(process.execPath, [
   "--outDir",
   dir,
 ]);
-const { fromActivity, reduceActivity, statusLabel } = require(
+const { fromActivity, reduceActivity, statusLabel, workSummary } = require(
   join(dir, "activity.js"),
 );
 const { modelIdentity } = require(join(dir, "model-identity.js"));
@@ -29,7 +29,7 @@ const initial = () =>
     projectName: "Test",
     status: "running",
     phase: "starting",
-    label: "Starting omp",
+    label: "Starting pi",
     startedAt: 1,
     updatedAt: 1,
     seq: 0,
@@ -149,4 +149,13 @@ test("model identity follows model maker rather than a routing provider", () => 
     ["custom-model", "my-server", null],
   ])
     assert.equal(modelIdentity(id, provider), expected, id);
+});
+
+test("finished runs summarize their work in one line", () => {
+  const tools = ["read", "bash", "write", "edit", "todo_write", "read", "render_preview"].map((tool) => ({ tool }));
+  assert.equal(
+    workSummary({ startedAt: 0, endedAt: 7400, tools }),
+    "Worked for 7s · 2 reads · 1 command · 2 edits · 1 render",
+  );
+  assert.equal(workSummary({ startedAt: 0, endedAt: 65000, tools: [] }), "Worked for 1m 5s");
 });

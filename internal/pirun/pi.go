@@ -1,22 +1,21 @@
-// Package omprun drives the locally installed omp agent over its RPC mode.
+// Package pirun drives the locally installed pi coding agent over its RPC mode.
 //
-// omp speaks JSONL over stdin/stdout: one JSON record per line, LF-terminated.
+// pi speaks JSONL over stdin/stdout: one JSON record per line, LF-terminated.
 // This package owns the process lifecycle, correlates command responses by id,
 // and turns the event stream into a typed channel.
 //
 // Protocol notes that the implementation depends on:
 //   - stdout carries protocol records only; diagnostics go to stderr.
-//   - the first record is a "ready" frame; the client negotiates protocol v2 so
-//     records larger than the 1 MiB physical frame limit arrive as an
-//     uninterrupted rpc_chunk sequence instead of being truncated or failed.
-//   - a prompt response with data.agentInvoked=false finished locally; no
-//     prompt_result or session_settled follows.
-//   - prompt_result reports how a prompt ended (completed/aborted/error);
-//     session_settled (or prompt_result.sessionSettled) marks the end of all
-//     automatic work. agent_end alone does not.
+//   - a prompt response reports data.disposition: "started" begins a run,
+//     "handled" finished locally (no agent_settled follows), "queued" waits
+//     behind an active run.
+//   - agent_settled {aborted} marks the end of all automatic work (retries,
+//     compaction recovery, queued messages). agent_end alone does not.
+//   - a provider failure is the final assistant message with stopReason
+//     "error"; earlier errored messages may still be retried.
 //   - records are framed by LF only; line-splitting must not treat U+2028 or
 //     U+2029 as boundaries.
-package omprun
+package pirun
 
 import (
 	"bufio"
@@ -47,7 +46,7 @@ const (
 	EventModelResult   = "model_result"
 )
 
-// Event is one item from omp's event stream.
+// Event is one item from pi's event stream.
 type Event struct {
 	Type         string          `json:"type"`
 	Text         string          `json:"text,omitempty"`
@@ -65,19 +64,23 @@ type Event struct {
 	Raw         json.RawMessage `json:"-"`
 }
 
-// Options configure an omp invocation.
+// Options configure a pi invocation.
 type Options struct {
-	// Bin is the omp executable. Empty means resolve from PATH and the known
+	// Bin is the pi executable. Empty means resolve from PATH and the known
 	// install locations.
 	Bin string
-	// Dir is the working directory -- omp's file tools operate here.
+	// Dir is the working directory -- pi's file tools operate here.
 	Dir string
 	// Model is an exact provider/model reference, e.g.
-	// "anthropic/claude-sonnet-4-5". Empty keeps omp's default (or, for a
+	// "anthropic/claude-sonnet-4-5". Empty keeps pi's default (or, for a
 	// continued session, the model it was saved with).
 	Model string
-	// Thinking is omp's thinking level: off|minimal|low|medium|high|xhigh|max.
+	// Thinking is pi's thinking level: off|minimal|low|medium|high|xhigh|max.
 	Thinking string
+	// SystemPrompt is a file that replaces pi's default coding-assistant
+	// system prompt. Tool definitions, skills and the working directory are
+	// still added by pi.
+	SystemPrompt string
 	// SystemPromptFiles are files appended to the system prompt.
 	SystemPromptFiles []string
 	// ExtraArgs are appended to the argv after the options above.
@@ -89,12 +92,9 @@ type Options struct {
 	SessionDir string
 	// Extensions are extension files loaded explicitly for this run.
 	Extensions []string
-	// AutoApprove skips tool approval prompts. Unattended runs need it: an
-	// approval prompt would otherwise wait for a host answer.
-	AutoApprove bool
 }
 
-// Session is a running omp process.
+// Session is a running pi process.
 type Session struct {
 	cmd    *exec.Cmd
 	stdin  io.WriteCloser
@@ -115,14 +115,13 @@ type Session struct {
 	// stderrTail keeps the last stderr lines for error reporting.
 	stderrTail []string
 
-	// Reader-goroutine state: chunk reassembly and settle tracking.
-	chunk                *chunkAssembly
-	promptAborted        bool
+	// Reader-goroutine state: settle tracking.
 	settledEmitted       bool
+	providerError        string
 	lastThinkingActivity time.Time
 }
 
-// rpcResponse is an omp command response record.
+// rpcResponse is a pi command response record.
 type rpcResponse struct {
 	Type    string          `json:"type"`
 	ID      string          `json:"id"`
@@ -132,7 +131,7 @@ type rpcResponse struct {
 	Data    json.RawMessage `json:"data"`
 }
 
-// ResolveBin locates the omp executable.
+// ResolveBin locates the pi executable.
 func ResolveBin(explicit string) (string, error) {
 	if explicit != "" {
 		// Runs start in project and temp directories, so a relative path
@@ -143,13 +142,13 @@ func ResolveBin(explicit string) (string, error) {
 				return abs, nil
 			}
 		}
-		return "", fmt.Errorf("omp binary %q not found", explicit)
+		return "", fmt.Errorf("pi binary %q not found", explicit)
 	}
-	if p, err := exec.LookPath("omp"); err == nil {
+	if p, err := exec.LookPath("pi"); err == nil {
 		return p, nil
 	}
 	// Apps launched from Finder do not inherit a login-shell PATH. Look where
-	// omp's installers put the binary.
+	// pi's installers put the binary.
 	home, err := os.UserHomeDir()
 	if err == nil {
 		for _, candidate := range installCandidates(home) {
@@ -158,20 +157,25 @@ func ResolveBin(explicit string) (string, error) {
 			}
 		}
 	}
-	return "", errors.New("omp executable not found on PATH (also looked in ~/.local/bin, ~/.bun/bin and ~/Library/Application Support/Tern/omp/bin)")
+	return "", errors.New("pi executable not found on PATH (also looked in ~/.bun/bin, ~/.local/bin, ~/.pi/agent/bin and Homebrew)")
 }
 
 func installCandidates(home string) []string {
 	return []string{
-		filepath.Join(home, ".local", "bin", "omp"),                                        // install script
-		filepath.Join(home, ".bun", "bin", "omp"),                                          // bun install -g
-		filepath.Join(home, "Library", "Application Support", "Tern", "omp", "bin", "omp"), // Tern
+		filepath.Join(home, ".bun", "bin", "pi"),         // bun install -g
+		filepath.Join(home, ".local", "bin", "pi"),       // npm prefix ~/.local
+		filepath.Join(home, ".pi", "agent", "bin", "pi"), // pi installer
+		"/opt/homebrew/bin/pi",                           // npm/Homebrew on Apple silicon
+		"/usr/local/bin/pi",                              // npm/Homebrew on Intel
 	}
 }
 
-// args builds the omp argv for opts.
+// args builds the pi argv for opts. Every session ignores project-local pi
+// resources (--no-approve): the agent writes the project folder, so its .pi
+// settings, extensions and MCP servers must never load. MCP is off too, so
+// the user's MCP servers never start inside design or metadata sessions.
 func (opts Options) args() []string {
-	args := []string{"--mode", "rpc"}
+	args := []string{"--mode", "rpc", "--no-approve", "--no-mcp"}
 	if opts.SessionDir == "" {
 		args = append(args, "--no-session")
 	} else {
@@ -187,16 +191,16 @@ func (opts Options) args() []string {
 	for _, e := range opts.Extensions {
 		args = append(args, "--extension", e)
 	}
+	if opts.SystemPrompt != "" {
+		args = append(args, "--system-prompt", opts.SystemPrompt)
+	}
 	for _, f := range opts.SystemPromptFiles {
 		args = append(args, "--append-system-prompt", f)
-	}
-	if opts.AutoApprove {
-		args = append(args, "--auto-approve")
 	}
 	return append(args, opts.ExtraArgs...)
 }
 
-// Start launches omp in RPC mode.
+// Start launches pi in RPC mode.
 func Start(ctx context.Context, opts Options) (*Session, error) {
 	bin, err := ResolveBin(opts.Bin)
 	if err != nil {
@@ -209,7 +213,7 @@ func Start(ctx context.Context, opts Options) (*Session, error) {
 	if cmd.Env == nil {
 		cmd.Env = os.Environ()
 	}
-	// Put omp in its own process group so the whole tree (omp plus any tools
+	// Put pi in its own process group so the whole tree (pi plus any tools
 	// it spawns) can be reaped together. Without this, killing the daemon
 	// leaves orphaned agent processes running to completion.
 	setProcessGroup(cmd)
@@ -228,7 +232,7 @@ func Start(ctx context.Context, opts Options) (*Session, error) {
 	}
 
 	if err := cmd.Start(); err != nil {
-		return nil, fmt.Errorf("start omp: %w", err)
+		return nil, fmt.Errorf("start pi: %w", err)
 	}
 
 	s := &Session{
@@ -259,22 +263,13 @@ func Start(ctx context.Context, opts Options) (*Session, error) {
 		}
 	}()
 
-	// Opt in to lossless framing before any other command. omp processes
-	// commands in order, so every later response may already be chunked. A
-	// runtime without v2 answers with a failure and keeps v1 framing, which
-	// readStdout handles identically.
-	if _, _, err := s.send("negotiate_protocol", map[string]any{"protocolVersion": 2}); err != nil {
-		s.CloseWith()
-		return nil, err
-	}
-
 	return s, nil
 }
 
 // Events returns the event channel. It is closed when the session ends.
 func (s *Session) Events() <-chan Event { return s.events }
 
-// Done is closed when the omp process exits.
+// Done is closed when the pi process exits.
 func (s *Session) Done() <-chan struct{} { return s.done }
 
 // readStdout parses the JSONL protocol stream.
@@ -286,7 +281,7 @@ func (s *Session) readStdout() {
 	for {
 		line, err := readLine(br)
 		if len(line) > 0 {
-			s.handleFrame(line)
+			s.handleRecord(line)
 		}
 		if err != nil {
 			if err != io.EOF {
@@ -432,16 +427,16 @@ func (s *Session) send(cmdType string, extra map[string]any) (string, chan *rpcR
 		s.mu.Lock()
 		delete(s.pending, id)
 		s.mu.Unlock()
-		return "", nil, fmt.Errorf("write to omp: %w", err)
+		return "", nil, fmt.Errorf("write to pi: %w", err)
 	}
 	return id, ch, nil
 }
 
-// Prompt sends a prompt and waits until omp has admitted it.
+// Prompt sends a prompt and waits until pi has admitted it.
 //
-// started is false when omp finished the prompt locally (data.agentInvoked
-// false, e.g. a builtin slash command): no prompt_result or session_settled
-// follows, so callers must not wait for EventSettled in that case.
+// started is false when pi finished the prompt locally (disposition
+// "handled", e.g. an extension command): no agent_settled follows, so callers
+// must not wait for EventSettled in that case.
 func (s *Session) Prompt(ctx context.Context, text string) (started bool, err error) {
 	_, ch, err := s.send("prompt", map[string]any{"message": text})
 	if err != nil {
@@ -453,20 +448,20 @@ func (s *Session) Prompt(ctx context.Context, text string) (started bool, err er
 			return false, fmt.Errorf("prompt rejected: %s", resp.Error)
 		}
 		var data struct {
-			AgentInvoked *bool `json:"agentInvoked"`
+			Disposition string `json:"disposition"`
 		}
 		if len(resp.Data) > 0 {
 			_ = json.Unmarshal(resp.Data, &data)
 		}
-		return data.AgentInvoked == nil || *data.AgentInvoked, nil
+		return data.Disposition != "handled", nil
 	case <-ctx.Done():
 		return false, ctx.Err()
 	case <-s.done:
-		return false, errors.New("omp exited before accepting the prompt")
+		return false, errors.New("pi exited before accepting the prompt")
 	}
 }
 
-// Abort asks omp to stop the current run.
+// Abort asks pi to stop the current run.
 func (s *Session) Abort(ctx context.Context) error {
 	_, ch, err := s.send("abort", nil)
 	if err != nil {
@@ -481,12 +476,12 @@ func (s *Session) Abort(ctx context.Context) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-s.done:
-		return errors.New("omp exited")
+		return errors.New("pi exited")
 	}
 }
 
 // Close shuts the session down: close stdin for an orderly exit, then kill
-// the process if it lingers. stdout keeps being drained meanwhile, as omp
+// the process if it lingers. stdout keeps being drained meanwhile, as pi
 // requires before it exits.
 func (s *Session) Close() {
 	s.stopOnce.Do(func() { close(s.stopDelivery) })
@@ -502,6 +497,8 @@ func (s *Session) Close() {
 
 	select {
 	case <-s.done:
+		// pi exited on its own; reap anything it left in its group.
+		killProcessGroup(s.cmd)
 	case <-time.After(3 * time.Second):
 		killProcessGroup(s.cmd)
 		select {

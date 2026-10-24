@@ -1,4 +1,4 @@
-package omprun
+package pirun
 
 import (
 	"context"
@@ -10,9 +10,9 @@ import (
 	"time"
 )
 
-func fakeOmpCatalog(t *testing.T) string {
+func fakePiCatalog(t *testing.T) string {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "omp")
+	path := filepath.Join(t.TempDir(), "pi")
 	script := `#!/bin/sh
 provider=first
 while [ "$#" -gt 0 ]; do
@@ -38,7 +38,7 @@ done
 func TestConfiguredModelDiscoveryAndExactProviderSelection(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
-	c := NewCatalog(fakeOmpCatalog(t))
+	c := NewCatalog(fakePiCatalog(t))
 	list, err := c.List(ctx, false)
 	if err != nil {
 		t.Fatal(err)
@@ -50,7 +50,7 @@ func TestConfiguredModelDiscoveryAndExactProviderSelection(t *testing.T) {
 	if strings.Contains(string(payload), "Authorization") || strings.Contains(string(payload), "never-expose") {
 		t.Fatal("raw model secrets escaped the allowlisted model fields")
 	}
-	// Both providers expose exactly the same id. This passes only when omp was
+	// Both providers expose exactly the same id. This passes only when pi was
 	// launched with the provider-qualified reference, not a bare model id.
 	levels, err := c.Thinking(ctx, "second/same-name")
 	if err != nil {
@@ -64,9 +64,9 @@ func TestConfiguredModelDiscoveryAndExactProviderSelection(t *testing.T) {
 	}
 }
 
-func TestPromptResultErrorIsTheAuthoritativeFailure(t *testing.T) {
+func TestFinalErroredMessageIsTheAuthoritativeFailure(t *testing.T) {
 	s := &Session{events: make(chan Event, 8)}
-	// A failed attempt omp still retries must not fail the run by itself.
+	// A failed attempt pi still retries must not fail the run by itself.
 	s.handleRecord([]byte(`{"type":"message_end","message":{"role":"assistant","stopReason":"error","errorMessage":"overloaded"}}`))
 	if ev := <-s.events; ev.Type != "message_end" {
 		t.Fatal("authoritative message was lost")
@@ -76,7 +76,16 @@ func TestPromptResultErrorIsTheAuthoritativeFailure(t *testing.T) {
 	if ev := <-s.events; ev.Type != EventModelResult {
 		t.Fatal("a successful retry must report a model result", ev)
 	}
-	s.handleRecord([]byte(`{"type":"prompt_result","id":"r2","agentInvoked":true,"status":"error","sessionSettled":true,"error":{"message":"Provider authentication failed","retryable":false}}`))
+	s.handleRecord([]byte(`{"type":"agent_settled","aborted":false}`))
+	if ev := <-s.events; ev.Type != EventSettled {
+		t.Fatalf("recovered run reported %+v", ev)
+	}
+
+	s.handleRecord([]byte(`{"type":"agent_start"}`))
+	<-s.events
+	s.handleRecord([]byte(`{"type":"message_end","message":{"role":"assistant","stopReason":"error","errorMessage":"Provider authentication failed"}}`))
+	<-s.events
+	s.handleRecord([]byte(`{"type":"agent_settled","aborted":false}`))
 	ev := <-s.events
 	if ev.Type != EventError || !strings.Contains(ev.Text, "authentication") {
 		t.Fatalf("provider failure was silently ignored: %+v", ev)
@@ -86,8 +95,8 @@ func TestPromptResultErrorIsTheAuthoritativeFailure(t *testing.T) {
 	}
 }
 
-func TestLiveInstalledOmpModels(t *testing.T) {
-	if os.Getenv("PIDESIGNER_LIVE_OMP") == "" {
+func TestLiveInstalledPiModels(t *testing.T) {
+	if os.Getenv("PIDESIGNER_LIVE_PI") == "" {
 		t.Skip("opt-in metadata-only test; no inference")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
@@ -98,9 +107,9 @@ func TestLiveInstalledOmpModels(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(list.Models) == 0 || list.Current == nil {
-		t.Fatal("installed omp did not return configured models")
+		t.Fatal("installed pi did not return configured models")
 	}
-	t.Logf("omp returned %d configured models; default=%s", len(list.Models), list.Current.Ref())
+	t.Logf("pi returned %d configured models; default=%s", len(list.Models), list.Current.Ref())
 	chosen := list.Models[0]
 	if chosen.Ref() == list.Current.Ref() && len(list.Models) > 1 {
 		chosen = list.Models[1]
@@ -115,6 +124,6 @@ func TestLiveInstalledOmpModels(t *testing.T) {
 		t.Fatal(err)
 	}
 	if after.Current == nil || after.Current.Ref() != list.Current.Ref() {
-		t.Fatal("model discovery changed the user's omp default")
+		t.Fatal("model discovery changed the user's pi default")
 	}
 }

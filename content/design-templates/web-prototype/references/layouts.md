@@ -1,247 +1,119 @@
-# Web prototype layouts
+# Optional structural examples
 
-**8 paste-ready section skeletons.** Drop into `<main id="content">` of `assets/template.html`. Don't write sections from scratch — pick the closest layout, paste, swap copy.
+These examples illustrate different ways to organize content; they are not a
+catalogue of required sections, paste-ready templates, or a closed set of
+acceptable layouts. Use an example only when it fits the user's task, adapt it
+to the actual content, or design a more suitable structure from scratch.
+There is no default page order, section count, hero, navigation, or footer.
 
-## Pre-flight (do this once before pasting anything)
+The snippets intentionally contain no visual styling, color, typography,
+decorative labels, filler copy, or inactive controls. Define the project's
+visual treatment separately and implement real behavior for any controls you
+add. Keep semantic structure and meaningful heading relationships as you
+adapt them.
 
-1. **Read `assets/template.html`** through the end of the `<style>` block. Every class used below must exist there. If one is missing, add it to `<style>` rather than inlining it on each section.
-2. **Pick a section list before writing copy.** Default rhythms:
-   - **Landing**: 1 hero → 2 features → 3 stat-row OR quote → 4 split → 6 cta-strip → footer
-   - **Marketing / editorial**: 1 hero-center → 7 log-list → 4 split → 6 cta-strip
-   - **Pricing / docs**: 1 hero-center → table-driven → 6 cta-strip
-3. **One accent per screen, used at most twice.** The hero eyebrow and the primary button already use it; budget any third usage carefully.
+## Work area with contextual information
 
-## Class inventory (must exist in `template.html`)
-
-> `section` `container` `hero` `hero-center` `hero-split` `hero-cta` `eyebrow` `lead` `h1` `h2` `h3` `meta` `num` `btn` `btn-primary` `btn-secondary` `btn-ghost` `btn-arrow` `card` `card-flat` `card-rule` `feature` `feature-mark` `stat` `stat-num` `stat-label` `stat-unit` `quote` `quote-mark` `quote-author` `pill` `tag` `field` `input` `textarea` `ds-table` `num-col` `ph-img` `content-img` `square` `portrait` `wide` `rule` `rule-strong` `grid-2` `grid-3` `grid-4` `grid-2-1` `grid-1-2` `row` `row-between` `stack` `log-row` `pull` `topnav` `pagefoot`
-
-If you reach for a class not on this list, define it in `<style>` first or use `style="…"` inline. Never invent a global class on a `<section>` that isn't backed by CSS.
-
----
-
-## Layout 1 — Hero, centered
-
-Use when the page leads with a thesis sentence (most landings, most marketing pages). One eyebrow, one h1 (≤14 words), one lead sentence, two CTAs.
+Useful when people need to work on one primary object while consulting
+secondary context. The relative emphasis and placement depend on the task;
+the supporting region may be omitted or moved below the main work on narrow
+screens.
 
 ```html
-<section class="section hero" data-od-id="hero">
-  <div class="container hero-center">
-    <p class="eyebrow">EYEBROW · CONTEXT</p>
-    <h1>One sharp sentence about what this is.</h1>
-    <p class="lead">One concrete-value subhead — what changes for the reader.</p>
-    <div class="hero-cta">
-      <button class="btn btn-primary">Primary action</button>
-      <button class="btn btn-secondary">Secondary</button>
-    </div>
-  </div>
-</section>
+<div class="work-area">
+  <aside aria-labelledby="context-heading">
+    <h2 id="context-heading">[Relevant context]</h2>
+    [Supporting information that helps with the task]
+  </aside>
+  <section aria-labelledby="work-heading">
+    <h1 id="work-heading">[Current task or object]</h1>
+    [The primary work surface and its real content]
+  </section>
+</div>
 ```
 
-## Layout 2 — Hero, split (text + visual)
+## Focused record or decision
 
-Use when there is a real product visual (product UI, screenshot, photograph). Left half copy, right half a `ph-img` scaffold. During Step 3, replace the entire scaffold with the acquired project-local image using `<img class="content-img" width="[intrinsic width]" height="[intrinsic height]">`. Do not transfer the scaffold's `wide` class or 16:9 ratio to the real image. Retain the scaffold only as a labeled fallback when acquisition genuinely fails.
+Useful when a single item needs review, with its status and supporting facts
+close to the decision it informs. Add actions only when they have real,
+implemented effects.
 
 ```html
-<section class="section" data-od-id="hero-split">
-  <div class="container hero-split">
+<article aria-labelledby="record-heading">
+  <header>
+    <h1 id="record-heading">[Record or decision]</h1>
+    <p>[Current state and concise context]</p>
+  </header>
+  <dl>
     <div>
-      <p class="eyebrow">EYEBROW · ROLE</p>
-      <h1>Headline that names the change.</h1>
-      <p class="lead" style="margin-top: 20px;">A short subhead — concrete, not corporate. Two sentences max.</p>
-      <div class="hero-cta" style="margin-top: 28px;">
-        <button class="btn btn-primary">Primary action</button>
-        <button class="btn btn-ghost btn-arrow">Read the story</button>
-      </div>
+      <dt>[Relevant property]</dt>
+      <dd>[Its actual value]</dd>
     </div>
-    <div class="ph-img wide" aria-label="Hero visual placeholder">[ Hero visual · 16:9 ]</div>
-  </div>
-</section>
+  </dl>
+  <section aria-labelledby="evidence-heading">
+    <h2 id="evidence-heading">[Supporting material]</h2>
+    [Evidence, history, or details needed to understand the record]
+  </section>
+</article>
 ```
 
-## Layout 3 — Feature triplet
+## Content-led reading sequence
 
-Three feature cells. Lead with a small `<h2>` framing the row. Don't put an icon on every heading — one tasteful mark per cell, monoline.
+Useful when the user's goal is to follow an explanation, story, or set of
+related topics. Let the subject determine whether content is grouped into
+sections, linked as an index, or presented in another order.
 
 ```html
-<section class="section" data-od-id="features">
-  <div class="container stack" style="gap: 56px;">
-    <div style="max-width: 36ch;">
-      <p class="eyebrow">WHAT'S DIFFERENT</p>
-      <h2>Three things you'll notice in the first ten minutes.</h2>
-    </div>
-    <div class="grid-3">
-      <div class="feature card-flat">
-        <div class="feature-mark">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 3v18M3 12h18"/></svg>
-        </div>
-        <h3>Specific feature one</h3>
-        <p>Two-sentence description that names the user value, not the technology.</p>
-      </div>
-      <div class="feature card-flat">
-        <div class="feature-mark">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>
-        </div>
-        <h3>Specific feature two</h3>
-        <p>Two-sentence description that names the user value, not the technology.</p>
-      </div>
-      <div class="feature card-flat">
-        <div class="feature-mark">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 7h16M4 12h10M4 17h16"/></svg>
-        </div>
-        <h3>Specific feature three</h3>
-        <p>Two-sentence description that names the user value, not the technology.</p>
-      </div>
-    </div>
-  </div>
-</section>
+<article aria-labelledby="page-heading">
+  <header>
+    <h1 id="page-heading">[Subject]</h1>
+    <p>[Context needed before reading]</p>
+  </header>
+  <section aria-labelledby="topic-heading">
+    <h2 id="topic-heading">[First relevant topic]</h2>
+    [The information that belongs to this topic]
+  </section>
+</article>
 ```
 
-## Layout 4 — Stat row (data billboard)
+## Data comparison
 
-Use when there are real numbers. Three stats max — four feels like a brochure. **Don't invent metrics.** If you don't have a number, use a different layout.
+Useful when the task depends on comparing values across the same attributes.
+Choose a table only when row-and-column relationships aid comprehension; use
+another representation when the data or task calls for it.
 
 ```html
-<section class="section" data-od-id="stats">
-  <div class="container">
-    <p class="eyebrow" style="margin-bottom: 40px;">BY THE NUMBERS · 2026</p>
-    <div class="grid-3">
-      <div class="stat">
-        <div class="stat-num num">38<span class="stat-unit">×</span></div>
-        <p class="stat-label">less data moved over the wire vs. naive sync, on real customer workloads.</p>
-      </div>
-      <div class="stat">
-        <div class="stat-num num">3,184</div>
-        <p class="stat-label">paying teams, including 14 of the YC W26 batch.</p>
-      </div>
-      <div class="stat">
-        <div class="stat-num num">$0.04<span class="stat-unit">/GB</span></div>
-        <p class="stat-label">average egress saved — typical $1,800/mo bill drops to $200.</p>
-      </div>
-    </div>
-  </div>
-</section>
+<table>
+  <caption>[What is being compared and why]</caption>
+  <thead>
+    <tr>
+      <th scope="col">[Attribute]</th>
+      <th scope="col">[Item A]</th>
+      <th scope="col">[Item B]</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <th scope="row">[Relevant comparison]</th>
+      <td>[Verified value]</td>
+      <td>[Verified value]</td>
+    </tr>
+  </tbody>
+</table>
 ```
 
-## Layout 5 — Pull quote (testimonial)
+## Adapting any structure
 
-A single decisive quote with attribution. Use sparingly — one per page, never two in a row.
-
-```html
-<section class="section" data-od-id="quote">
-  <div class="container" style="max-width: 800px;">
-    <div class="quote-mark">"</div>
-    <blockquote class="quote">Filebase pays for itself in the first month. We were going to hire a dedicated DevOps person to babysit our sync — instead we just switched.</blockquote>
-    <p class="quote-author">— Mira Hassan, CTO at Northwind Studios</p>
-  </div>
-</section>
-```
-
-## Layout 6 — CTA strip (closing)
-
-End the page on one decisive ask. Centered, generous whitespace, one primary button. No secondary unless the page has zero other buttons.
-
-```html
-<section class="section" data-od-id="cta-strip" style="text-align: center;">
-  <div class="container" style="max-width: 600px;">
-    <h2>Stop measuring meetings. Start measuring focus.</h2>
-    <p class="lead" style="margin: 16px auto 32px;">Free for solo. $4/mo per teammate after that.</p>
-    <button class="btn btn-primary">Start free</button>
-  </div>
-</section>
-```
-
-## Layout 7 — Log list (changelog / blog index / posts)
-
-Editorial layout for a list of dated entries. Date in mono on the left, title + dek in the middle, optional pull stat on the right. Borders on top, never around — boxes feel like a brochure.
-
-```html
-<section class="section" data-od-id="log">
-  <div class="container">
-    <div class="row-between" style="margin-bottom: 32px;">
-      <h2>Recent changes</h2>
-      <a class="btn btn-ghost btn-arrow" href="#">View all</a>
-    </div>
-    <div>
-      <article class="log-row">
-        <span class="meta">Apr 27, 2026</span>
-        <div>
-          <h3>Sync engine v3 — half the wire bytes</h3>
-          <p style="margin: 4px 0 0; color: var(--muted); font-size: 14px;">A new content-defined chunker that produces 38× fewer post-edit changes on Final Cut projects.</p>
-        </div>
-        <span class="pull meta">Engineering</span>
-      </article>
-      <article class="log-row">
-        <span class="meta">Apr 19, 2026</span>
-        <div>
-          <h3>Per-folder bandwidth budgets</h3>
-          <p style="margin: 4px 0 0; color: var(--muted); font-size: 14px;">Cap how much a single project can pull each month — useful for archive folders.</p>
-        </div>
-        <span class="pull meta">Product</span>
-      </article>
-      <article class="log-row">
-        <span class="meta">Apr 04, 2026</span>
-        <div>
-          <h3>S3 + R2 dual-region replication</h3>
-          <p style="margin: 4px 0 0; color: var(--muted); font-size: 14px;">Two providers, automatic failover. Enterprise tier only for now.</p>
-        </div>
-        <span class="pull meta">Infra</span>
-      </article>
-    </div>
-  </div>
-</section>
-```
-
-## Layout 8 — Comparison table (pricing, plan matrix, before/after)
-
-Hairline borders, mono numerics, one column highlighted via an accent border. Don't put the whole row in surface-color — that screams "table".
-
-```html
-<section class="section" data-od-id="pricing">
-  <div class="container">
-    <div style="text-align: center; max-width: 36ch; margin: 0 auto 56px;">
-      <p class="eyebrow">PRICING</p>
-      <h2>One row of features. Three lines of pricing.</h2>
-    </div>
-    <table class="ds-table">
-      <thead>
-        <tr>
-          <th>Feature</th>
-          <th class="num-col">Solo</th>
-          <th class="num-col">Team</th>
-          <th class="num-col">Enterprise</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr><td>Sync engine v3</td><td class="num-col">✓</td><td class="num-col">✓</td><td class="num-col">✓</td></tr>
-        <tr><td>Per-folder budgets</td><td class="num-col">—</td><td class="num-col">✓</td><td class="num-col">✓</td></tr>
-        <tr><td>SAML / SCIM</td><td class="num-col">—</td><td class="num-col">—</td><td class="num-col">✓</td></tr>
-        <tr><td>Dedicated infra</td><td class="num-col">—</td><td class="num-col">—</td><td class="num-col">✓</td></tr>
-        <tr style="border-top: 1px solid var(--fg);">
-          <td><strong>Monthly</strong></td>
-          <td class="num-col"><strong>$0</strong></td>
-          <td class="num-col"><strong>$4 / seat</strong></td>
-          <td class="num-col"><strong>Talk to us</strong></td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-</section>
-```
-
----
-
-## Section rhythm — when in doubt
-
-For a 5-section landing:
-1. Hero (Layout 1 or 2)
-2. Features (Layout 3)
-3. Stats *or* quote (Layout 4 or 5)
-4. Split detail (custom, using `grid-2-1` / `grid-1-2`)
-5. CTA + footer (Layout 6)
-
-For a 4-section docs/marketing index:
-1. Hero center (Layout 1)
-2. Log list (Layout 7)
-3. CTA + footer (Layout 6)
-
-Two stat rows in a row, two quote blocks in a row, two feature triplets in a row — all visual fatigue. Alternate.
+- Start from the primary task or message and the hierarchy established in the
+  brief; do not select a familiar section sequence by habit.
+- Preserve the requested brand and any explicit reference or clone fidelity.
+  Distinct concepts, when useful, should differ in information structure or
+  task flow while keeping the same brand and content constraints.
+- Add navigation, page chrome, disclosures, forms, dialogs, and other
+  interactions only when the experience needs them. Give each control a
+  meaningful label and a working outcome.
+- Create domain-specific sections when they express the content more clearly
+  than these examples. Do not add generic content merely to complete a
+  sequence.
+- Keep the hierarchy and relationships understandable at narrow widths and
+  with assistive technology; details belong in the prototype's implementation.

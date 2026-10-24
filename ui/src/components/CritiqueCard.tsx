@@ -43,6 +43,12 @@ export function CritiqueCard({ critiques, live = false }: { critiques: Critique[
         <span class="sr-only">{`Score history: ${history}`}</span>
       </p>}
     </div>
+    {latest.jury && <div class="critique-jury" aria-label="Independent jury">
+      <div class="critique-jury-head"><h4>Independent jury</h4><span>{latest.jury.model}{typeof latest.selfComposite === 'number' ? ` · pi's own panel ${latest.selfComposite.toFixed(1)}` : ''}</span></div>
+      <dl class="critique-jury-scores">{(['design', 'usability', 'creativity', 'content'] as const).map((k) => <div key={k}><dt>{k}</dt><dd>{latest.jury!.scores[k].toFixed(1)}</dd></div>)}</dl>
+      {latest.jury.verdict && <p class="critique-notes">{latest.jury.verdict}</p>}
+      {latest.jury.issues.length > 0 && <ul class="critique-jury-issues">{latest.jury.issues.map((issue, i) => <li key={i}>{issue}</li>)}</ul>}
+    </div>}
     <ul class="critique-panel">
       {(latest.panelists ?? []).map((panelist, index) => {
         const notes = panelist.notes || '';

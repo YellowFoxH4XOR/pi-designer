@@ -108,20 +108,20 @@ func (s *Server) handleKnowledgeReference(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusOK, map[string]string{"path": path, "status": status})
 }
 
-// CheckForUpdates queries only the approved text sources; it never installs them.
-func (s *Server) CheckForUpdates(ctx context.Context) {
-	if s.Knowledge == nil {
+// handleKnowledgeSync refreshes every approved text reference now, the same
+// way the startup and daily sync does. Per-source failures are reported in
+// each source's state; the response is the updated list.
+func (s *Server) handleKnowledgeSync(w http.ResponseWriter, r *http.Request) {
+	if !sameOrigin(r) {
+		writeErr(w, http.StatusForbidden, "cross-origin update refused")
 		return
 	}
-	for _, src := range s.Knowledge.Sources {
-		if src.DocumentURL == "" {
-			continue
-		}
-		c, cancel := context.WithTimeout(ctx, 20*time.Second)
-		_, _ = s.Knowledge.Check(c, src.ID)
-		cancel()
-		if ctx.Err() != nil {
-			return
-		}
+	if s.Knowledge == nil {
+		writeErr(w, http.StatusServiceUnavailable, "design references unavailable")
+		return
 	}
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Minute)
+	defer cancel()
+	_ = s.Knowledge.Sync(ctx)
+	writeJSON(w, http.StatusOK, map[string]any{"sources": s.Knowledge.List()})
 }

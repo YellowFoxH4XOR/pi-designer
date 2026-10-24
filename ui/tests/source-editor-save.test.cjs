@@ -5,7 +5,7 @@ const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 const { execFileSync } = require("node:child_process");
 
-const dir = mkdtempSync(join(tmpdir(), "omp-source-editor-tests-"));
+const dir = mkdtempSync(join(tmpdir(), "pi-source-editor-tests-"));
 execFileSync(process.execPath, [
   "node_modules/typescript/bin/tsc",
   "src/source-editor-save.ts",

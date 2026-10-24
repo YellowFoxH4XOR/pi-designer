@@ -147,7 +147,7 @@ final class NativeActivityController: NSObject, UNUserNotificationCenterDelegate
         guard let key = ActivityNotificationQueue.key(for: activity) else { return }
 
         let content = UNMutableNotificationContent()
-        content.title = activity.attention ? "omp needs your attention" : activity.status == "failed" ? "omp couldn’t finish" : "omp finished your task"
+        content.title = activity.attention ? "pi needs your attention" : activity.status == "failed" ? "pi couldn’t finish" : "pi finished your task"
         content.body = preferences["previews"] ? "\(activity.projectName) — \(activity.label)" : "Open πDesigner to view the project."
         content.threadIdentifier = activity.projectId
         content.userInfo = ["projectId": activity.projectId, "conversationId": activity.conversationId ?? ""]

@@ -19,18 +19,23 @@ export type TodoStatus = 'pending' | 'in_progress' | 'completed';
 export interface Todo { content: string; status: TodoStatus }
 export interface Render {
   viewport: 'web' | 'desktop' | 'mobile' | string; path?: string; image: string;
-  overflowX?: boolean; errors?: number; slide?: number;
+  overflowX?: boolean; errors?: number; slide?: number; at?: number;
 }
 export type CritiqueRole = 'designer' | 'critic' | 'brand' | 'a11y' | 'copy';
 export type CritiqueDecision = 'revise' | 'ship' | 'ship_with_issues';
 export interface CritiquePanelist { role: CritiqueRole; score?: number; notes: string; mustFix: string[] }
-export interface Critique { round: number; composite: number; decision: CritiqueDecision; panelists: CritiquePanelist[] }
+export interface JuryReview { model: string; scores: { design: number; usability: number; creativity: number; content: number }; overall: number; verdict: string; issues: string[] }
+export interface Critique { round: number; composite: number; selfComposite?: number; decision: CritiqueDecision; signatureMoment?: string; panelists: CritiquePanelist[]; jury?: JuryReview }
 export interface Run {
   id: string; projectId: string; conversationId?: string;
   status: 'running' | 'succeeded' | 'failed' | 'canceled'; error?: string; startedAt: string;
   todos?: Todo[]; renders?: Render[]; critiques?: Critique[];
 }
-export interface Health { ok: boolean; ompBin: string; projectRoot: string; designSystems: number; skills: number }
+export interface PiRuntime { bin: string; version?: string; minVersion: string; supported: boolean; error?: string }
+/** piBin is set only when the detected pi is supported; pi holds the details. */
+export interface Health { ok: boolean; piBin: string; pi: PiRuntime; projectRoot: string; designSystems: number; skills: number }
+/** One saved state of a project's files, recorded after each pi turn. */
+export interface ArtifactVersion { n: number; runId?: string; messageId?: string; label?: string; entry?: string; createdAt: string; changed: string[]; removed?: string[]; files: string[] }
 export interface AgentModel { id: string; provider: string; name: string; reasoning: boolean; contextWindow?: number }
 export interface ModelCatalog { models: AgentModel[]; current?: AgentModel; thinkingLevels: string[] }
 export interface Connection { available: boolean; config: Record<string, unknown> }
@@ -52,16 +57,14 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
 const json = (body: unknown, method = 'POST') => ({ method, body: JSON.stringify(body) });
 const projectPath = (id: string) => `/api/projects/${encodeURIComponent(id)}`;
 export const api = {
-  health: () => req<Health>('/api/health'),
+  health: (recheck = false) => req<Health>(`/api/health${recheck ? '?recheck=1' : ''}`),
   activity: () => req<{ activities: Activity[] }>('/api/activity'),
   runLog: (id: string, after = 0) => req<{ events: AgentEvent[] }>(`/api/runs/${encodeURIComponent(id)}/log?after=${after}`),
   runActivity: (id: string) => req<{ activity: Activity }>(`/api/runs/${encodeURIComponent(id)}/activity`),
   respondUI: (id: string, body: { id: string; value?: string; confirmed?: boolean; cancelled?: boolean }) => req(`/api/runs/${encodeURIComponent(id)}/ui-response`, json(body)),
   connection: () => req<Connection>('/api/connection'),
   knowledge: () => req<{ sources: KnowledgeSource[] }>('/api/knowledge'),
-  checkKnowledge: (id: string) => req<KnowledgeSource>(`/api/knowledge/${encodeURIComponent(id)}/check`, { method: 'POST' }),
-  previewKnowledge: (id: string) => req<{ content: string }>(`/api/knowledge/${encodeURIComponent(id)}/preview`),
-  applyKnowledge: (id: string) => req<KnowledgeSource>(`/api/knowledge/${encodeURIComponent(id)}/apply`, { method: 'POST' }),
+  syncKnowledge: () => req<{ sources: KnowledgeSource[] }>('/api/knowledge/sync', { method: 'POST' }),
   rollbackKnowledge: (id: string) => req<KnowledgeSource>(`/api/knowledge/${encodeURIComponent(id)}/rollback`, { method: 'POST' }),
   preferences: () => req<{ model: string; thinking: string }>('/api/preferences'),
   savePreferences: (p: { model: string; thinking: string }) => req<{ model: string; thinking: string }>('/api/preferences', json(p, 'PUT')),
@@ -75,6 +78,8 @@ export const api = {
   updateProject: (p: Project) => req<{ project: Project }>(projectPath(p.id), json(pickProject(p), 'PATCH')),
   deleteProject: (id: string) => req<{ deleted: string }>(projectPath(id), { method: 'DELETE' }),
   files: (id: string) => req<{ files: FileEntry[] }>(`${projectPath(id)}/files`),
+  versions: (id: string) => req<{ versions: ArtifactVersion[] }>(`${projectPath(id)}/versions`),
+  restoreVersion: (id: string, n: number) => req<{ version: ArtifactVersion }>(`${projectPath(id)}/versions/${n}/restore`, { method: 'POST' }),
   file: (id: string, path: string) => req<{ content: string }>(`${projectPath(id)}/file?path=${encodeURIComponent(path)}`),
   writeFile: (id: string, path: string, content: string) => req(`${projectPath(id)}/file`, json({ path, content }, 'PUT')),
   conversations: (id: string) => req<{ conversations: Conversation[] }>(`${projectPath(id)}/conversations`),
@@ -104,4 +109,11 @@ export function subscribeRun(runId: string, after: number, onEvent: (event: Agen
 
 export function previewURL(id: string, entry = 'index.html') {
   return `/preview/${encodeURIComponent(id)}/${entry.split('/').map(encodeURIComponent).join('/')}`;
+}
+/** A saved version is served beside the live preview, so relative links stay inside it. */
+export function versionPreviewURL(id: string, n: number, entry = 'index.html') {
+  return `/preview/${encodeURIComponent(id)}/@v/${n}/${entry.split('/').map(encodeURIComponent).join('/')}`;
+}
+export function versionDownloadURL(id: string, n: number) {
+  return `/api/projects/${encodeURIComponent(id)}/versions/${n}/download`;
 }

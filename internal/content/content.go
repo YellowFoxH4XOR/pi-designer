@@ -22,7 +22,7 @@ import (
 // Catalog indexes the content directories.
 type Catalog struct {
 	Root      string
-	Knowledge *knowledge.Manager // optional reviewed references in user data
+	Knowledge *knowledge.Manager // optional hash-verified references in user data
 
 	mu           sync.RWMutex
 	systems      []model.DesignSystem
@@ -147,6 +147,8 @@ type DesignSystemContext struct {
 	UsageMD     string `json:"usageMd,omitempty"`
 	TokensJSON  string `json:"tokensJson,omitempty"`
 	ComponentHx string `json:"componentsHtml,omitempty"`
+	// Dir is the package directory, resolved from the scanned catalog.
+	Dir string `json:"-"`
 }
 
 // DesignSystemContext loads the brand contract for a design system so it can
@@ -155,11 +157,17 @@ func (c *Catalog) DesignSystemContext(id string) (*DesignSystemContext, error) {
 	if id == "" {
 		return nil, nil
 	}
-	dir := filepath.Join(c.Root, "design-systems", id)
+	// Only scanned packages resolve, so a client-supplied id can never name a
+	// directory outside design-systems/.
+	entry, ok := c.DesignSystem(id)
+	if !ok {
+		return nil, fmt.Errorf("design system %q not found", id)
+	}
+	dir := filepath.Join(c.Root, "design-systems", entry.Slug)
 	if !dirExists(dir) {
 		return nil, fmt.Errorf("design system %q not found", id)
 	}
-	ds := &DesignSystemContext{ID: id, Name: id}
+	ds := &DesignSystemContext{ID: id, Name: id, Dir: dir}
 	ds.DesignMD = readMaybe(filepath.Join(dir, "DESIGN.md"))
 	ds.TokensCSS = readMaybe(filepath.Join(dir, "tokens.css"))
 	ds.UsageMD = readMaybe(filepath.Join(dir, "USAGE.md"))

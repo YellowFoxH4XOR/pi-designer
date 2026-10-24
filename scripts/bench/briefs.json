@@ -1,0 +1,39 @@
+[
+  {
+    "id": "ceramics-launch",
+    "skill": "web-prototype",
+    "viewport": "web",
+    "prompt": "A launch page for Hald, a small ceramics studio in Copenhagen releasing its spring collection of hand-thrown tableware. It should make people want to visit the studio and join the waiting list."
+  },
+  {
+    "id": "notes-pricing",
+    "skill": "web-prototype",
+    "viewport": "web",
+    "prompt": "A product and pricing page for Ledger, a privacy-first notes app with end-to-end encryption, offline-first sync and a one-time license. The audience is skeptical, technical people."
+  },
+  {
+    "id": "photographer-portfolio",
+    "skill": "web-prototype",
+    "viewport": "web",
+    "prompt": "A portfolio for Ines Marquez, an architectural photographer who shoots brutalist housing estates in Southern Europe. Art directors should be able to browse projects quickly and get in touch."
+  },
+  {
+    "id": "fleet-dashboard",
+    "skill": "web-prototype",
+    "viewport": "web",
+    "prompt": "An operations dashboard for a city bike-share fleet: station availability, bikes needing repair, rebalancing van routes and today's incidents. Dispatchers use it all day."
+  },
+  {
+    "id": "microgrid-deck",
+    "skill": "simple-deck",
+    "viewport": "web",
+    "prompt": "A six-slide investor pitch deck for Sunfold, a startup that installs solar microgrids for rural clinics in East Africa."
+  },
+  {
+    "id": "drowning-film",
+    "skill": "motion-design",
+    "viewport": "mobile",
+    "motion": true,
+    "prompt": "A man drowning. A short cinematic motion film, 9:16 social, about 15 seconds, a mood piece for a general audience. Make it beautiful and haunting."
+  }
+]

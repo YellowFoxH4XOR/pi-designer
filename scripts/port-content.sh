@@ -151,12 +151,36 @@ if [[ -f "$PRESERVE/scripts/init-clone.mjs" ]]; then
   cp -p "$PRESERVE/scripts/init-clone.mjs" "$STAGED/skills/web-clone/scripts/init-clone.mjs"
 fi
 
+PROTOTYPE_PRESERVE="$TMP/preserved-web-prototype"
+PROTOTYPE_ADAPTERS=(
+  SKILL.md
+  assets/template.html
+  references/layouts.md
+  references/checklist.md
+)
+for adapter in "${PROTOTYPE_ADAPTERS[@]}"; do
+  source="$STAGED/design-templates/web-prototype/$adapter"
+  if [[ -f "$source" ]]; then
+    mkdir -p "$PROTOTYPE_PRESERVE/$(dirname "$adapter")"
+    cp -p "$source" "$PROTOTYPE_PRESERVE/$adapter"
+  fi
+done
+
 echo "==> design templates"
 rm -rf "$STAGED/design-templates"
 mkdir -p "$STAGED/design-templates"
 for template in "${TEMPLATES[@]}"; do
   cp -R "$UP/design-templates/$template" "$STAGED/design-templates/$template"
 done
+for adapter in "${PROTOTYPE_ADAPTERS[@]}"; do
+  preserved="$PROTOTYPE_PRESERVE/$adapter"
+  if [[ -f "$preserved" ]]; then
+    destination="$STAGED/design-templates/web-prototype/$adapter"
+    mkdir -p "$(dirname "$destination")"
+    cp -p "$preserved" "$destination"
+  fi
+done
+
 
 echo "==> craft laws"
 rm -rf "$STAGED/craft"

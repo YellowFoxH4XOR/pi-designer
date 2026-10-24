@@ -228,7 +228,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     }
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         // Close hides the workspace; it does not discard source, unload WebKit,
-        // close the daemon pipe, or terminate active omp tasks.
+        // close the daemon pipe, or terminate active pi tasks.
         sender.orderOut(nil)
         activity?.updateVisibility()
         return false

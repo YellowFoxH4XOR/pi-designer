@@ -1,4 +1,4 @@
-package omprun
+package pirun
 
 import (
 	"context"
@@ -51,7 +51,7 @@ func TestLiveExplicitModelPrompt(t *testing.T) {
 				return
 			}
 		}
-		finished <- result{out.String(), "omp exited before settling: " + failure, false}
+		finished <- result{out.String(), "pi exited before settling: " + failure, false}
 	}()
 	if _, err := s.Prompt(ctx, "Reply with exactly MODEL_SELECTION_OK. Do not use tools."); err != nil {
 		t.Fatal(err)

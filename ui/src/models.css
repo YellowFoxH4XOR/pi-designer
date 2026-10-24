@@ -1,4 +1,4 @@
-/* omp execution identity is separate from the app tile and selected model. */
+/* pi execution identity is separate from the app tile and selected model. */
 .agent-mark { display: block; flex: 0 0 auto; }
 .model-button { display: inline-flex; align-items: center; gap: 7px; padding: 7px; min-height: 34px; margin-left: auto; border-radius: 8px; color: var(--muted); background: var(--surface); border: 1px solid transparent; min-width: 0; text-align: left; }
 .model-button:hover:not(:disabled) { background: var(--subtle); border-color: var(--line); }
