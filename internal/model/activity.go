@@ -75,7 +75,7 @@ type Activity struct {
 }
 
 func NewActivity(r Run, p Project) Activity {
-	return Activity{RunID: r.ID, ProjectID: r.ProjectID, ProjectName: p.Name, ConversationID: r.ConversationID, Status: r.Status, Phase: "starting", Label: "Starting omp", Prompt: r.Prompt, StartedAt: r.StartedAt.UnixMilli(), UpdatedAt: r.StartedAt.UnixMilli(), Tools: []ToolActivity{}}
+	return Activity{RunID: r.ID, ProjectID: r.ProjectID, ProjectName: p.Name, ConversationID: r.ConversationID, Status: r.Status, Phase: "starting", Label: "Starting pi", Prompt: r.Prompt, StartedAt: r.StartedAt.UnixMilli(), UpdatedAt: r.StartedAt.UnixMilli(), Tools: []ToolActivity{}}
 }
 
 // ToolLabel is descriptive, not a claim about what a command will accomplish.
@@ -105,6 +105,14 @@ func ToolLabel(name string, args json.RawMessage) string {
 		return "Updating plan"
 	case "submit_critique":
 		return "Reviewing design"
+	case "study_references":
+		return "Studying references"
+	case "select_design_sources":
+		return "Choosing design sources"
+	case "web_search":
+		return "Searching the web"
+	case "fetch_content":
+		return "Reading a web page"
 	default:
 		return "Using " + name
 	}

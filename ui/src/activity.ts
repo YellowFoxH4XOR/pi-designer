@@ -275,6 +275,10 @@ export function toolLabel(tool: string, args?: Record<string, unknown>) {
         render_preview: "Rendering preview",
         todo_write: "Updating plan",
         submit_critique: "Reviewing design",
+        study_references: "Studying references",
+        select_design_sources: "Choosing design sources",
+        web_search: "Searching the web",
+        fetch_content: "Reading a web page",
       } as Record<string, string>
     )[tool] || `Using ${tool}`
   );
@@ -295,4 +299,28 @@ export function statusLabel(
 export function elapsed(start: number, end = Date.now()) {
   const s = Math.max(0, Math.floor((end - start) / 1000));
   return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`;
+}
+const WORK_KINDS: Record<string, [string, string]> = {
+  read: ["read", "reads"],
+  bash: ["command", "commands"],
+  write: ["edit", "edits"],
+  edit: ["edit", "edits"],
+  render_preview: ["render", "renders"],
+  submit_critique: ["critique", "critiques"],
+};
+/** One-line digest of a finished run: "Worked for 7s · 1 read · 2 edits". */
+export function workSummary(
+  a: Pick<Activity, "startedAt" | "endedAt"> & { tools: Pick<ToolActivity, "tool">[] },
+) {
+  const counts = new Map<string, number>();
+  for (const t of a.tools) {
+    const kind = WORK_KINDS[t.tool];
+    if (kind) counts.set(kind[0], (counts.get(kind[0]) || 0) + 1);
+  }
+  const parts = [`Worked for ${elapsed(a.startedAt, a.endedAt)}`];
+  for (const [singular, plural] of Object.values(WORK_KINDS)) {
+    const n = counts.get(singular);
+    if (n) { parts.push(`${n} ${n === 1 ? singular : plural}`); counts.delete(singular); }
+  }
+  return parts.join(" · ");
 }

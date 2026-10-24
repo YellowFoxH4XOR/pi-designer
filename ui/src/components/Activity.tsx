@@ -3,6 +3,7 @@ import { api } from "../api";
 import {
   elapsed,
   statusLabel,
+  workSummary,
   type RunState,
   type ToolActivity,
   type UIRequest,
@@ -116,7 +117,7 @@ export function ActivityCenter({
                     </span>
                     <ProjectStatus run={a} />
                     <span class="activity-project-meta">
-                      {a.model || "omp agent"} · {elapsed(a.startedAt, a.endedAt)}
+                      {a.model || "pi agent"} · {elapsed(a.startedAt, a.endedAt)}
                     </span>
                   </button>
                 </li>
@@ -221,7 +222,7 @@ export function RunProgress({ run }: { run: RunState }) {
           : run.phase === "responding"
             ? "Receiving the agent’s response."
             : run.phase === "starting"
-              ? "Starting omp and loading the project context."
+              ? "Starting pi and loading the project context."
               : "Waiting for the next reported action. No new tool is running."}
       </p>}
       {recent.length + active.length > 0 && <div class="run-progress-tools" aria-label="Recent tool actions">
@@ -266,7 +267,7 @@ function ExtensionQuestion({
         void answer(false, request.method === "confirm" ? true : undefined);
       }}
     >
-      <h3>{request.title || "omp needs your answer"}</h3>
+      <h3>{request.title || "pi needs your answer"}</h3>
       {request.message && <p>{request.message}</p>}
       {request.method === "select" ? (
         <label>
@@ -389,7 +390,9 @@ export function RunActivity({
                 : statusLabel(run)}
             </strong>
             <small>
-              {run.projectName} · {elapsed(run.startedAt, run.endedAt)}
+              {run.status === "running" || run.attention
+                ? `${run.projectName} · ${elapsed(run.startedAt, run.endedAt)}`
+                : workSummary(run)}
             </small>
           </span>
           <Icon name="chevron" size={14} class={open ? "expanded" : ""} />
@@ -413,7 +416,7 @@ export function RunActivity({
               <ModelIcon id={run.modelId} provider={run.provider} size={18} />
               <span>
                 {run.model}
-                <small>Executed by omp</small>
+                <small>Executed by pi</small>
               </span>
             </p>
           )}

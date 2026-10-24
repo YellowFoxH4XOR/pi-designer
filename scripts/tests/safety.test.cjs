@@ -74,6 +74,10 @@ const importedTemplates = [
   'web-prototype-taste-soft', 'motion-frames', 'tweaks', 'critique', 'simple-deck',
 ];
 
+const adaptedPrototypeFiles = [
+  'SKILL.md', 'assets/template.html', 'references/layouts.md', 'references/checklist.md',
+];
+
 function makePortRepo() {
   const root = temporaryDirectory('pidesigner-port-content-');
   const scriptCopy = path.join(root, 'scripts/port-content.sh');
@@ -95,6 +99,14 @@ function makePortRepo() {
   for (const template of importedTemplates) {
     write(root, `open-design/design-templates/${template}/SKILL.md`, `upstream ${template}\n`);
   }
+  for (const adapter of adaptedPrototypeFiles) {
+    if (adapter !== 'SKILL.md') {
+      write(root, `open-design/design-templates/web-prototype/${adapter}`, `upstream ${adapter}\n`);
+    }
+  }
+  write(root, 'open-design/design-templates/web-prototype/assets/site.css', 'upstream updated asset\n');
+  write(root, 'open-design/design-templates/web-prototype/assets/new-upstream.svg', 'new upstream asset\n');
+
   write(root, 'open-design/craft/law.md');
   write(root, 'open-design/prompt-templates/example.json', '{}');
   return root;
@@ -104,7 +116,7 @@ function runPort(root, env = process.env) {
   return spawnSync('bash', [path.join(root, 'scripts/port-content.sh')], { cwd: root, env, encoding: 'utf8' });
 }
 
-test('content import stages the update and preserves local skills and web-clone adaptations', () => {
+test('content import stages updates and preserves local skills and template adaptations', () => {
   const root = makePortRepo();
   try {
     write(root, 'content/unmanaged.json', 'preserve me\n');
@@ -113,6 +125,11 @@ test('content import stages the update and preserves local skills and web-clone 
     write(root, 'content/skills/local-extension/SKILL.md', 'local skill\n');
     write(root, 'content/skills/web-clone/SKILL.md', 'πDesigner local instructions\n');
     write(root, 'content/skills/web-clone/scripts/init-clone.mjs', 'πDesigner local initializer\n');
+    for (const adapter of adaptedPrototypeFiles) {
+      write(root, `content/design-templates/web-prototype/${adapter}`, `πDesigner local ${adapter}\n`);
+    }
+    write(root, 'content/design-templates/web-prototype/assets/site.css', 'stale local asset\n');
+
     write(root, 'content/design-templates/obsolete/SKILL.md');
     write(root, 'content/craft/obsolete.md');
     write(root, 'content/prompt-templates/obsolete.json');
@@ -124,6 +141,21 @@ test('content import stages the update and preserves local skills and web-clone 
     assert.equal(fs.readFileSync(path.join(root, 'content/skills/local-extension/SKILL.md'), 'utf8'), 'local skill\n');
     assert.equal(fs.readFileSync(path.join(root, 'content/skills/web-clone/SKILL.md'), 'utf8'), 'πDesigner local instructions\n');
     assert.equal(fs.readFileSync(path.join(root, 'content/skills/web-clone/scripts/init-clone.mjs'), 'utf8'), 'πDesigner local initializer\n');
+    for (const adapter of adaptedPrototypeFiles) {
+      assert.equal(
+        fs.readFileSync(path.join(root, 'content/design-templates/web-prototype', adapter), 'utf8'),
+        `πDesigner local ${adapter}\n`,
+      );
+    }
+    assert.equal(
+      fs.readFileSync(path.join(root, 'content/design-templates/web-prototype/assets/site.css'), 'utf8'),
+      'upstream updated asset\n',
+    );
+    assert.equal(
+      fs.readFileSync(path.join(root, 'content/design-templates/web-prototype/assets/new-upstream.svg'), 'utf8'),
+      'new upstream asset\n',
+    );
+
     assert.ok(fs.existsSync(path.join(root, 'content/design-systems/sample/manifest.json')));
     assert.ok(!fs.existsSync(path.join(root, 'content/design-systems/obsolete')));
     assert.ok(!fs.existsSync(path.join(root, 'content/design-systems/sample/DESIGN-fr.md')));
@@ -137,6 +169,23 @@ test('content import stages the update and preserves local skills and web-clone 
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+test('content import includes upstream web-prototype adapters on a first import', () => {
+  const root = makePortRepo();
+  try {
+    const result = runPort(root);
+    assert.equal(result.status, 0, result.stderr);
+    for (const adapter of adaptedPrototypeFiles) {
+      const expected = adapter === 'SKILL.md' ? 'upstream web-prototype\n' : `upstream ${adapter}\n`;
+      assert.equal(
+        fs.readFileSync(path.join(root, 'content/design-templates/web-prototype', adapter), 'utf8'),
+        expected,
+      );
+    }
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 
 test('content import leaves the old catalog intact when required sources are missing', () => {
   const root = temporaryDirectory('pidesigner-port-missing-');

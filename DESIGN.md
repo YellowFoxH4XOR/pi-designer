@@ -188,9 +188,9 @@ A white container with a deep coral focus border holds a real textarea paired wi
 
 Search and category filters scope the full bundled catalog. Grid specimens are indicative, explicitly labeled as samples. Detail views expose real guidelines, compiled CSS, palette values, and component fixtures. The detail tabs support arrow keys, Home, and End.
 
-### omp model picker
+### pi model picker
 
-The omp control opens a searchable list read from the installed agent over RPC. Rows identify both model name and provider. Selection saves an exact provider/model id, checks supported thinking levels, and carries into the next run. Settings uses the same picker and only exposes supported thinking levels. Preserve loading, retry, empty-result, and failed-selection states. Credentials, endpoints, and provider headers are never model-list UI data.
+The pi model control opens a searchable list read from the installed agent over RPC. Rows identify both model name and provider. Selection saves an exact provider/model id, checks supported thinking levels, and carries into the next run. Settings uses the same picker and only exposes supported thinking levels. Preserve loading, retry, empty-result, and failed-selection states. Credentials, endpoints, and provider headers are never model-list UI data.
 
 ### Studio and source editor
 
@@ -220,7 +220,7 @@ Use native HTML modal dialogs for focused system choice and renaming, with Escap
 
 - Do preserve the separation between the workspace and the generated artifact.
 - Do use the real catalog and local run state, including empty and failure cases.
-- Do keep omp-only execution and local storage explicit without making it the visual focus.
+- Do keep pi-only execution and local storage explicit without making it the visual focus.
 - Do keep native keyboard conventions and visible focus.
 - Do use light neutral layers and warm coral actions consistently across shell, library, Studio, and dialogs.
 

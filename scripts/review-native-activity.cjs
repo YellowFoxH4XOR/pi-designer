@@ -7,13 +7,13 @@ const path = require('node:path');
 const os = require('node:os');
 const assert = require('node:assert/strict');
 (async()=>{
- const root=path.resolve(__dirname,'..');const data=await fs.mkdtemp(path.join(os.tmpdir(),'omp-native-review-'));
+ const root=path.resolve(__dirname,'..');const data=await fs.mkdtemp(path.join(os.tmpdir(),'pi-native-review-'));
  const out=path.join(root,'.impeccable/review');await fs.mkdir(out,{recursive:true});
  const driver=path.join(data,'accessibility');execFileSync('swiftc',['-o',driver,path.join(root,'scripts/native-accessibility.swift')]);
  const suite='dev.pidesigner.review.'+Date.now();
  for(const category of ['completed','attention','failure'])execFileSync('defaults',['write',suite,'activity.'+category,'-bool','NO']);
  const executable=path.join(root,'build/πDesigner.app/Contents/MacOS/pidesigner-app');
- const child=spawn(executable,[],{env:{...process.env,PIDESIGNER_DATA_DIR:data,PIDESIGNER_OMP_BIN:path.join(root,'scripts/fixtures/omp-rpc.cjs'),PIDESIGNER_PREFERENCES_SUITE:suite},stdio:['ignore','pipe','pipe']});
+ const child=spawn(executable,[],{env:{...process.env,PIDESIGNER_DATA_DIR:data,PIDESIGNER_PI_BIN:path.join(root,'scripts/fixtures/pi-rpc.cjs'),PIDESIGNER_PREFERENCES_SUITE:suite},stdio:['ignore','pipe','pipe']});
  let logs='';child.stderr.on('data',b=>logs+=b);const checks=[];const pass=name=>{checks.push(name);console.log('PASS',name)};
  const sleep=ms=>new Promise(r=>setTimeout(r,ms));
  const ax=(action,...args)=>execFileSync(driver,[String(child.pid),action,...args],{encoding:'utf8'});

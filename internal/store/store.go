@@ -193,7 +193,7 @@ func (s *Store) GetProject(ref string) (model.Project, error) {
 		return p, nil
 	}
 	rows, err := s.db.Query(`SELECT id,name,slug,dir,design_system_id,skill_id,entry_file,created_at,updated_at
-		FROM projects WHERE lower(slug) LIKE lower(?) OR lower(name) LIKE lower(?)`, "%"+ref+"%", "%"+ref+"%")
+		FROM projects WHERE lower(slug) LIKE lower(?) ESCAPE '\' OR lower(name) LIKE lower(?) ESCAPE '\'`, likeContains(ref), likeContains(ref))
 	if err != nil {
 		return model.Project{}, err
 	}
@@ -213,6 +213,21 @@ func (s *Store) GetProject(ref string) (model.Project, error) {
 		return model.Project{}, fmt.Errorf("ambiguous project reference %q (%d matches)", ref, len(matches))
 	}
 	return matches[0], nil
+}
+
+// likeContains builds a LIKE pattern matching ref literally anywhere, so
+// "%" and "_" in a reference never act as wildcards.
+func likeContains(ref string) string {
+	return "%" + strings.NewReplacer(`\`, `\\`, "%", `\%`, "_", `\_`).Replace(ref) + "%"
+}
+
+// SlugExists reports whether a project already uses slug (case-insensitive).
+func (s *Store) SlugExists(slug string) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var n int
+	err := s.db.QueryRow(`SELECT count(*) FROM projects WHERE lower(slug)=lower(?)`, slug).Scan(&n)
+	return n > 0, err
 }
 
 // ListProjects returns all projects, newest first.

@@ -1,6 +1,6 @@
 import type { ComponentChildren } from 'preact';
 
-export type IconName = 'home' | 'projects' | 'palette' | 'skills' | 'settings' | 'plus' | 'search' | 'arrow' | 'chevron' | 'back' | 'close' | 'web' | 'mobile' | 'desktop' | 'code' | 'eye' | 'refresh' | 'external' | 'copy' | 'check' | 'stop' | 'folder' | 'file' | 'motion' | 'clone' | 'deck' | 'connect' | 'menu' | 'send' | 'download' | 'clock' | 'activity' | 'warning' | 'message' | 'trash';
+export type IconName = 'home' | 'projects' | 'palette' | 'skills' | 'settings' | 'plus' | 'search' | 'arrow' | 'chevron' | 'back' | 'close' | 'web' | 'mobile' | 'desktop' | 'code' | 'eye' | 'refresh' | 'external' | 'copy' | 'check' | 'stop' | 'folder' | 'file' | 'motion' | 'clone' | 'deck' | 'connect' | 'menu' | 'send' | 'download' | 'clock' | 'activity' | 'warning' | 'message' | 'trash' | 'expand' | 'collapse' | 'panel' | 'history' | 'chevron-left';
 const paths: Record<IconName, ComponentChildren> = {
   activity: <><path d="M3 12h4l3-8 4 16 3-8h4"/></>,
   warning: <><path d="m12 3 10 18H2Z"/><path d="M12 9v5M12 17h.01"/></>,
@@ -36,14 +36,20 @@ const paths: Record<IconName, ComponentChildren> = {
   send: <><path d="m3 3 19 9-19 9 3-9Z"/><path d="M6 12h16"/></>,
   download: <><path d="M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4"/></>,
   clock: <><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></>,
+  expand: <><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></>,
+  collapse: <><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></>,
+  panel: <><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M14 4v16"/></>,
+  history: <><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></>,
+  'chevron-left': <path d="m15 6-6 6 6 6"/>,
   trash: <><path d="M4 7h16M10 11v6M14 11v6M9 7V4h6v3"/><path d="M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/></>,
 };
 export function Icon({ name, size = 19, class: className = '' }: { name: IconName; size?: number; class?: string }) {
   return <svg class={`icon ${className}`} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">{paths[name]}</svg>;
 }
-// The omp logo identifies the execution engine; provider/model controls use ModelIcon.
+// The π mark identifies the pi agent that executes runs; provider/model
+// controls use ModelIcon.
 export function AgentMark({ size = 24 }: { size?: number }) {
-  return <img src="/omp.svg" width={size} height={size} class="agent-mark" alt="" />;
+  return <img src="/pi.svg" width={size} height={size} class="agent-mark" alt="" />;
 }
 export function Logo({ size = 32 }: { size?: number }) {
   return <img src="/brand.svg" width={size} height={size} class="brand-mark" alt="" />;

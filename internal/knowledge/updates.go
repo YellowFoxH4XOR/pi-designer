@@ -1,4 +1,4 @@
-// Package knowledge manages reviewed, data-only design references outside the signed app bundle.
+// Package knowledge manages hash-verified, data-only design references outside the signed app bundle.
 package knowledge
 
 import (
@@ -61,7 +61,7 @@ type state struct {
 	Entries map[string]*Entry `json:"entries"`
 }
 
-// Manager is serialized so checking and applying cannot race or write partial snapshots.
+// Manager serializes state changes and installs only complete, verified snapshots.
 type Manager struct {
 	mu      sync.Mutex
 	Dir     string
@@ -151,11 +151,12 @@ func (m *Manager) source(id string) (Source, bool) {
 }
 func (m *Manager) Check(ctx context.Context, id string) (Entry, error) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	src, ok := m.source(id)
 	if !ok || src.DocumentURL == "" {
+		m.mu.Unlock()
 		return Entry{}, errors.New("source cannot be checked")
 	}
+	m.mu.Unlock()
 	if !strings.HasPrefix(src.DocumentURL, "https://") {
 		return Entry{}, errors.New("source URL must use HTTPS")
 	}
@@ -184,6 +185,8 @@ func (m *Manager) Check(ctx context.Context, id string) (Entry, error) {
 	if strings.Contains(res.Header.Get("Content-Type"), "text/html") || strings.HasPrefix(lower, "<!doctype") || strings.HasPrefix(lower, "<html") || !strings.Contains(string(b), "# ") {
 		return Entry{}, errors.New("unexpected document format")
 	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if m.data.Entries[id] == nil {
 		m.data.Entries[id] = &Entry{}
 	}
@@ -240,15 +243,23 @@ func (m *Manager) Apply(id string) (Entry, error) {
 		return Entry{}, errors.New("staged document failed verification")
 	}
 	installed := filepath.Join(m.Dir, id+".md")
-	if e.InstalledHash != "" && e.InstalledHash != e.AvailableHash {
+	if e.InstalledHash != "" {
 		old, readErr := os.ReadFile(installed)
 		if readErr != nil || hash(old) != e.InstalledHash {
 			return Entry{}, errors.New("installed document failed verification")
 		}
-		if err = atomic(filepath.Join(m.Dir, id+".previous.md"), old); err != nil {
-			return Entry{}, err
+		if e.InstalledHash != e.AvailableHash {
+			if err = atomic(filepath.Join(m.Dir, id+".previous.md"), old); err != nil {
+				return Entry{}, err
+			}
+			e.PreviousHash = e.InstalledHash
+		} else {
+			for _, v := range m.listLocked() {
+				if v.ID == id {
+					return v, nil
+				}
+			}
 		}
-		e.PreviousHash = e.InstalledHash
 	}
 	if err = atomic(installed, raw); err != nil {
 		return Entry{}, err
@@ -265,7 +276,7 @@ func (m *Manager) Apply(id string) (Entry, error) {
 	return Entry{}, errors.New("source disappeared")
 }
 
-// Rollback restores the prior reviewed version without fetching upstream.
+// Rollback restores the prior installed version without fetching upstream.
 func (m *Manager) Rollback(id string) (Entry, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -319,7 +330,7 @@ func (m *Manager) Reference(ctx context.Context, id string) (path, status string
 	e := m.data.Entries[id]
 	if e != nil {
 		for _, candidate := range []struct{ filename, digest, label string }{
-			{id + ".md", e.InstalledHash, "reviewed"},
+			{id + ".md", e.InstalledHash, "installed reference"},
 			{id + ".pending.txt", e.AvailableHash, "unreviewed cache"},
 		} {
 			if candidate.digest == "" {
@@ -351,7 +362,7 @@ func (m *Manager) Reference(ctx context.Context, id string) (path, status string
 	return p, "unreviewed cache", nil
 }
 
-// Docs lists installed references by fixed filename, verifying they still match approved hashes.
+// Docs lists installed references by fixed filename, verifying their recorded hashes.
 func (m *Manager) Docs() []string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -369,4 +380,45 @@ func (m *Manager) Docs() []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// Sync refreshes every downloadable source independently. Failed sources retain
+// their installed snapshot and expose the failure through List; link-only
+// resources are never fetched. No upstream code is executed.
+func (m *Manager) Sync(ctx context.Context) error {
+	var failures []error
+	for _, src := range m.Sources {
+		if ctx.Err() != nil {
+			return errors.Join(append(failures, ctx.Err())...)
+		}
+		if src.DocumentURL == "" {
+			continue
+		}
+		_, err := m.Check(ctx, src.ID)
+		if err == nil && ctx.Err() == nil {
+			_, err = m.Apply(src.ID)
+		}
+		if err == nil {
+			err = ctx.Err()
+		}
+		if err != nil {
+			failures = append(failures, fmt.Errorf("%s: %w", src.ID, err))
+			// Cancellation on shutdown is not an upstream failure.
+			if ctx.Err() != nil {
+				return errors.Join(failures...)
+			}
+			m.mu.Lock()
+			if m.data.Entries[src.ID] == nil {
+				m.data.Entries[src.ID] = &Entry{}
+			}
+			m.data.Entries[src.ID].Error = err.Error()
+			m.data.Entries[src.ID].CheckedAt = time.Now().UTC().Format(time.RFC3339)
+			saveErr := m.saveLocked()
+			m.mu.Unlock()
+			if saveErr != nil {
+				failures = append(failures, saveErr)
+			}
+		}
+	}
+	return errors.Join(failures...)
 }

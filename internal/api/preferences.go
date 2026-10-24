@@ -27,7 +27,7 @@ func (s *Server) handlePreferences(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(p.Model) > 200 || strings.ContainsAny(p.Model, "\n\r\x00") {
-		writeErr(w, http.StatusBadRequest, "Enter a valid omp model reference")
+		writeErr(w, http.StatusBadRequest, "Enter a valid pi model reference")
 		return
 	}
 	switch p.Thinking {

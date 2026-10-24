@@ -1,47 +1,79 @@
-# Web prototype checklist
+# Web prototype review checklist
 
-Run this before emitting `<artifact>`. P0 = must pass; P1 = should pass; P2 = nice to have.
+Review the prototype against the brief, then check its semantics and behavior.
+P0 items are required before delivery; P1 items are recommended when relevant;
+P2 items are optional refinements, not extra design constraints.
 
-## P0 — must pass
+## P0 — required
 
-- [ ] **No raw hex outside `:root` token block.** Every color is `var(--bg)` / `var(--fg)` / `var(--muted)` / `var(--border)` / `var(--accent)` / `var(--surface)` (or a `color-mix()` of those). Grep `#[0-9a-fA-F]{3,8}` outside `:root{}` should return nothing.
-- [ ] **All headings use `var(--font-display)`.** No sans-serif `<h1>` / `<h2>`. Inter / Roboto / system-sans never serve as a display face.
-- [ ] **Accent appears at most twice per screen.** Count: eyebrow color, primary CTA fill, anything else? If three or more, demote one to `var(--fg)` or `var(--muted)`.
-- [ ] **No purple/violet gradient backgrounds.** No `linear-gradient(... #a855f7 / #8b5cf6 / purple ...)`. The seed template has no gradients on backgrounds — keep it that way.
-- [ ] **No emoji used as feature icons.** Use the inline SVG monoline marks shipped in Layout 3, or a tasteful single-character glyph in `--font-mono`. ✨ 🚀 🎯 are out.
-- [ ] **No invented metrics.** Every number on the page came from the user, the brief, or is clearly labelled as a placeholder (e.g. `[REPLACE] · 38×`). "10× faster", "99.9% uptime" without source = remove.
-- [ ] **No filler copy.** Zero "Feature One / Feature Two", lorem ipsum, "Lorem ipsum dolor". If a section feels empty, delete it; do not pad.
-- [ ] **Named real-world referents use the correct real images.** Search/fetch and verify the intended person, product, brand mark, cover, artwork, event, landmark, or place. Never use generated, drawn, generic, look-alike, or fictional substitutes.
-- [ ] **No remote image dependencies.** Every used image is copied into the project and referenced relatively. No hotlinks, expiring URLs, broken sources, or unlabeled `.ph-img` scaffolds remain.
-- [ ] **Content images preserve their intrinsic ratio and full frame.** Inspect source width and height; replace the entire `.ph-img` scaffold with `<img class="content-img" width="…" height="…">`. Do not retain `.ph-img`, `.wide`, `.portrait`, or `.square`, do not fix both rendered axes, and do not use `cover` for content. Unusually tall or wide images must be bounded on one axis with the other left automatic so they neither crop nor create an excessive page-height column.
-- [ ] **`data-od-id` on every top-level `<section>`.** Used by comment mode to target sections.
-- [ ] **Mobile reflow works.** All `grid-2`, `grid-3`, `grid-4`, `grid-2-1`, `grid-1-2` collapse to one column at ≤920px (the default media query in `template.html` does this). Verify by mentally narrowing — no horizontal scroll.
-- [ ] **No `scrollIntoView()` calls.** Breaks the OD preview iframe. Use `scrollTo({...})` if you need scroll behaviour.
+- [ ] **The requested task is clear.** The prototype serves the user's actual
+  audience and mode. Its primary message or task is easy to find, and the
+  content follows the hierarchy established from the brief. It has not been
+  turned into a generic marketing page or padded with irrelevant sections.
+- [ ] **Explicit constraints are honored.** Named brand, platform,
+  reference/clone fidelity, and requested content or interactions are reflected
+  in the result. A refinement preserves existing working details that the
+  request did not ask to change.
+- [ ] **The document is semantic and navigable.** Use appropriate landmarks,
+  headings, lists, tables, and form elements for their content. Heading levels
+  and labels make relationships understandable; no section or control is
+  present only for visual filler.
+- [ ] **Section targets are stable.** Each top-level `<section>` has a
+  meaningful, unique `data-od-id`. During refinement, keep existing values
+  stable for unchanged sections.
+- [ ] **Every control works.** Links have real destinations; buttons, forms,
+  and other controls perform their stated action and expose their actual state.
+  No `href="#"`, dead-end navigation, fake CTA, or decorative control that
+  looks actionable without doing anything.
+- [ ] **Keyboard and assistive-technology use works.** Interactive elements
+  are keyboard reachable, focus is visible, controls have meaningful labels,
+  images have appropriate alternative text (or empty alt when decorative),
+  and meaning is not conveyed by color alone.
+- [ ] **Responsive layout preserves usability.** Check the intended desktop
+  size and narrow viewports. Content and controls remain readable and usable,
+  order remains sensible, and no element causes unintended horizontal
+  scrolling, clipping, or overlap.
+- [ ] **Content and assets are truthful.** No invented metrics, testimonials,
+  claims, records, or capabilities. Any named real-world visual referent uses
+  the correct real asset, not a generated or look-alike substitute.
+- [ ] **Image use preserves geometry.** Use project-local assets when imagery
+  is needed; do not hotlink remote or expiring URLs. For content images,
+  inspect intrinsic dimensions, include matching `width` and `height`, retain
+  the full frame, and avoid distortion. Crop only an intentionally decorative
+  image.
+- [ ] **No implementation scaffolding ships as content.** Remove instructions,
+  unfilled placeholders, temporary wireframes, broken links, and sample data
+  that could be mistaken for real product content.
 
-## P1 — should pass
+## P1 — recommended when relevant
 
-- [ ] **One decisive flourish.** A pull quote, a striking stat, a real-feeling photograph, one micro-animation on the hero. *One.* Not three.
-- [ ] **Section rhythm alternates.** No two stat rows in a row. No two feature triplets in a row. No two quote blocks in a row.
-- [ ] **Headlines under 14 words.** If longer, the writing is doing the design's job.
-- [ ] **Lead text under 56 ch / two sentences.** `max-width: 60ch` on `.lead` enforces this; don't override.
-- [ ] **CTA buttons say what happens.** "Start free" beats "Get Started". "Read the story" beats "Learn More".
-- [ ] **Hover states present** for all `<a>` and `.btn`. Seed template covers this.
-- [ ] **Numerics use `.num` (mono, tabular).** Prices, stats, version numbers, dates.
-- [ ] **One image style per page.** Don't mix square portrait headshots with widescreen product hero with vertical phone mock — pick a lane.
+- [ ] **The structure fits the task's information density.** Work surfaces
+  foreground the work; content-led pages foreground their subject. Include
+  navigation, chrome, status, secondary context, and calls to action only
+  where the brief or task needs them.
+- [ ] **Exploration compares structure, not just styling.** When the brief is
+  open-ended or asks for concepts, compare genuinely different information
+  structures or task flows under the same brand and content constraints. For
+  a specified design or reference-fidelity task, do not introduce alternatives
+  or novelty that conflict with the request.
+- [ ] **Visual choices express the intended brand and mode.** Typography,
+  palette, spacing, density, and imagery are consistent and support the
+  content. They come from the named design system or deliberate choices for
+  this brief, not an assumed seed style.
+- [ ] **Relevant interaction states are covered.** Where the experience needs
+  them, represent or implement empty, loading, success, validation, and error
+  states with clear feedback. Do not fabricate states or data.
+- [ ] **Motion respects preferences.** If transitions or animations are used,
+  check the reduced-motion preference and avoid motion that obscures task
+  progress or essential information.
+- [ ] **The preview is self-contained.** Styles, behavior, and required assets
+  are available to the project without a remote runtime or dependency.
 
-## P2 — nice to have
+## P2 — optional refinement
 
-- [ ] **`text-wrap: pretty` / `balance`** on long paragraphs / headings (already on `<p>` and `h*` in seed).
-- [ ] **`color-mix()` for derived tones.** No additional `--accent-50` / `--accent-300` Bootstrap-style tokens — derive on the spot.
-- [ ] **Sticky topnav has frosted glass** (already in seed via `backdrop-filter: blur()`).
-- [ ] **Loaded fonts are system-first.** Iowan Old Style / Charter for serif, system stack for sans. Only pull a Google Font if DESIGN.md specifies one.
-
-## Anti-slop spot-check
-
-Look at the page for two seconds. If your gut says any of:
-
-- "looks like every Cursor / Linear / Vercel ripoff I've seen this month"
-- "this could be any AI startup's homepage"
-- "the feature row has an icon, a heading, and three lines of vague benefit copy"
-
-…go back, replace one feature cell with something more specific to *this* product (a screenshot, a concrete example, a sample of the actual output), and remove one accent.
+- [ ] Review at additional viewport sizes and with longer or shorter realistic
+  content to catch layout pressure not visible in the initial example.
+- [ ] Review dense content and interaction flows for scanning, hierarchy,
+  feedback, and recovery from mistakes.
+- [ ] Remove styling or implementation that no longer serves the chosen
+  structure; keep the prototype maintainable and easy to refine.

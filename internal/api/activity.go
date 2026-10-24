@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/akki/pidesigner/internal/model"
-	"github.com/akki/pidesigner/internal/omprun"
+	"github.com/akki/pidesigner/internal/pirun"
 )
 
 func (s *Server) activityFor(run model.Run) (model.Activity, error) {
@@ -216,7 +216,7 @@ func (s *Server) handleRunEvents(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (r *Runner) handleExtensionUI(runID string, sess *omprun.Session, b *eventJournal, data json.RawMessage) {
+func (r *Runner) handleExtensionUI(runID string, sess *pirun.Session, b *eventJournal, data json.RawMessage) {
 	var req struct {
 		ID      string `json:"id"`
 		Method  string `json:"method"`
@@ -296,7 +296,7 @@ func (s *Server) handleUIResponse(w http.ResponseWriter, r *http.Request) {
 	}
 	out := map[string]any{"id": response.ID, "value": response.Value, "confirmed": response.Confirmed, "cancelled": response.Cancelled}
 	if err = sess.RespondUI(out); err != nil {
-		writeErr(w, 409, "omp could not receive your answer")
+		writeErr(w, 409, "pi could not receive your answer")
 		return
 	}
 	b.publish(AgentEvent{Type: "attention_resolved", RunID: a.RunID, At: nowMs()})

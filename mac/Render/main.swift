@@ -24,6 +24,7 @@ import WebKit
 // MARK: - Constants
 
 private let settleDelay: TimeInterval = 0.4
+private let pdSeekWait: TimeInterval = 3.0
 private let fontImageTimeout: TimeInterval = 2.0
 private let fullPageResizeDelay: TimeInterval = 0.35
 private let maxFullPageHeight = 6000
@@ -38,13 +39,15 @@ private struct RenderOptions {
     var outPath = ""
     var fullPage = false
     var slide = 0 // 1-based slide to bring into view; 0 = none
+    var at: TimeInterval = 0 // animation time to seek to before capture; 0 = as loaded
+    var wait: TimeInterval = 0 // real time to let the page run before capture (loaders, intros)
     var timeout: TimeInterval = 15
 }
 
 private func usageText() -> String {
     """
     usage: pidesigner-render --url <file:// or http:// URL> --width 1440 --height 900 \
-    --out /abs/path.png [--full-page] [--slide N] [--timeout 15]
+    --out /abs/path.png [--full-page] [--slide N] [--at MS] [--wait MS] [--timeout 15]
     """
 }
 
@@ -117,6 +120,20 @@ private func parseOptions() -> RenderOptions {
                 fail("invalid --slide: \(raw)")
             }
             options.slide = value
+        case "--at":
+            // Capture a moment of an animation: its clocks are seeked to this time.
+            let raw = nextValue(arg)
+            guard let value = Int(raw), value >= 0, value <= 60000 else {
+                fail("invalid --at: \(raw) (0–60000 ms)")
+            }
+            options.at = TimeInterval(value) / 1000
+        case "--wait":
+            // Let a live page run (preloaders, intro sequences) before capturing.
+            let raw = nextValue(arg)
+            guard let value = Int(raw), value >= 0, value <= 20000 else {
+                fail("invalid --wait: \(raw) (0–20000 ms)")
+            }
+            options.wait = TimeInterval(value) / 1000
         case "-h", "--help":
             FileHandle.standardError.write(Data((usageText() + "\n").utf8))
             exit(0)
@@ -125,6 +142,8 @@ private func parseOptions() -> RenderOptions {
         }
     }
 
+    // A long wait still leaves the normal budget for loading and capture.
+    options.timeout += options.wait
     guard !options.urlText.isEmpty else { fail("missing --url") }
     guard let url = URL(string: options.urlText) else {
         fail("invalid --url: \(options.urlText)")
@@ -283,6 +302,8 @@ private final class Renderer: NSObject, WKNavigationDelegate, WKUIDelegate {
     private var webView: WKWebView!
     private var currentHeight: Int
     private var finished = false
+    /// Animations moved to --at; nil when no time was requested.
+    private var seeked: Int?
     private var timeoutWork: DispatchWorkItem?
 
     init(options: RenderOptions) {
@@ -336,6 +357,14 @@ private final class Renderer: NSObject, WKNavigationDelegate, WKUIDelegate {
         webView.autoresizingMask = [.width, .height]
         webView.navigationDelegate = self
         webView.uiDelegate = self
+        // The parked window counts as occluded, so WebKit would suspend
+        // requestAnimationFrame after one frame: canvas, WebGL and GSAP pages
+        // would never advance past their first frame or a preloader. Opt out
+        // where WebKit offers the switch.
+        let occlusion = NSSelectorFromString("_setWindowOcclusionDetectionEnabled:")
+        if webView.responds(to: occlusion) {
+            webView.perform(occlusion, with: false)
+        }
         self.webView = webView
 
         window.contentView = webView
@@ -385,7 +414,8 @@ private final class Renderer: NSObject, WKNavigationDelegate, WKUIDelegate {
             "overflowX": scrollWidth > Double(width) + 1,
             "errors": Array(errors.prefix(50)),
             "brokenImages": Array(brokenImages.prefix(50)),
-            "title": title
+            "title": title,
+            "seeked": seeked.map { $0 as Any } ?? NSNull()
         ])
         exit(0)
     }
@@ -440,8 +470,12 @@ private final class Renderer: NSObject, WKNavigationDelegate, WKUIDelegate {
                 self.finishFailure("readiness check failed: \(error.localizedDescription)")
             case .success:
                 self.showSlideIfRequested { [weak self] in
-                    DispatchQueue.main.asyncAfter(deadline: .now() + settleDelay) { [weak self] in
-                        self?.measure(secondPass: false)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + (self?.options.wait ?? 0)) { [weak self] in
+                    self?.seekIfRequested { [weak self] in
+                        DispatchQueue.main.asyncAfter(deadline: .now() + settleDelay) { [weak self] in
+                            self?.measure(secondPass: false)
+                        }
+                    }
                     }
                 }
             }
@@ -477,6 +511,57 @@ private final class Renderer: NSObject, WKNavigationDelegate, WKUIDelegate {
                     : "slide \(self.options.slide) does not exist; the deck has \(count) slides")
                 return
             }
+            next()
+        }
+    }
+
+    /// An offscreen web view does not advance animations in real time, so a
+    /// requested moment is reached by seeking every animation clock the page
+    /// exposes: the artifact's own `window.pdSeek(ms)` when it defines one,
+    /// otherwise CSS animations and transitions (Web Animations), GSAP
+    /// (including paused timelines), anime.js and media. requestAnimationFrame loops that read the wall clock cannot
+    /// be seeked; the reported count lets the caller tell what moved.
+    private func seekIfRequested(then next: @escaping () -> Void, waited: TimeInterval = 0) {
+        guard options.at > 0 else { next(); return }
+        // A page that initializes asynchronously defines pdSeek once it is
+        // ready; seeking earlier would be undone by its own setup.
+        if waited < pdSeekWait {
+            webView.evaluateJavaScript("typeof window.pdSeek === 'function'") { [weak self] value, _ in
+                guard let self = self, !self.finished else { return }
+                if (value as? Bool) == true {
+                    self.seekIfRequested(then: next, waited: pdSeekWait)
+                } else {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+                        self?.seekIfRequested(then: next, waited: waited + 0.1)
+                    }
+                }
+            }
+            return
+        }
+        let ms = Int((options.at * 1000).rounded())
+        let script = """
+        (function (ms) {
+          var n = 0;
+          // The artifact's own clock wins: it can also redraw canvases and players.
+          try { if (typeof window.pdSeek === 'function') { window.pdSeek(ms); return 1; } } catch (e) {}
+          try { document.getAnimations().forEach(function (a) { try { a.pause(); a.currentTime = ms; n++; } catch (e) {} }); } catch (e) {}
+          try { if (window.gsap && gsap.globalTimeline) {
+            gsap.globalTimeline.pause(); gsap.globalTimeline.seek(ms / 1000, false); n++;
+            // Paused timelines (a film's own player) ignore the global clock.
+            gsap.globalTimeline.getChildren(false, false, true).forEach(function (tl) { if (tl.paused()) { tl.seek(ms / 1000, false); n++; } });
+          } } catch (e) {}
+          try { if (window.anime && anime.running) anime.running.slice().forEach(function (a) { a.pause(); a.seek(ms); n++; }); } catch (e) {}
+          try { document.querySelectorAll('video, audio').forEach(function (m) { m.pause(); m.currentTime = ms / 1000; n++; }); } catch (e) {}
+          return n;
+        })(\(ms))
+        """
+        webView.evaluateJavaScript(script) { [weak self] value, error in
+            guard let self = self, !self.finished else { return }
+            if let error = error {
+                self.finishFailure("could not seek to \(ms) ms: \(error.localizedDescription)")
+                return
+            }
+            self.seeked = (value as? NSNumber)?.intValue ?? 0
             next()
         }
     }

@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/akki/pidesigner/internal/omprun"
+	"github.com/akki/pidesigner/internal/pirun"
 )
 
 func (s *Server) handleModels(w http.ResponseWriter, r *http.Request) {
 	models, err := s.Models.List(r.Context(), r.URL.Query().Get("refresh") == "1")
 	if err != nil {
-		writeErr(w, http.StatusServiceUnavailable, "Could not read models from your installed omp: "+err.Error())
+		writeErr(w, http.StatusServiceUnavailable, "Could not read models from your installed pi: "+err.Error())
 		return
 	}
 	writeJSON(w, http.StatusOK, models)
@@ -26,15 +26,15 @@ func (s *Server) handleThinkingLevels(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"levels": levels})
 }
 func (s *Server) validatePreferences(ctx context.Context, p preferences) error {
-	if err := omprun.ValidateRef(p.Model); err != nil {
+	if err := pirun.ValidateRef(p.Model); err != nil {
 		return err
 	}
 	levels, err := s.Models.Thinking(ctx, p.Model)
 	if err != nil {
 		return err
 	}
-	if !omprun.ContainsLevel(levels, p.Thinking) {
-		return fmt.Errorf("Thinking level %s is not supported by the selected omp model", p.Thinking)
+	if !pirun.ContainsLevel(levels, p.Thinking) {
+		return fmt.Errorf("Thinking level %s is not supported by the selected pi model", p.Thinking)
 	}
 	return nil
 }

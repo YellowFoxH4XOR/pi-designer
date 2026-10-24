@@ -37,7 +37,7 @@
 		<true/>
 	</dict>
 
-	<!-- The app shells out to the user's `omp` binary and writes into
+	<!-- The app shells out to the user's `pi` binary and writes into
 	     ~/Library/Application Support/PiDesigner. -->
 	<key>NSHumanReadableCopyright</key>
 	<string>πDesigner · Local design workspace</string>

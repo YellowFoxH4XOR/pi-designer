@@ -17,24 +17,54 @@ import (
 	"github.com/akki/pidesigner/internal/content"
 	"github.com/akki/pidesigner/internal/knowledge"
 	"github.com/akki/pidesigner/internal/model"
-	"github.com/akki/pidesigner/internal/omprun"
+	"github.com/akki/pidesigner/internal/pirun"
 	"github.com/akki/pidesigner/internal/preview"
 	"github.com/akki/pidesigner/internal/project"
 	"github.com/akki/pidesigner/internal/store"
+	"github.com/akki/pidesigner/internal/versions"
 )
 
 // Server holds the daemon's dependencies.
 type Server struct {
-	Store         *store.Store
-	Catalog       *content.Catalog
-	Knowledge     *knowledge.Manager
-	Runner        *Runner
-	Hub           *preview.Hub
-	ProjectRoot   string
-	OmpBin        string
-	Models        *omprun.Catalog
+	Store       *store.Store
+	Catalog     *content.Catalog
+	Knowledge   *knowledge.Manager
+	Runner      *Runner
+	Hub         *preview.Hub
+	ProjectRoot string
+	// PiExplicit is the configured pi path; empty resolves automatically.
+	PiExplicit    string
+	Models        *pirun.Catalog
+	Versions      *versions.Store
 	activeMu      sync.RWMutex
 	activeProject string
+	piMu          sync.Mutex
+	pi            pirun.Runtime
+}
+
+// SetPiRuntime records the detected pi installation.
+func (s *Server) SetPiRuntime(rt pirun.Runtime) {
+	s.piMu.Lock()
+	s.pi = rt
+	s.piMu.Unlock()
+}
+
+func (s *Server) piRuntime() pirun.Runtime {
+	s.piMu.Lock()
+	defer s.piMu.Unlock()
+	return s.pi
+}
+
+// piReady reports why a run cannot start with the detected pi, or nil.
+func (s *Server) piReady() error {
+	rt := s.piRuntime()
+	if rt.Supported {
+		return nil
+	}
+	if rt.Error != "" {
+		return fmt.Errorf("%s. Open Settings to check your pi installation", rt.Error)
+	}
+	return fmt.Errorf("pi was not found. Open Settings to check your pi installation")
 }
 
 // Routes builds the HTTP mux.
@@ -63,6 +93,9 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("DELETE /api/projects/{id}/file", s.handleDeleteFile)
 	mux.HandleFunc("GET /api/projects/{id}/search", s.handleSearch)
 	mux.HandleFunc("GET /api/projects/{id}/artifact", s.handleArtifact)
+	mux.HandleFunc("GET /api/projects/{id}/versions", s.handleListVersions)
+	mux.HandleFunc("POST /api/projects/{id}/versions/{n}/restore", s.handleRestoreVersion)
+	mux.HandleFunc("GET /api/projects/{id}/versions/{n}/download", s.handleDownloadVersion)
 
 	// Conversations
 	mux.HandleFunc("GET /api/projects/{id}/conversations", s.handleListConversations)
@@ -90,6 +123,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/design-systems/{id}/preview/{path...}", s.handleSystemPreview)
 	mux.HandleFunc("GET /api/craft", s.handleCraft)
 	mux.HandleFunc("GET /api/knowledge", s.handleKnowledge)
+	mux.HandleFunc("POST /api/knowledge/sync", s.handleKnowledgeSync)
 	mux.HandleFunc("POST /api/knowledge/{id}/check", s.handleKnowledgeCheck)
 	mux.HandleFunc("GET /api/knowledge/{id}/preview", s.handleKnowledgePreview)
 	mux.HandleFunc("POST /api/knowledge/{id}/apply", s.handleKnowledgeApply)
@@ -100,6 +134,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/projects/{id}/watch", s.handleWatch)
 	mux.HandleFunc("GET /preview/{id}", s.handlePreview)
 	mux.HandleFunc("GET /preview/{id}/", s.handlePreview)
+	mux.HandleFunc("GET /preview/{id}/@v/{n}/{path...}", s.handleVersionPreview)
 
 	return logMiddleware(mux)
 }
@@ -162,9 +197,20 @@ func (s *Server) resolveProject(w http.ResponseWriter, r *http.Request) (model.P
 // ------------------------------------------------------------------ handlers
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+	// "Check again" in Settings re-detects pi after the user installs or
+	// upgrades it; runs resolve the binary themselves each time.
+	if r.URL.Query().Get("recheck") == "1" {
+		s.SetPiRuntime(pirun.Detect(r.Context(), s.PiExplicit))
+	}
+	rt := s.piRuntime()
+	piBin := ""
+	if rt.Supported {
+		piBin = rt.Bin
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok":            true,
-		"ompBin":        s.OmpBin,
+		"piBin":         piBin,
+		"pi":            rt,
 		"projectRoot":   s.ProjectRoot,
 		"designSystems": len(s.Catalog.DesignSystems()),
 		"skills":        len(s.Catalog.Skills()),
@@ -201,19 +247,30 @@ func (s *Server) handleCreateProject(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "name is required")
 		return
 	}
+	if req.DesignSystemID != "" {
+		if _, ok := s.Catalog.DesignSystem(req.DesignSystemID); !ok {
+			writeErr(w, http.StatusBadRequest, "Unknown design system")
+			return
+		}
+	}
 
 	slug := store.Slugify(req.Name)
 	if slug == "" {
 		slug = "project"
 	}
-	// Ensure slug uniqueness.
+	// Ensure slug uniqueness. Match slugs exactly: GetProject's name and
+	// substring fallbacks would reserve unrelated slugs.
 	base := slug
 	for i := 2; ; i++ {
-		if _, err := s.Store.GetProject(slug); err == nil {
-			slug = fmt.Sprintf("%s-%d", base, i)
-			continue
+		taken, err := s.Store.SlugExists(slug)
+		if err != nil {
+			writeErr(w, http.StatusInternalServerError, err.Error())
+			return
 		}
-		break
+		if !taken {
+			break
+		}
+		slug = fmt.Sprintf("%s-%d", base, i)
 	}
 
 	now := time.Now()
@@ -440,6 +497,10 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 	var req RunRequest
 	if err := decodeBody(r, &req); err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := s.piReady(); err != nil {
+		writeErr(w, http.StatusServiceUnavailable, err.Error())
 		return
 	}
 	req.ProjectID = proj.ID

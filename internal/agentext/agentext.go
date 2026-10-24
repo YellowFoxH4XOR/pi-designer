@@ -1,4 +1,4 @@
-// Package agentext installs πDesigner's omp extension, which gives design
+// Package agentext installs πDesigner's pi extension, which gives design
 // runs their plan (todo_write) and render-and-inspect (render_preview) tools.
 package agentext
 
@@ -16,7 +16,7 @@ var source []byte
 const FileName = "pidesigner-extension.ts"
 
 // Install writes the extension into dir and returns its path. The file is
-// rewritten only when its content changed, so a running omp process never
+// rewritten only when its content changed, so a running pi process never
 // observes a partially written file from an unrelated daemon start.
 func Install(dir string) (string, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {

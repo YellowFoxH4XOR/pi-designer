@@ -1,10 +1,10 @@
 ---
 name: web-prototype
 description: |
-  General-purpose desktop web prototype. Single self-contained HTML file built
-  by copying the seed `assets/template.html` and pasting section layouts from
-  `references/layouts.md`. Default for any landing / marketing / docs / SaaS
-  page when no more specific skill matches.
+  General-purpose self-contained HTML prototype for task interfaces, marketing,
+  editorial, documentation, and other web experiences. Choose hierarchy and
+  interaction from the brief; reuse the technical baseline and optional layout
+  techniques without imposing a default page skeleton.
 triggers:
   - "prototype"
   - "mockup"
@@ -26,69 +26,109 @@ od:
 
 # Web Prototype Skill
 
-Produce a single, self-contained HTML prototype using the bundled seed and layout library — **not** by writing CSS from scratch. The seed already encodes good defaults (typography, spacing, accent budget). Your job is to compose it.
+Create a single, self-contained HTML prototype for the user's actual task. Treat
+the bundled files as optional reference material, not a prescribed design
+system or page skeleton. Build the information architecture, visual treatment,
+and interactions that fit the brief.
 
 ## Resource map
 
 ```
 web-prototype/
-├── SKILL.md                ← you're reading this
+├── SKILL.md                ← workflow and quality bar
 ├── assets/
-│   └── template.html       ← seed: tokens + class system + chrome (READ FIRST)
+│   └── template.html       ← minimal document and accessibility baseline
 └── references/
-    ├── layouts.md          ← 8 paste-ready section skeletons
-    └── checklist.md        ← P0/P1/P2 self-review
+    ├── layouts.md          ← optional structural examples
+    └── checklist.md        ← brief-fit and implementation checks
 ```
 
 ## Workflow
 
-### Step 0 — Pre-flight (do this once before writing anything)
+### Step 0 — Understand the task and content
 
-1. **Read `assets/template.html` end-to-end** — at minimum through the `<style>` block. The class inventory at the top of `references/layouts.md` lists every class that must be defined there; if one is missing, add it to `<style>` rather than re-defining it inline on every section.
-2. **Read `references/layouts.md`** so you know which section skeletons exist. Don't write a section type that isn't covered — pick the closest layout and adapt.
-3. **Read the active DESIGN.md** (already injected into your system prompt). Map its colors to the six `:root` variables in the seed; don't introduce new tokens.
+Read the user's brief, the active DESIGN.md (if supplied in context), and any
+existing prototype being refined. Establish:
 
-### Step 1 — Prepare `index.html` from the seed
+- who the prototype is for and what they need to do or understand;
+- the mode that fits the request (for example, a task-oriented application,
+  product or marketing page, editorial experience, documentation, storefront,
+  or a focused interaction);
+- the information hierarchy: primary task or message, supporting content,
+  important states, and secondary actions;
+- explicit brand, platform, reference-fidelity, accessibility, and technical
+  constraints.
 
-Use `assets/template.html` as the seed for the canonical project file, normally `index.html`.
+Use the requested mode, not a generic marketing-page structure. A task UI
+should foreground its real workflow, data, and states; it does not need a
+marketing hero, feature grid, or closing CTA. Don't invent facts, metrics,
+testimonials, product capabilities, or content to fill space. If details are
+missing, make only safe, clearly bounded assumptions.
 
-Replace the six `:root` variables with the active design system's tokens. Replace the page `<title>` and the topnav brand.
+For a refinement, preserve working content, interactions, navigation, and
+visual decisions unless the request changes them. Keep existing `data-od-id`
+values stable so comment targets continue to refer to the same sections.
 
-### Step 2 — Plan the section list
+### Step 1 — Choose structure before styling
 
-**Pick layouts before writing copy.** Default rhythms (from `layouts.md`):
+Plan the structure around the content hierarchy and user flow: decide what
+belongs together, what deserves focus, and which actions or states need to be
+visible. Use custom sections and interactions when the task calls for them;
+the examples in `references/layouts.md` are optional starting points, not an
+exclusive menu. The seed does not provide page chrome or a default section
+sequence.
 
-| Page kind | Default rhythm |
-|---|---|
-| Landing | 1 hero → 3 features → 4 stats *or* 5 quote → custom split → 6 cta |
-| Marketing / editorial | 1 hero-center → 7 log list → 6 cta |
-| Pricing | 1 hero-center → 8 comparison table → 6 cta |
-| Docs index | 1 hero-center → 7 log list (sections of docs) → 6 cta |
+When the request is open-ended or asks for design exploration, compare
+meaningfully different structural concepts under the same brand and content
+constraints. Compare how they organize information and support the task, not
+just their colors. Choose the best-fitting direction or show the requested
+options. Do not randomize variants for their own sake. For a specific
+implementation, refinement, or reference/clone request, follow that direction
+instead of imposing novelty.
 
-State the chosen list in one sentence to the user *before* writing — they can redirect cheaply now and not after 200 lines of HTML.
+### Step 2 — Apply the visual system
 
-### Step 3 — Paste and fill
+Honor any named brand or active DESIGN.md, including its colors, typography,
+spacing, components, and tone. Do not compress it into a fixed token count or
+replace it with a house palette. Where the brief leaves choices open, select
+type, color, density, geometry, and imagery to support this product and mode;
+there is no default serif, eyebrow, accent budget, or decorative-label style.
+Keep visual choices legible, consistent, and appropriate to the amount and
+kind of content.
 
-For each chosen layout, copy the `<section>` block from `layouts.md` into `<main id="content">` of the project HTML. Replace bracketed `[REPLACE]` strings with real, specific copy from the user's brief. **No filler** — if a slot is empty, the section is the wrong choice; pick a different layout. Treat every `.ph-img` block as layout scaffolding and replace it when the section requires imagery, following the real-first rule below before self-checking.
+Use `assets/template.html` as a technical document baseline, not a design
+template. Add the styles and any needed local interactions for the prototype.
+Do not copy in chrome or content that the user did not ask for.
 
-### Step 4 — Self-check
+### Step 3 — Build the prototype
 
-Run through `references/checklist.md` top to bottom. Every P0 item must pass before you move on. P1 items should pass; P2 are bonus.
+Write the requested experience in the canonical project HTML file, normally
+`index.html`. Use semantic HTML and native controls where practical. Every
+visible control must have a meaningful destination or working behavior;
+implement important interaction states rather than showing inert decoration.
+Ensure keyboard access, visible focus, clear labels, readable contrast, and
+responsive behavior.
 
-### Step 5 — Write the project file
+Use real, project-local assets when imagery is needed. For a named
+real-world referent, use the correct real asset rather than a generated,
+look-alike, or fictional substitute. Preserve content-image geometry: inspect
+the intrinsic dimensions, include matching `width` and `height` attributes,
+and show the full frame unless the image is explicitly a decorative,
+croppable fill. Do not distort, silently crop, or add imagery merely to fill
+space. Never depend on remote hotlinks or expiring asset URLs.
 
-Write the completed HTML to the canonical project file, normally `index.html`. Then send one short ordinary assistant summary naming the file and describing what's there. Do not output the full HTML source in chat.
+If sections are used, put a stable, unique `data-od-id` on each top-level
+`<section>` for comment mode. Adapt identifiers when adding sections; do not
+rename existing targets during unrelated refinements.
 
-## Hard rules (the seed protects most of these — don't fight it)
+### Step 4 — Review against the brief
 
-- **Single accent, used at most twice per screen.** Eyebrow + primary CTA is the default budget.
-- **Display font is serif** (Iowan Old Style / Charter / Georgia in the seed). Sans for body. Mono for numerics, captions, eyebrows.
-- **Real imagery, never remote hotlinks.** `.ph-img` is temporary layout scaffolding, not the default final treatment. For a named real-world referent, search/fetch the correct real image, copy it into the project, and reference it relatively; never generate, draw, or invent a substitute. For illustrative or atmospheric subjects, prefer suitable fetched real photography and use image generation only as a fallback. If no compliant asset can be acquired, keep an intentional labeled `.ph-img` and disclose the limitation in the delivery summary.
-- **Preserve real-image geometry.** Inspect each acquired image's intrinsic width and height, replace the entire `.ph-img` scaffold with an `<img class="content-img">`, and set matching `width` and `height` attributes. Never copy `.ph-img`, `.wide`, `.portrait`, or `.square` onto a real image. Content images must show the full frame; `object-fit: cover` is only for intentionally croppable decorative fills. The seed's `.content-img` rule bounds unusually tall or wide images to the viewport while keeping the other axis automatic.
-- **Mobile reflow already works** via the seed's media query at 920px. Don't break it by adding fixed widths.
-- **`data-od-id` on every `<section>`** so comment mode can target it.
+Use `references/checklist.md` to check both implementation and fit. Confirm
+that the prototype addresses the requested task, that its structure follows
+the established hierarchy, and that nothing optional has become mandatory by
+habit. Fix failures before delivery.
 
-## Output contract
+### Step 5 — Deliver
 
 Filesystem runs use project files as the source of truth:
 
@@ -96,6 +136,7 @@ Filesystem runs use project files as the source of truth:
 index.html
 ```
 
-OpenDesign derives the preview from the written project file. Do not also emit a source-code `<artifact>` block for the same generation turn.
-
-One short summary after writing the file. Nothing after.
+OpenDesign derives the preview from the written project file. Do not also emit
+a source-code `<artifact>` block for the same generation turn. After writing
+the file, give one short summary naming it and describing the experience.
+Do not output the full HTML source in chat.

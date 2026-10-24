@@ -41,14 +41,14 @@ final class Daemon {
             "--data", Config.dataDir.path,
             "--content", resources.appendingPathComponent("content").path,
             "--ui", resources.appendingPathComponent("ui").path]
-        if let omp = ProcessInfo.processInfo.environment["PIDESIGNER_OMP_BIN"], !omp.isEmpty { proc.arguments?.append(contentsOf: ["--omp", omp]) }
+        if let pi = ProcessInfo.processInfo.environment["PIDESIGNER_PI_BIN"], !pi.isEmpty { proc.arguments?.append(contentsOf: ["--pi", pi]) }
         var environment = ProcessInfo.processInfo.environment
-        // Finder launches don't inherit a login shell PATH. Look for omp in its
-        // install locations (install script, bun global, Tern manager) before
-        // the inherited PATH and the usual Homebrew/system directories.
+        // Finder launches don't inherit a login shell PATH. Look for pi in its
+        // install locations (bun global, npm prefix, pi installer) before the
+        // inherited PATH and the usual Homebrew/system directories.
         let home = FileManager.default.homeDirectoryForCurrentUser.path
-        environment["PATH"] = ["\(home)/.local/bin", "\(home)/.bun/bin",
-            "\(home)/Library/Application Support/Tern/omp/bin", environment["PATH"] ?? "",
+        environment["PATH"] = ["\(home)/.bun/bin", "\(home)/.local/bin",
+            "\(home)/.pi/agent/bin", environment["PATH"] ?? "",
             "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"].joined(separator: ":")
         environment["PIDESIGNER_APP"] = "1"
         proc.environment = environment
@@ -94,7 +94,7 @@ final class Daemon {
         stopping = true
         input?.fileHandleForWriting.closeFile()
         guard let process, process.isRunning else { return }
-        // EOF normally reaps the daemon and its omp process tree immediately.
+        // EOF normally reaps the daemon and its pi process tree immediately.
         let deadline = Date().addingTimeInterval(4)
         while process.isRunning && Date() < deadline { usleep(30_000) }
         if process.isRunning { process.terminate() }

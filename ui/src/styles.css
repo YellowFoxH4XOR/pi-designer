@@ -110,6 +110,8 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .workspace-breadcrumb { display: flex; align-items: center; gap: 12px; }
 .workspace-breadcrumb strong { font-weight: 500; color: var(--ink); }
 .workspace-health { display: flex; align-items: center; gap: 7px; font-size: 10.5px; }
+.pi-health { display: inline-flex; align-items: center; gap: 7px; color: inherit; }
+.pi-health:hover { color: var(--accent); }
 .header-rule { height: 12px; width: 1px; background: var(--subtle); margin: 0 5px; }
 .workspace-canvas { flex: 1; min-height: 0; background: var(--canvas); border-top: 1px solid var(--line); overflow: auto; }
 .workspace-footer { display: flex; align-items: center; gap: 6px; height: 29px; flex: 0 0 auto; padding: 0 20px; border-top: 1px solid var(--line); color: var(--muted); font-size: 9.5px; }
@@ -400,9 +402,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .rename-form input { padding: 11px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); }.rename-form .button { margin-top: 20px; }
 .settings-page { max-width: 920px; }.settings-section { padding: 28px 0; border-top: 1px solid var(--line); }
 .settings-section-heading h2 { font-size: 16px; font-weight: 580; margin: 0 0 8px; }.settings-section-heading p { font-size: 12px; color: var(--muted); margin: 0 0 22px; }
-.agent-card { display: flex; align-items: center; gap: 14px; padding: 20px; background: var(--subtle); border: 1px solid var(--line); border-radius: 10px; }
-.agent-card > div { min-width: 0; }.agent-card strong { font-size: 13px; font-weight: 550; }.agent-card p { font: 10px/1.7 var(--mono); color: var(--muted); overflow-wrap: anywhere; margin: 7px 0 0; }
-.agent-state { margin-left: auto; display: flex; align-items: center; gap: 6px; color: var(--success); font-size: 11px; white-space: nowrap; }.agent-state.unavailable { color: var(--error); }
+
 .preferences-form { margin-top: 23px; display: grid; grid-template-columns: 1fr 170px; gap: 20px; }
 .preferences-form label { display: flex; flex-direction: column; gap: 10px; font-size: 12px; }.preferences-form label > span { font-size: 10px; color: var(--muted); line-height: 1.7; }
 .preferences-form input, .preferences-form select { padding: 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 7px; font-size: 12px; min-width: 0; }.preferences-form select { margin-top: auto; }
@@ -417,23 +417,12 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .design-route ul { margin: 0 0 7px; padding-left: 18px; }
 .design-route li { margin: 4px 0; }
 .design-route b { font-weight: 600; }
-.knowledge-summary { padding: 11px 14px; margin-bottom: 20px; background: var(--subtle); border-radius: 7px; color: var(--ink); font-size: 12px; }
 .knowledge-group { margin: 22px 0 28px; }
 .knowledge-group h3 { font-size: 12px; font-weight: 630; margin: 0 0 10px; color: var(--ink); }
-.knowledge-sources { border-top: 1px solid var(--line); }
-.knowledge-source { display: flex; align-items: start; justify-content: space-between; gap: 20px; padding: 16px 0; border-bottom: 1px solid var(--line); }
 .knowledge-source-info { min-width: 0; }
 .knowledge-source strong { font-size: 13px; color: var(--ink); }
-.knowledge-license { margin-left: 9px; color: var(--muted); font-size: 10px; }
-.knowledge-source p { margin: 6px 0 2px; color: var(--ink); font-size: 12px; line-height: 1.5; }
-.knowledge-source small { display: block; font-size: 11px; line-height: 1.5; color: var(--muted); }
-.knowledge-provenance { display: flex; flex-wrap: wrap; align-items: center; column-gap: 12px; margin-top: 6px; font-size: 11px; line-height: 1.7; color: var(--muted); }
-.knowledge-link-only { color: var(--muted); font-size: 11px; padding: 8px 0; }
-.knowledge-actions { display: flex; flex-wrap: wrap; gap: 8px; flex-shrink: 0; }
-.knowledge-preview { margin-top: 18px; padding: 18px; background: var(--white); border: 1px solid var(--line); border-radius: 11px; }
-.knowledge-preview-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.knowledge-preview pre { max-height: 320px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; padding: 14px; border: 1px solid var(--line); border-radius: 7px; background: var(--canvas); font-size: 11px; line-height: 1.6; }
-@media (max-width: 700px) { .knowledge-source { flex-direction: column; } }.storage-path { display: block; padding: 13px 15px; background: var(--subtle); border-radius: 7px; font-size: 11px; line-height: 1.8; overflow-wrap: anywhere; }
+.knowledge-license { color: var(--muted); font-size: 10px; }
+.storage-path { display: block; padding: 13px 15px; background: var(--subtle); border-radius: 7px; font-size: 11px; line-height: 1.8; overflow-wrap: anywhere; }
 
 /* Agent turns: design notes, question forms, plan, renders. */
 .agent-message { min-width: 0; }
@@ -583,3 +572,76 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
   .studio-workflow { display: none; }.studio-header-end .local-label { display: none; }.source-tree { width: 125px; }.canvas-tab-note { display: none; }.fit-button > span { display: none; }.toolbar-divider { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
+
+/* pi runtime: the engine card, its facts, and setup steps when pi is missing or outdated. */
+.pi-runtime { padding: 20px; background: var(--subtle); border: 1px solid var(--line); border-radius: 10px; }
+.pi-runtime.attention { background: var(--surface); border-color: color-mix(in srgb, var(--warning) 35%, var(--line)); }
+.pi-runtime-head { display: flex; align-items: center; gap: 14px; }
+.pi-runtime-head > div { min-width: 0; }
+.pi-runtime-head strong { font-size: 13px; font-weight: 580; }
+.pi-runtime-head p { margin: 5px 0 0; font-size: 12px; line-height: 1.55; color: var(--muted); }
+.pi-runtime .agent-mark { border-radius: 9px; }
+.agent-state { margin-left: auto; display: flex; align-items: center; gap: 6px; color: var(--success); font-size: 11px; white-space: nowrap; }
+.agent-state.unavailable { color: var(--warning); }
+.pi-runtime-facts { margin: 18px 0 0; padding-top: 6px; border-top: 1px solid var(--line); }
+.pi-runtime-facts > div { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 12px; padding: 7px 0; font-size: 12px; }
+.pi-runtime-facts dt { color: var(--muted); }
+.pi-runtime-facts dd { margin: 0; min-width: 0; }
+.pi-runtime-facts code, .pi-steps code { font: 11px/1.6 var(--mono); overflow-wrap: anywhere; }
+.pi-runtime-facts small { display: block; margin-top: 2px; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.pi-steps { margin: 14px 0 0; padding: 14px 0 0 20px; border-top: 1px solid var(--line); color: var(--ink); font-size: 12px; line-height: 1.7; }
+.pi-steps li + li { margin-top: 8px; }
+.pi-steps code { padding: 1px 5px; background: var(--subtle); border-radius: 4px; }
+.pi-command { display: flex; align-items: center; gap: 10px; margin-top: 8px; padding: 6px 6px 6px 12px; background: var(--canvas); border: 1px solid var(--line); border-radius: 8px; }
+.pi-command code { flex: 1; min-width: 0; padding: 0; background: none; }
+.pi-command .button { min-height: 30px; padding: 5px 10px; font-size: 11.5px; }
+.pi-runtime-actions { display: flex; align-items: center; gap: 16px; margin-top: 16px; }
+.pi-runtime-actions .text-button { gap: 4px; }
+/* Design references sync on their own; this is status, not a review queue. */
+.reference-sync { display: flex; align-items: center; gap: 10px; padding: 10px 10px 10px 14px; margin-bottom: 8px; background: var(--subtle); border-radius: 8px; font-size: 12px; color: var(--muted); }
+.reference-sync strong { color: var(--ink); font-weight: 560; }
+.reference-sync .button { margin-left: auto; }
+.knowledge-sources { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
+.knowledge-source { display: flex; align-items: start; justify-content: space-between; gap: 20px; padding: 14px 0; border-bottom: 1px solid var(--line); }
+.knowledge-source-title { display: flex; align-items: baseline; gap: 9px; }
+.knowledge-source p { margin: 5px 0 0; color: var(--ink); font-size: 12px; line-height: 1.5; }
+.knowledge-provenance { display: flex; flex-wrap: wrap; align-items: center; column-gap: 12px; margin-top: 5px; font-size: 11px; line-height: 1.7; color: var(--muted); }
+.knowledge-provenance a { display: inline-flex; align-items: center; gap: 3px; }
+.knowledge-provenance a:hover { color: var(--accent); }
+.knowledge-source .knowledge-error { color: var(--error); font-size: 11px; overflow-wrap: anywhere; }
+.knowledge-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex-shrink: 0; }
+.knowledge-actions .text-button { padding: 2px 0; font-size: 11px; }
+.reference-state { font-size: 11px; color: var(--muted); white-space: nowrap; }
+.reference-state.ready { color: var(--success); }
+.reference-state.failed { color: var(--error); }
+@media (max-width: 700px) { .knowledge-source { flex-direction: column; } .knowledge-actions { align-items: flex-start; } .pi-runtime-facts > div { grid-template-columns: 1fr; gap: 2px; } }
+/* Artifacts: each turn's result is a card in the conversation and a version in the canvas. */
+.artifact-card { display: flex; align-items: center; gap: 11px; width: 100%; margin-top: 12px; padding: 10px 12px; text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; transition: border-color .12s, background .12s; }
+.artifact-card:hover { border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
+.artifact-card.active { border-color: var(--accent); background: var(--accent-soft); }
+.artifact-card-icon { display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; flex: 0 0 auto; border-radius: 8px; background: var(--subtle); color: var(--accent); }
+.artifact-card.active .artifact-card-icon { background: var(--surface); }
+.artifact-card-text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.artifact-card-text strong { font-size: 12.5px; font-weight: 580; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.artifact-card-text small { display: flex; align-items: center; gap: 6px; margin-top: 2px; color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.artifact-card-open { display: inline-flex; align-items: center; gap: 2px; color: var(--muted); font-size: 11px; flex: 0 0 auto; }
+.artifact-card:hover .artifact-card-open, .artifact-card.active .artifact-card-open { color: var(--accent); }
+.artifact-header { gap: 10px; }
+.artifact-title { display: flex; align-items: center; gap: 7px; min-width: 0; padding: 5px 10px; background: var(--subtle); border-radius: 7px; font-size: 11px; }
+.artifact-title > span, .artifact-title select { min-width: 0; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.artifact-title select, .version-nav select { border: 0; background: transparent; font-size: 11px; padding: 2px 0; cursor: pointer; }
+.version-nav { display: flex; align-items: center; gap: 0; }
+.version-nav .icon-button { width: 26px; height: 26px; }
+.version-nav select { padding: 2px 4px; border-radius: 6px; }
+.version-nav select:hover { background: var(--subtle); }
+.artifact-actions { display: flex; align-items: center; gap: 1px; }
+.artifact-actions .icon-button { width: 30px; height: 30px; }
+.version-banner { display: flex; align-items: center; gap: 10px; padding: 9px 13px; background: var(--warning-soft); border-bottom: 1px solid var(--line); color: var(--warning); font-size: 11.5px; }
+.version-banner > span { flex: 1; min-width: 0; color: var(--ink); line-height: 1.5; }
+.version-banner .button { min-height: 28px; padding: 5px 10px; font-size: 11.5px; }
+.studio-shell.canvas-closed .studio-content { grid-template-columns: minmax(0, 1fr); }
+.studio-shell.canvas-closed .conversation-pane { width: 100%; max-width: 760px; margin: 0 auto; }
+.studio-shell.canvas-expanded .studio-content { grid-template-columns: minmax(0, 1fr); }
+.studio-shell.canvas-expanded .conversation-pane { display: none; }
+@media (max-width: 1100px) { .artifact-header .canvas-tab-note { display: none; } .artifact-title > span, .artifact-title select { max-width: 140px; } }
+@media (prefers-reduced-motion: reduce) { .artifact-card { transition: none; } }

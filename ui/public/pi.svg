@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <!-- pi agent mark: a π on a dark tile, drawn as strokes so it renders without fonts. -->
+  <rect width="120" height="120" rx="26" fill="#24272e"/>
+  <g fill="none" stroke="#ffffff" stroke-width="11" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M28 40c4-5 9-7 16-7h48"/>
+    <path d="M50 34c0 20-3 37-12 52"/>
+    <path d="M74 34v40c0 8 3 12 9 12 4 0 7-2 9-5"/>
+  </g>
+</svg>

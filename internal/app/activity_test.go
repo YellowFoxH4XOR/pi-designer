@@ -11,12 +11,12 @@ import (
 )
 
 func TestQuitDrainsActivityBeforeClosingTheDatabase(t *testing.T) {
-	fixture, err := filepath.Abs("../../scripts/fixtures/omp-rpc.cjs")
+	fixture, err := filepath.Abs("../../scripts/fixtures/pi-rpc.cjs")
 	if err != nil {
 		t.Fatal(err)
 	}
 	data := t.TempDir()
-	a, err := Start(Options{DataDir: data, ContentDir: fixtureCatalog(t), OmpBin: fixture})
+	a, err := Start(Options{DataDir: data, ContentDir: fixtureCatalog(t), PiBin: fixture})
 	if err != nil {
 		t.Fatal(err)
 	}

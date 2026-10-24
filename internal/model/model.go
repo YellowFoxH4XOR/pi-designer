@@ -81,16 +81,31 @@ type Render struct {
 	Image     string `json:"image"` // daemon URL of the PNG
 	FullPage  bool   `json:"fullPage,omitempty"`
 	Slide     int    `json:"slide,omitempty"` // deck slide shown, 1-based
+	At        int    `json:"at,omitempty"`    // motion time captured, in ms
 	OverflowX bool   `json:"overflowX"`
 	Errors    int    `json:"errors"`
 }
 
 // Critique is one round of the expert panel critique.
 type Critique struct {
-	Round     int        `json:"round"`
-	Composite float64    `json:"composite"`
-	Decision  string     `json:"decision"` // revise | ship | ship_with_issues
-	Panelists []Panelist `json:"panelists"`
+	Round int `json:"round"`
+	// Composite is the score that decided the round: the independent jury's
+	// when one ran, otherwise the agent's own panel.
+	Composite       float64     `json:"composite"`
+	SelfComposite   float64     `json:"selfComposite,omitempty"`
+	Decision        string      `json:"decision"` // revise | ship | ship_with_issues
+	SignatureMoment string      `json:"signatureMoment,omitempty"`
+	Panelists       []Panelist  `json:"panelists"`
+	Jury            *JuryReview `json:"jury,omitempty"`
+}
+
+// JuryReview is an independent model's Awwwards-rubric score of fresh renders.
+type JuryReview struct {
+	Model   string             `json:"model"`
+	Scores  map[string]float64 `json:"scores"`
+	Overall float64            `json:"overall"`
+	Verdict string             `json:"verdict"`
+	Issues  []string           `json:"issues"`
 }
 
 // Panelist is one reviewer's verdict in a critique round.

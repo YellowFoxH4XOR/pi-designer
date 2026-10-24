@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Real installed omp metadata, real Go persistence, and an optional one-line
+// Real installed pi metadata, real Go persistence, and an optional one-line
 // inference through the app. All project data is confined to a review daemon.
 const { chromium } = require(process.env.PLAYWRIGHT_PACKAGE || '../ui/node_modules/playwright-core');
 const fs = require('node:fs/promises');
@@ -18,11 +18,11 @@ const assert = require('node:assert/strict');
     await fs.mkdir('.impeccable/review', { recursive: true });
     await page.goto(meta.url);
     await page.getByRole('heading',{name:/Good ideas/}).waitFor();
-    await page.getByRole('button',{name:'Choose omp model'}).waitFor();
+    await page.getByRole('button',{name:'Choose pi model'}).waitFor();
     assert.ok(await page.locator('.model-button .model-icon').count());
     assert.equal(await page.locator('.brand .brand-mark').getAttribute('src'), '/brand.svg');
     pass('Selected-model icons and πDesigner app identity are distinct');
-    await page.getByRole('button',{name:'Choose omp model'}).click();
+    await page.getByRole('button',{name:'Choose pi model'}).click();
     await page.locator('.model-row[data-model-ref]').first().waitFor({timeout:45000});
     const {data:catalog}=await request('/api/models');
     assert.ok(catalog.models.length>0);
@@ -37,7 +37,7 @@ const assert = require('node:assert/strict');
     assert.equal(prefs.model,ref);
     const levels=(await request('/api/models/thinking?model='+encodeURIComponent(ref))).data.levels;
     assert.ok(levels.includes(prefs.thinking));
-    pass(`Real omp catalog (${catalog.models.length} models), exact selection, supported thinking, and save`);
+    pass(`Real pi catalog (${catalog.models.length} models), exact selection, supported thinking, and save`);
     await page.reload();
     await page.getByRole('heading',{name:/Good ideas/}).waitFor();
     await page.waitForFunction(name=>document.querySelector('.model-button strong')?.textContent===name,target.name);
@@ -47,12 +47,12 @@ const assert = require('node:assert/strict');
     await page.waitForFunction(()=>!document.querySelector('.preferences-form select')?.disabled);
     const actualLevels=await page.getByLabel('Thinking level').locator('option').evaluateAll(options=>options.filter(o=>!o.disabled).map(o=>o.value));
     assert.deepEqual(actualLevels,levels);
-    assert.equal(await page.locator('.agent-card .agent-mark').getAttribute('src'),'/omp.svg');
+    assert.equal(await page.locator('.agent-card .agent-mark').getAttribute('src'),'/pi.svg');
     await page.getByLabel('Thinking level').selectOption(levels.includes('low')?'low':levels[0]);
     await page.getByRole('button',{name:'Save preferences'}).click();
     await page.getByRole('status').filter({hasText:'Preferences saved'}).waitFor();
     await page.screenshot({path:'.impeccable/review/model-settings.png'});
-    pass('Settings uses the omp logo and only selected-model thinking levels');
+    pass('Settings uses the pi logo and only selected-model thinking levels');
     const invalid=await request('/api/preferences',{model:'not-a-provider/not-a-model',thinking:'medium'});
     assert.equal(invalid.status,400);
     assert.equal((await request('/api/preferences')).data.model,ref);
@@ -76,7 +76,7 @@ const assert = require('node:assert/strict');
       await page.getByText('Finished. Response saved to this conversation.',{exact:true}).waitFor({timeout:90000});
       assert.ok((await page.locator('.conversation-messages').textContent()).includes('MODEL_SELECTION_OK'));
       await page.screenshot({path:'.impeccable/review/model-run.png'});
-      pass('Real UI run sent selected id, omp confirmed the model, and inference completed');
+      pass('Real UI run sent selected id, pi confirmed the model, and inference completed');
     }
     assert.deepEqual(errors,[]);pass('No browser JavaScript errors');
     await fs.writeFile('.impeccable/review/model-report.json',JSON.stringify({checks,model:ref,configuredModels:catalog.models.length,errors},null,2));

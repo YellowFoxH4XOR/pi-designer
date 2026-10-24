@@ -57,6 +57,16 @@ func TestDeckSlideRendersAreNotPageOverflow(t *testing.T) {
 	}
 }
 
+func TestTimedMotionRendersAreParsedAndServed(t *testing.T) {
+	got, ok := parseRender("p", []byte(`{"viewport":"mobile","file":"7-mobile-t2500.png","at":2500}`))
+	if !ok || got.At != 2500 {
+		t.Fatalf("timed render parsed as %+v", got)
+	}
+	if (&Runner{cfg: RunnerConfig{RenderDir: "/r"}}).RenderFile("p", "7-mobile-t2500.png") == "" {
+		t.Fatal("timed render file is not served")
+	}
+}
+
 type runnerTestHub struct{}
 
 func (runnerTestHub) NotifyProjectChanged(string) {}
@@ -93,7 +103,7 @@ func newRunnerTest(t *testing.T) (*Runner, *store.Store, model.Project, string, 
 	if err != nil {
 		t.Fatal(err)
 	}
-	fixture, err := filepath.Abs("../../scripts/fixtures/omp-rpc.cjs")
+	fixture, err := filepath.Abs("../../scripts/fixtures/pi-rpc.cjs")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -292,6 +302,28 @@ func TestBuildArtifactReportsMissingEntryRelativeDependency(t *testing.T) {
 	_, err := BuildArtifact(project.New(root), "pages/index.html")
 	if err == nil || !strings.Contains(err.Error(), `pages/theme.css`) {
 		t.Fatalf("missing nested dependency error = %v", err)
+	}
+}
+
+func TestBuildArtifactIgnoresScriptCodeCommentsAndDataAttributes(t *testing.T) {
+	root := t.TempDir()
+	writeArtifactTestFile(t, root, "index.html", `<!-- <img src="old.png"> -->
+<img data-src="lazy/missing.png" src="hero.png">
+<script src="app.js"></script>
+<script>const img = new Image(); img.src = "generated/missing.png"; el.innerHTML = '<a href="nope.html">';</script>`)
+	writeArtifactTestFile(t, root, "hero.png", "png")
+	writeArtifactTestFile(t, root, "app.js", "1")
+	bundle, err := BuildArtifact(project.New(root), "index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bundle.Files) != 3 {
+		t.Fatalf("artifact files = %v", bundle.Files)
+	}
+	for _, name := range []string{"hero.png", "app.js"} {
+		if _, ok := bundle.Files[name]; !ok {
+			t.Errorf("artifact omitted %q", name)
+		}
 	}
 }
 

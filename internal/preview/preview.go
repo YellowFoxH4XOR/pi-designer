@@ -236,7 +236,7 @@ func (h *Hub) broadcast(project string, msg Message) {
 
 	for _, c := range clients {
 		c.mu.Lock()
-		_ = c.ws.Write(ctxWithTimeout(), websocket.MessageText, mustJSON(msg))
+		_ = writeMessage(c.ws, msg)
 		c.mu.Unlock()
 	}
 }
@@ -255,7 +255,7 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request, project string) {
 		_ = conn.Close(websocket.StatusNormalClosure, "")
 	}()
 
-	_ = conn.Write(ctxWithTimeout(), websocket.MessageText, mustJSON(Message{Type: "hello", Project: project}))
+	_ = writeMessage(conn, Message{Type: "hello", Project: project})
 
 	// Drain inbound frames so close/ping handling works.
 	for {
@@ -482,8 +482,27 @@ func mustJSON(v any) []byte {
 	return b
 }
 
-func ctxWithTimeout() context.Context {
+// writeMessage sends one message, giving up on a stalled client after 5s.
+func writeMessage(ws *websocket.Conn, msg Message) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	_ = cancel
-	return ctx
+	defer cancel()
+	return ws.Write(ctx, websocket.MessageText, mustJSON(msg))
+}
+
+// CleanPath turns a preview URL path into a project-relative file name,
+// defaulting to index.html; ok is false when it would escape the project.
+func CleanPath(raw string) (string, bool) { return cleanPreviewPath(raw) }
+
+// ServeSnapshot serves one file of a saved version with the same sandbox as a
+// live preview. Versions never change, so there is no reload bridge and the
+// response may be cached.
+func ServeSnapshot(w http.ResponseWriter, r *http.Request, name string, data []byte, modTime time.Time) {
+	w.Header().Set("Content-Security-Policy", "sandbox allow-scripts allow-forms")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Cache-Control", "private, max-age=31536000, immutable")
+	setPreviewCORS(w, r, name)
+	if typ := previewContentType(name); typ != "" {
+		w.Header().Set("Content-Type", typ)
+	}
+	http.ServeContent(w, r, name, modTime, bytes.NewReader(data))
 }
