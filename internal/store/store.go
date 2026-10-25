@@ -92,9 +92,17 @@ func (s *Store) migrate() error {
 		`CREATE TABLE IF NOT EXISTS run_events (seq INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE, body TEXT NOT NULL)`,
 		`CREATE INDEX IF NOT EXISTS idx_run_events ON run_events(run_id,seq)`,
 		`CREATE TABLE IF NOT EXISTS run_activity (run_id TEXT PRIMARY KEY REFERENCES runs(id) ON DELETE CASCADE, body TEXT NOT NULL)`,
+		`CREATE TABLE IF NOT EXISTS run_summary (run_id TEXT PRIMARY KEY REFERENCES runs(id) ON DELETE CASCADE, body TEXT NOT NULL)`,
 		`CREATE INDEX IF NOT EXISTS idx_conv_project ON conversations(project_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_msg_conv ON messages(conversation_id, created_at)`,
 		`CREATE INDEX IF NOT EXISTS idx_run_project ON runs(project_id, started_at)`,
+		// A durable, constant-time invalidation token. Timestamps can collide
+		// within one millisecond, and count/sum fingerprints can be reused.
+		`CREATE TABLE IF NOT EXISTS project_revision (id INTEGER PRIMARY KEY CHECK(id=1), version INTEGER NOT NULL)`,
+		`INSERT OR IGNORE INTO project_revision(id,version) VALUES(1,0)`,
+		`CREATE TRIGGER IF NOT EXISTS projects_revision_insert AFTER INSERT ON projects BEGIN UPDATE project_revision SET version=version+1 WHERE id=1; END`,
+		`CREATE TRIGGER IF NOT EXISTS projects_revision_update AFTER UPDATE ON projects BEGIN UPDATE project_revision SET version=version+1 WHERE id=1; END`,
+		`CREATE TRIGGER IF NOT EXISTS projects_revision_delete AFTER DELETE ON projects BEGIN UPDATE project_revision SET version=version+1 WHERE id=1; END`,
 	}
 	for _, q := range stmts {
 		if _, err := s.db.Exec(q); err != nil {
@@ -106,6 +114,11 @@ func (s *Store) migrate() error {
 		if err := s.addColumn("runs", col, "TEXT"); err != nil {
 			return fmt.Errorf("migrate: %w", err)
 		}
+	}
+	// A compact copy of the projection in its own table, so activity polling
+	// neither decodes whole transcripts nor walks their overflow pages.
+	if _, err := s.db.Exec(`INSERT OR IGNORE INTO run_summary(run_id,body) SELECT run_id,json_remove(body,'$.text','$.textBlocks','$.messageText','$.prompt','$.tools','$.request','$.todos','$.renders','$.critiques') FROM run_activity WHERE NOT EXISTS (SELECT 1 FROM run_summary WHERE run_summary.run_id=run_activity.run_id) AND json_valid(body)`); err != nil {
+		return fmt.Errorf("migrate: %w", err)
 	}
 	// web-artifacts-builder is a catalogue stub without a workflow; the
 	// Prototype workflow is the web-prototype skill.
@@ -249,6 +262,16 @@ func (s *Store) ListProjects() ([]model.Project, error) {
 		out = append(out, p)
 	}
 	return out, rows.Err()
+}
+
+// ProjectsStamp returns a durable revision incremented by SQLite triggers on
+// every project mutation, so polling costs O(1) and never depends on timestamps.
+func (s *Store) ProjectsStamp() (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var stamp string
+	err := s.db.QueryRow(`SELECT version FROM project_revision WHERE id=1`).Scan(&stamp)
+	return stamp, err
 }
 
 // DeleteProject removes a project row (files are removed by the caller).
@@ -442,6 +465,10 @@ func (s *Store) SaveRunWork(id string, todos []model.Todo, renders []model.Rende
 const runColumns = `id,project_id,COALESCE(conversation_id,''),status,COALESCE(prompt,''),
 		COALESCE(error,''),started_at,ended_at,COALESCE(todos,''),COALESCE(renders,''),COALESCE(critiques,'')`
 
+// runHeaderColumns matches runColumns' shape without the prompt and work JSON.
+const runHeaderColumns = `id,project_id,COALESCE(conversation_id,''),status,'',
+		COALESCE(error,''),started_at,ended_at,'','',''`
+
 func scanRun(scan func(...any) error) (model.Run, error) {
 	var r model.Run
 	var started int64
@@ -477,6 +504,18 @@ func (s *Store) GetRun(id string) (model.Run, error) {
 		return r, ErrNotFound
 	}
 	return r, err
+}
+
+// RunStatus reads only a run's status, for loops that poll for completion.
+func (s *Store) RunStatus(id string) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var status string
+	err := s.db.QueryRow(`SELECT status FROM runs WHERE id=?`, id).Scan(&status)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", ErrNotFound
+	}
+	return status, err
 }
 
 // FailStaleRuns marks runs that were still marked running as failed. A daemon

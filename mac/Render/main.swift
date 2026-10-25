@@ -26,8 +26,13 @@ import WebKit
 private let settleDelay: TimeInterval = 0.4
 private let pdSeekWait: TimeInterval = 3.0
 private let fontImageTimeout: TimeInterval = 2.0
-private let fullPageResizeDelay: TimeInterval = 0.35
 private let maxFullPageHeight = 6000
+/// Full pages are captured the way a visitor sees them: scrolled one viewport
+/// at a time at the frame height, so 100vh sections keep their size and
+/// scroll-triggered reveals have fired.
+private let revealStepDelay: TimeInterval = 0.12
+private let revealSettleDelay: TimeInterval = 1.2
+private let tileDelay: TimeInterval = 0.15
 
 // MARK: - Options
 
@@ -300,7 +305,6 @@ private final class Renderer: NSObject, WKNavigationDelegate, WKUIDelegate {
 
     private var window: NSWindow!
     private var webView: WKWebView!
-    private var currentHeight: Int
     private var finished = false
     /// Animations moved to --at; nil when no time was requested.
     private var seeked: Int?
@@ -308,7 +312,6 @@ private final class Renderer: NSObject, WKNavigationDelegate, WKUIDelegate {
 
     init(options: RenderOptions) {
         self.options = options
-        self.currentHeight = options.height
         super.init()
     }
 
@@ -370,7 +373,8 @@ private final class Renderer: NSObject, WKNavigationDelegate, WKUIDelegate {
         window.contentView = webView
         window.orderFrontRegardless()
 
-        let timeout = options.timeout
+        // Scrolling a full page tile by tile needs time beyond one capture.
+        let timeout = options.timeout + (options.fullPage ? 10 : 0)
         let timeoutWork = DispatchWorkItem { [weak self] in
             self?.finishFailure("render timed out after \(Int(timeout))s")
         }
@@ -473,7 +477,7 @@ private final class Renderer: NSObject, WKNavigationDelegate, WKUIDelegate {
                     DispatchQueue.main.asyncAfter(deadline: .now() + (self?.options.wait ?? 0)) { [weak self] in
                     self?.seekIfRequested { [weak self] in
                         DispatchQueue.main.asyncAfter(deadline: .now() + settleDelay) { [weak self] in
-                            self?.measure(secondPass: false)
+                            self?.measure()
                         }
                     }
                     }
@@ -568,7 +572,7 @@ private final class Renderer: NSObject, WKNavigationDelegate, WKUIDelegate {
 
     // MARK: Measure / resize
 
-    private func measure(secondPass: Bool) {
+    private func measure() {
         guard !finished else { return }
         webView.evaluateJavaScript(Scripts.measure) { [weak self] value, error in
             guard let self = self, !self.finished else { return }
@@ -587,18 +591,21 @@ private final class Renderer: NSObject, WKNavigationDelegate, WKUIDelegate {
             let errors = (dict["errors"] as? [Any])?.map { String(describing: $0) } ?? []
             let brokenImages = (dict["brokenImages"] as? [Any])?.map { String(describing: $0) } ?? []
 
-            if self.options.fullPage && !secondPass {
+            if self.options.fullPage {
                 let target = min(
                     max(Double(self.options.height), scrollHeight),
                     Double(maxFullPageHeight)
                 )
                 let targetHeight = Int(target.rounded(.up))
-                if targetHeight > self.currentHeight {
-                    self.resize(to: targetHeight)
-                    DispatchQueue.main.asyncAfter(deadline: .now() + fullPageResizeDelay) {
-                        [weak self] in
-                        self?.measure(secondPass: true)
-                    }
+                if targetHeight > self.options.height {
+                    self.captureScrolled(
+                        totalHeight: targetHeight,
+                        scrollWidth: scrollWidth,
+                        scrollHeight: scrollHeight,
+                        errors: errors,
+                        brokenImages: brokenImages,
+                        title: title
+                    )
                     return
                 }
             }
@@ -613,15 +620,160 @@ private final class Renderer: NSObject, WKNavigationDelegate, WKUIDelegate {
         }
     }
 
-    private func resize(to height: Int) {
+    // MARK: Full page
+
+    /// Scrolls through the page so IntersectionObserver and scroll-linked
+    /// reveals fire, returns to the top, then stitches one snapshot per
+    /// viewport. Fixed and sticky elements appear once, in the first tile.
+    private func captureScrolled(totalHeight: Int, scrollWidth: Double, scrollHeight: Double,
+                                 errors: [String], brokenImages: [String], title: String) {
+        let viewport = options.height
+        let reveal = """
+        for (var y = 0; y < total; y += step) {
+          window.scrollTo({ top: y, left: 0, behavior: 'instant' });
+          window.dispatchEvent(new Event('scroll'));
+          await new Promise(function (r) { setTimeout(r, \(Int(revealStepDelay * 1000))); });
+        }
+        window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+        window.dispatchEvent(new Event('scroll'));
+        return true;
+        """
+        webView.callAsyncJavaScript(
+            reveal,
+            arguments: ["total": totalHeight, "step": viewport],
+            in: nil,
+            in: .page
+        ) { [weak self] result in
+            guard let self = self, !self.finished else { return }
+            if case .failure(let error) = result {
+                self.finishFailure("full-page scroll failed: \(error.localizedDescription)")
+                return
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + revealSettleDelay) { [weak self] in
+                guard let self = self else { return }
+                var offsets: [Int] = []
+                var y = 0
+                while y < totalHeight {
+                    offsets.append(min(y, totalHeight - viewport))
+                    y += viewport
+                }
+                self.captureTiles(offsets: offsets, tiles: [], totalHeight: totalHeight) { [weak self] tiles in
+                    guard let self = self else { return }
+                    guard let png = Renderer.stitch(tiles, width: self.options.width, height: totalHeight) else {
+                        self.finishFailure("could not encode PNG")
+                        return
+                    }
+                    self.write(png) {
+                        self.finishSuccess(
+                            width: self.options.width,
+                            height: totalHeight,
+                            scrollWidth: scrollWidth,
+                            scrollHeight: scrollHeight,
+                            errors: errors,
+                            brokenImages: brokenImages,
+                            title: title
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    private func captureTiles(offsets: [Int], tiles: [(Int, NSImage)], totalHeight: Int,
+                              then done: @escaping ([(Int, NSImage)]) -> Void) {
         guard !finished else { return }
-        currentHeight = height
-        let size = NSSize(width: options.width, height: height)
-        window.setContentSize(size)
-        webView.frame = NSRect(origin: .zero, size: size)
-        window.contentView?.layoutSubtreeIfNeeded()
-        webView.layoutSubtreeIfNeeded()
-        logWindowState("after resize to \(height)px")
+        guard let offset = offsets.first else { done(tiles); return }
+        let hideChrome = tiles.isEmpty ? "" : """
+        Array.prototype.forEach.call(document.body ? document.body.getElementsByTagName('*') : [], function (el) {
+          var p = getComputedStyle(el).position;
+          if (p === 'fixed' || p === 'sticky') el.style.setProperty('visibility', 'hidden', 'important');
+        });
+        """
+        let script = """
+        (function () {
+          \(hideChrome)
+          window.scrollTo({ top: \(offset), left: 0, behavior: 'instant' });
+          window.dispatchEvent(new Event('scroll'));
+          return Math.round(window.scrollY);
+        })()
+        """
+        webView.evaluateJavaScript(script) { [weak self] value, error in
+            guard let self = self, !self.finished else { return }
+            if let error = error {
+                self.finishFailure("full-page scroll failed: \(error.localizedDescription)")
+                return
+            }
+            // The document may end before the measured height; place the tile
+            // where the page actually scrolled.
+            let actual = (value as? NSNumber)?.intValue ?? offset
+            DispatchQueue.main.asyncAfter(deadline: .now() + tileDelay) { [weak self] in
+                guard let self = self, !self.finished else { return }
+                let configuration = WKSnapshotConfiguration()
+                configuration.snapshotWidth = NSNumber(value: self.options.width)
+                self.webView.takeSnapshot(with: configuration) { [weak self] image, error in
+                    guard let self = self, !self.finished else { return }
+                    guard let image = image, error == nil, image.size.width > 0 else {
+                        self.finishFailure("snapshot failed: \(error?.localizedDescription ?? "empty image")")
+                        return
+                    }
+                    self.captureTiles(
+                        offsets: Array(offsets.dropFirst()),
+                        tiles: tiles + [(min(actual, totalHeight - self.options.height), image)],
+                        totalHeight: totalHeight,
+                        then: done
+                    )
+                }
+            }
+        }
+    }
+
+    /// Draws viewport tiles at their scroll offsets into one width×height PNG.
+    private static func stitch(_ tiles: [(Int, NSImage)], width: Int, height: Int) -> Data? {
+        guard width > 0, height > 0, let first = tiles.first else { return nil }
+        guard let rep = NSBitmapImageRep(
+            bitmapDataPlanes: nil,
+            pixelsWide: width,
+            pixelsHigh: height,
+            bitsPerSample: 8,
+            samplesPerPixel: 4,
+            hasAlpha: true,
+            isPlanar: false,
+            colorSpaceName: .deviceRGB,
+            bytesPerRow: 0,
+            bitsPerPixel: 0
+        ) else { return nil }
+        rep.size = NSSize(width: width, height: height)
+        guard let context = NSGraphicsContext(bitmapImageRep: rep) else { return nil }
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = context
+        context.imageInterpolation = .high
+        NSColor.white.setFill()
+        NSRect(x: 0, y: 0, width: width, height: height).fill()
+        let tileHeight = first.1.size.height * CGFloat(width) / first.1.size.width
+        for (offset, image) in tiles {
+            // AppKit's origin is bottom-left.
+            let y = CGFloat(height - offset) - tileHeight
+            image.draw(in: NSRect(x: 0, y: y, width: CGFloat(width), height: tileHeight),
+                       from: .zero, operation: .sourceOver, fraction: 1)
+        }
+        context.flushGraphics()
+        NSGraphicsContext.restoreGraphicsState()
+        return rep.representation(using: .png, properties: [:])
+    }
+
+    private func write(_ png: Data, then next: () -> Void) {
+        let outURL = URL(fileURLWithPath: options.outPath)
+        do {
+            try FileManager.default.createDirectory(
+                at: outURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try png.write(to: outURL, options: .atomic)
+        } catch {
+            finishFailure("could not write PNG: \(error.localizedDescription)")
+            return
+        }
+        next()
     }
 
     // MARK: Snapshot
@@ -646,33 +798,22 @@ private final class Renderer: NSObject, WKNavigationDelegate, WKUIDelegate {
             }
 
             let width = self.options.width
-            let height = self.currentHeight
+            let height = self.options.height
             guard let png = Renderer.pngData(from: image, width: width, height: height) else {
                 self.finishFailure("could not encode PNG")
                 return
             }
-
-            let outURL = URL(fileURLWithPath: self.options.outPath)
-            do {
-                try FileManager.default.createDirectory(
-                    at: outURL.deletingLastPathComponent(),
-                    withIntermediateDirectories: true
+            self.write(png) {
+                self.finishSuccess(
+                    width: width,
+                    height: height,
+                    scrollWidth: scrollWidth,
+                    scrollHeight: scrollHeight,
+                    errors: errors,
+                    brokenImages: brokenImages,
+                    title: title
                 )
-                try png.write(to: outURL, options: .atomic)
-            } catch {
-                self.finishFailure("could not write PNG: \(error.localizedDescription)")
-                return
             }
-
-            self.finishSuccess(
-                width: width,
-                height: height,
-                scrollWidth: scrollWidth,
-                scrollHeight: scrollHeight,
-                errors: errors,
-                brokenImages: brokenImages,
-                title: title
-            )
         }
     }
 

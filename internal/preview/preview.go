@@ -65,12 +65,14 @@ func NewHub() *Hub {
 	}
 }
 
-// watcher polls a project directory and reports mutations.
+// watcher polls a project directory and reports mutations. It only polls
+// while a preview client is connected; nobody else consumes its changes.
 type watcher struct {
 	project string
 	dir     string
 	hub     *Hub
 	stop    chan struct{}
+	wake    chan struct{}
 	once    sync.Once
 	last    map[string]fileStamp
 	mu      sync.Mutex
@@ -93,12 +95,12 @@ func (h *Hub) Watch(project, dir string) (stop func()) {
 		dir:     dir,
 		hub:     h,
 		stop:    make(chan struct{}),
+		wake:    make(chan struct{}, 1),
 		last:    map[string]fileStamp{},
 	}
 	h.watchers[project] = w
 	h.mu.Unlock()
 
-	w.scan() // prime the baseline
 	go w.loop()
 	return func() { w.once.Do(func() { close(w.stop) }) }
 }
@@ -118,6 +120,17 @@ func (w *watcher) loop() {
 	ticker := time.NewTicker(250 * time.Millisecond)
 	defer ticker.Stop()
 	for {
+		if !w.hub.hasClients(w.project) {
+			select {
+			case <-w.stop:
+				return
+			case <-w.wake:
+			}
+			// A client that just connected loaded the current files, so
+			// re-baseline without announcing what changed while idle.
+			w.diff()
+			continue
+		}
 		select {
 		case <-w.stop:
 			return
@@ -127,8 +140,15 @@ func (w *watcher) loop() {
 	}
 }
 
-// scan diffs the directory against the last known state.
+// scan diffs the directory against the last known state and broadcasts it.
 func (w *watcher) scan() {
+	if changes := w.diff(); len(changes) > 0 {
+		w.hub.broadcast(w.project, Message{Type: "changed", Project: w.project, Changes: changes})
+	}
+}
+
+// diff walks the directory and returns what changed since the last walk.
+func (w *watcher) diff() []Change {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	seen := map[string]fileStamp{}
@@ -168,12 +188,8 @@ func (w *watcher) scan() {
 		}
 	}
 	w.last = seen
-
-	if len(changes) == 0 {
-		return
-	}
 	sort.Slice(changes, func(i, j int) bool { return changes[i].Path < changes[j].Path })
-	w.hub.broadcast(w.project, Message{Type: "changed", Project: w.project, Changes: changes})
+	return changes
 }
 
 func changeKind(p string) string {
@@ -197,10 +213,17 @@ func stampOf(path string, st fileStamp) string {
 func (h *Hub) NotifyProjectChanged(project string) {
 	h.mu.Lock()
 	w, ok := h.watchers[project]
+	listening := len(h.clients[project]) > 0
 	h.mu.Unlock()
-	if ok {
+	if ok && listening {
 		w.scan()
 	}
+}
+
+func (h *Hub) hasClients(project string) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return len(h.clients[project]) > 0
 }
 
 // AddClient registers a websocket client for a project.
@@ -211,6 +234,12 @@ func (h *Hub) AddClient(project string, c *Client) {
 		h.clients[project] = map[*Client]struct{}{}
 	}
 	h.clients[project][c] = struct{}{}
+	if w := h.watchers[project]; w != nil {
+		select {
+		case w.wake <- struct{}{}:
+		default:
+		}
+	}
 }
 
 // RemoveClient drops a websocket client.

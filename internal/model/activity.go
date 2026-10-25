@@ -74,6 +74,21 @@ type Activity struct {
 	Critiques      []Critique      `json:"critiques,omitempty"`
 }
 
+// Summary drops the transcript, tool log and work products, leaving what a
+// global activity list needs.
+func (a Activity) Summary() Activity {
+	a.Text = ""
+	a.TextBlocks = nil
+	a.MessageText = ""
+	a.Prompt = ""
+	a.Tools = nil
+	a.Request = nil
+	a.Todos = nil
+	a.Renders = nil
+	a.Critiques = nil
+	return a
+}
+
 func NewActivity(r Run, p Project) Activity {
 	return Activity{RunID: r.ID, ProjectID: r.ProjectID, ProjectName: p.Name, ConversationID: r.ConversationID, Status: r.Status, Phase: "starting", Label: "Starting pi", Prompt: r.Prompt, StartedAt: r.StartedAt.UnixMilli(), UpdatedAt: r.StartedAt.UnixMilli(), Tools: []ToolActivity{}}
 }

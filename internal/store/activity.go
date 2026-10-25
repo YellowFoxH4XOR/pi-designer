@@ -49,7 +49,15 @@ func (s *Store) AppendRunEvent(e *model.AgentEvent, a *model.Activity) error {
 	if err != nil {
 		return err
 	}
+	summary, err := json.Marshal(next.Summary())
+	if err != nil {
+		return err
+	}
 	_, err = tx.Exec(`INSERT INTO run_activity(run_id,body) VALUES(?,?) ON CONFLICT(run_id) DO UPDATE SET body=excluded.body`, e.RunID, string(body))
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(`INSERT INTO run_summary(run_id,body) VALUES(?,?) ON CONFLICT(run_id) DO UPDATE SET body=excluded.body`, e.RunID, string(summary))
 	if err != nil {
 		return err
 	}
@@ -61,11 +69,21 @@ func (s *Store) AppendRunEvent(e *model.AgentEvent, a *model.Activity) error {
 }
 
 func (s *Store) RunActivity(id string) (model.Activity, error) {
+	return s.runActivity(`SELECT body FROM run_activity WHERE run_id=?`, id)
+}
+
+// RunActivitySummary loads the compact projection written with each event.
+func (s *Store) RunActivitySummary(id string) (model.Activity, error) {
+	a, err := s.runActivity(`SELECT body FROM run_summary WHERE run_id=?`, id)
+	return a.Summary(), err
+}
+
+func (s *Store) runActivity(query, id string) (model.Activity, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var body string
 	var a model.Activity
-	err := s.db.QueryRow(`SELECT body FROM run_activity WHERE run_id=?`, id).Scan(&body)
+	err := s.db.QueryRow(query, id).Scan(&body)
 	if errors.Is(err, sql.ErrNoRows) {
 		return a, ErrNotFound
 	}
@@ -108,10 +126,11 @@ func (s *Store) RunEvents(id string, after int64, limit int) ([]model.AgentEvent
 
 // LatestRuns returns one latest run per project, plus older running runs if a
 // future implementation permits them. It also finds editor/MCP-created work.
+// Rows are headers for the activity list: prompt and work columns are left empty.
 func (s *Store) LatestRuns() ([]model.Run, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	rows, err := s.db.Query(`SELECT ` + runColumns + ` FROM runs WHERE status='running' OR id IN (SELECT id FROM (SELECT id,started_at,ROW_NUMBER() OVER(PARTITION BY project_id ORDER BY started_at DESC,rowid DESC) n FROM runs) WHERE n=1 ORDER BY started_at DESC LIMIT 100) ORDER BY started_at DESC`)
+	rows, err := s.db.Query(`SELECT ` + runHeaderColumns + ` FROM runs WHERE status='running' OR id IN (SELECT id FROM (SELECT id,started_at,ROW_NUMBER() OVER(PARTITION BY project_id ORDER BY started_at DESC,rowid DESC) n FROM runs) WHERE n=1 ORDER BY started_at DESC LIMIT 100) ORDER BY started_at DESC`)
 	if err != nil {
 		return nil, err
 	}

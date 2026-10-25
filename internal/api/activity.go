@@ -14,11 +14,21 @@ import (
 )
 
 func (s *Server) activityFor(run model.Run) (model.Activity, error) {
+	return s.loadActivity(run, s.Store.RunActivity)
+}
+
+// activitySummaryFor skips the transcript and tool log, which list polling discards.
+func (s *Server) activitySummaryFor(run model.Run) (model.Activity, error) {
+	a, err := s.loadActivity(run, s.Store.RunActivitySummary)
+	return a.Summary(), err
+}
+
+func (s *Server) loadActivity(run model.Run, load func(string) (model.Activity, error)) (model.Activity, error) {
 	p, err := s.Store.GetProject(run.ProjectID)
 	if err != nil {
 		return model.Activity{}, err
 	}
-	a, err := s.Store.RunActivity(run.ID)
+	a, err := load(run.ID)
 	if err != nil {
 		a = model.NewActivity(run, p)
 		a.Todos = run.Todos
@@ -70,14 +80,14 @@ func (s *Server) handleActivity(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				continue
 			}
-			a, err := s.activityFor(run)
+			a, err := s.activitySummaryFor(run)
 			if err != nil {
 				continue
 			}
 			if event.Type == "attention" && !a.Attention {
 				continue
 			}
-			outcomes = append(outcomes, activitySummary(a))
+			outcomes = append(outcomes, a)
 		}
 	}
 	runs, err := s.Store.LatestRuns()
@@ -87,25 +97,18 @@ func (s *Server) handleActivity(w http.ResponseWriter, r *http.Request) {
 	}
 	out := []model.Activity{}
 	for _, run := range runs {
-		a, err := s.activityFor(run)
+		a, err := s.activitySummaryFor(run)
 		if err != nil {
 			continue
 		}
-		out = append(out, activitySummary(a))
+		out = append(out, a)
 	}
-	writeJSON(w, 200, map[string]any{"activities": out, "outcomes": outcomes, "cursor": cursor})
-}
-func activitySummary(a model.Activity) model.Activity {
-	a.Text = ""
-	a.TextBlocks = nil
-	a.MessageText = ""
-	a.Prompt = ""
-	a.Tools = nil
-	a.Request = nil
-	a.Todos = nil
-	a.Renders = nil
-	a.Critiques = nil
-	return a
+	projects, err := s.Store.ProjectsStamp()
+	if err != nil {
+		writeErr(w, 500, "Could not load activity")
+		return
+	}
+	writeJSON(w, 200, map[string]any{"activities": out, "outcomes": outcomes, "cursor": cursor, "projects": projects})
 }
 
 func (s *Server) handleRunActivity(w http.ResponseWriter, r *http.Request) {
@@ -187,13 +190,17 @@ func (s *Server) handleRunEvents(w http.ResponseWriter, r *http.Request) {
 		if len(events) == 500 {
 			continue
 		}
-		run, err := s.Store.GetRun(id)
+		status, err := s.Store.RunStatus(id)
 		if err != nil {
 			return
 		}
-		if run.Status != "running" {
+		if status != "running" {
 			// Terminal state is saved before the final event. Send a final authoritative
 			// snapshot so even a crash in that tiny gap cannot strand the subscriber.
+			run, err := s.Store.GetRun(id)
+			if err != nil {
+				return
+			}
 			a, err := s.activityFor(run)
 			if err == nil {
 				payload, _ := json.Marshal(a)
