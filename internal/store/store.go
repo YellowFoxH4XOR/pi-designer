@@ -96,6 +96,13 @@ func (s *Store) migrate() error {
 		`CREATE INDEX IF NOT EXISTS idx_conv_project ON conversations(project_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_msg_conv ON messages(conversation_id, created_at)`,
 		`CREATE INDEX IF NOT EXISTS idx_run_project ON runs(project_id, started_at)`,
+		// A durable, constant-time invalidation token. Timestamps can collide
+		// within one millisecond, and count/sum fingerprints can be reused.
+		`CREATE TABLE IF NOT EXISTS project_revision (id INTEGER PRIMARY KEY CHECK(id=1), version INTEGER NOT NULL)`,
+		`INSERT OR IGNORE INTO project_revision(id,version) VALUES(1,0)`,
+		`CREATE TRIGGER IF NOT EXISTS projects_revision_insert AFTER INSERT ON projects BEGIN UPDATE project_revision SET version=version+1 WHERE id=1; END`,
+		`CREATE TRIGGER IF NOT EXISTS projects_revision_update AFTER UPDATE ON projects BEGIN UPDATE project_revision SET version=version+1 WHERE id=1; END`,
+		`CREATE TRIGGER IF NOT EXISTS projects_revision_delete AFTER DELETE ON projects BEGIN UPDATE project_revision SET version=version+1 WHERE id=1; END`,
 	}
 	for _, q := range stmts {
 		if _, err := s.db.Exec(q); err != nil {
@@ -110,7 +117,7 @@ func (s *Store) migrate() error {
 	}
 	// A compact copy of the projection in its own table, so activity polling
 	// neither decodes whole transcripts nor walks their overflow pages.
-	if _, err := s.db.Exec(`INSERT OR IGNORE INTO run_summary(run_id,body) SELECT run_id,json_remove(body,'$.text','$.textBlocks','$.messageText','$.prompt','$.tools','$.request','$.todos','$.renders','$.critiques') FROM run_activity WHERE json_valid(body)`); err != nil {
+	if _, err := s.db.Exec(`INSERT OR IGNORE INTO run_summary(run_id,body) SELECT run_id,json_remove(body,'$.text','$.textBlocks','$.messageText','$.prompt','$.tools','$.request','$.todos','$.renders','$.critiques') FROM run_activity WHERE NOT EXISTS (SELECT 1 FROM run_summary WHERE run_summary.run_id=run_activity.run_id) AND json_valid(body)`); err != nil {
 		return fmt.Errorf("migrate: %w", err)
 	}
 	// web-artifacts-builder is a catalogue stub without a workflow; the
@@ -257,13 +264,13 @@ func (s *Store) ListProjects() ([]model.Project, error) {
 	return out, rows.Err()
 }
 
-// ProjectsStamp changes whenever a project is created, updated or deleted, so
-// clients can poll it instead of the project list.
+// ProjectsStamp returns a durable revision incremented by SQLite triggers on
+// every project mutation, so polling costs O(1) and never depends on timestamps.
 func (s *Store) ProjectsStamp() (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var stamp string
-	err := s.db.QueryRow(`SELECT count(*)||':'||COALESCE(sum(updated_at),0) FROM projects`).Scan(&stamp)
+	err := s.db.QueryRow(`SELECT version FROM project_revision WHERE id=1`).Scan(&stamp)
 	return stamp, err
 }
 

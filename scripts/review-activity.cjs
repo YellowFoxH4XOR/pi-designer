@@ -37,6 +37,24 @@ const assert = require('node:assert/strict');
   await page.screenshot({path:path.join(out,'activity-model-picker.png')});
   await page.locator('[data-model-ref="opencode-go/deepseek-fixture"]').click();await page.getByRole('dialog').waitFor({state:'detached'});
   pass('pi brand and real model/provider icon mapping');
+  // MCP uses the same API: discovery must work even before a run exists.
+  const external=await api('/api/projects',{name:'External project discovery',skillId:'web-prototype'});
+  const externalLink=page.locator('.sidebar-recents a').filter({hasText:'External project discovery'});
+  await externalLink.waitFor({timeout:8000});
+  let failedProjectList=false;
+  await page.route('**/api/projects',async route=>{
+    if(route.request().method()==='GET'&&!failedProjectList){failedProjectList=true;await route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:'Temporary project-list failure'})});return;}
+    await route.continue();
+  });
+  let response=await fetch(`${base}/api/projects/${external.project.id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'Externally renamed project'})});
+  assert.ok(response.ok,`external rename: ${response.status}`);
+  await page.locator('.sidebar-recents a').filter({hasText:'Externally renamed project'}).waitFor({timeout:8000});
+  assert.ok(failedProjectList,'project-list failure must be exercised before recovery');
+  await page.unroute('**/api/projects');
+  response=await fetch(`${base}/api/projects/${external.project.id}`,{method:'DELETE'});
+  assert.ok(response.ok,`external delete: ${response.status}`);
+  await page.locator('.sidebar-recents a').filter({hasText:'Externally renamed project'}).waitFor({state:'detached',timeout:8000});
+  pass('External project creation, rename and deletion appear without a run or reload, including retry after a failed list request');
   await page.getByLabel('Describe your design').fill('LONG_TASK Build an observable design fixture');
   await page.getByRole('button',{name:'Create prototype'}).click();await page.getByRole('button',{name:'Rename project'}).waitFor();
   const projectId=new URL(page.url()).hash.slice('#project/'.length);

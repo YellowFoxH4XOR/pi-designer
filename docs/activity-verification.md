@@ -55,6 +55,14 @@ Native OS notification authorization/banner delivery and the actual Quit confirm
 - Full-page renders scroll the page at the frame height and stitch one snapshot per viewport, hiding fixed and sticky chrome after the first tile. 100vh sections keep their size and scroll-triggered reveals fire. On the Ironline Freight project the previous renderer produced a 5,799 px capture that was black apart from the preloader; the new one shows every section. The independent jury now also sees a full-page capture of `pdSeek` pages after the intro.
 - Passed `go test -race ./...`, `go vet ./...`, nine frontend tests, TypeScript, the production UI build, 24 script-safety tests, all 13 activity/browser/native-WebKit review checks, all nine native app review checks and `codesign --verify --deep --strict` on an isolated build. No installed app or user data was changed; benchmarks used a copy of the database.
 
+## Optimisation follow-up review
+
+- Replaced the project count/timestamp fingerprint with a durable SQLite revision, incremented transactionally by insert/update/delete triggers. Reading it is constant-time, and same-millisecond edits or a create/delete pair between polls cannot reuse a stamp. Store regressions cover unchanged timestamps, touch, rollback and daemon reopen.
+- Project discovery refreshes on its first snapshot, acknowledges a revision only after a successful list fetch, and retries transient failures without waiting for another mutation. Project-list requests share a generation guard so late initial/refresh responses cannot overwrite a newer response or local creation.
+- Summary backfill excludes rows already present in `run_summary` before validating/decoding their full activity JSON on subsequent starts.
+- Passed `go test -race ./...`, `go vet ./...`, all 12 frontend tests, TypeScript, the production UI build and all 24 script-safety tests. The discovery hook tests exercise first-snapshot refresh, failed-fetch retry, hidden-window polling and listener/timer cleanup.
+- All 14 isolated browser/native-WebKit review checks passed, including a new permanent no-run external project create/rename/delete regression with an injected HTTP 503 on the list request. The isolated Mac bundle rebuilt and passed signing verification and all eight native lifecycle checks. The installed app and its data were not replaced or restarted; no inference was used.
+
 ## Manual checks / known limits
 
 - Enable notifications in Settings, then check the macOS authorization prompt, real banner delivery and notification-click restoration. Automation deliberately did not grant permission. Permission denial does not disable in-app/menu-bar/notch activity.

@@ -40,7 +40,7 @@ export function useRoute() {
 // Discover work globally, including runs started by an editor/MCP. Each stream
 // starts after an authoritative snapshot and resumes using a durable cursor.
 // onProjects fires when the project list changed elsewhere (MCP, another window).
-export function useRuns(onFinished: () => void, onProjects: () => void) {
+export function useRuns(onFinished: () => void, onProjects: () => void | Promise<void>) {
   const [runs, setRuns] = useState<Record<string, RunState>>({});
   const [activityError, setActivityError] = useState('');
   const state = useRef(runs); state.current = runs;
@@ -83,7 +83,7 @@ export function useRuns(onFinished: () => void, onProjects: () => void) {
     finally { loading.current.delete(run.id); }
   }
   useEffect(() => {
-    mounted.current = true; let pending = false; let projects = '';
+    mounted.current = true; let pending = false; let projects: string | undefined;
     async function sync() {
       // A hidden window resumes from an authoritative snapshot when shown.
       if (pending || document.visibilityState === 'hidden') return; pending = true;
@@ -91,7 +91,12 @@ export function useRuns(onFinished: () => void, onProjects: () => void) {
         const { activities, projects: stamp } = await api.activity();
         if (!mounted.current) return;
         setActivityError('');
-        if (projects && stamp !== projects) projectsChanged.current();
+        // Refresh on the first snapshot too: the initial project-list request
+        // may have finished before an external creation during page load.
+        // Do not acknowledge a revision until the list loaded successfully;
+        // a transient request failure must be retried on the next poll.
+        if (stamp !== projects) await projectsChanged.current();
+        if (!mounted.current) return;
         projects = stamp;
         for (const a of activities) {
           const current = state.current[a.projectId];

@@ -53,11 +53,12 @@ func TestRunActivitySummaryTracksProjectionWithoutTranscript(t *testing.T) {
 }
 
 func TestProjectsStampChangesWithProjectList(t *testing.T) {
-	st, err := Open(filepath.Join(t.TempDir(), "test.db"))
+	path := filepath.Join(t.TempDir(), "test.db")
+	st, err := Open(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer st.Close()
+	t.Cleanup(func() { st.Close() })
 	// Clients compare each poll with the previous one.
 	previous := ""
 	record := func(step string) {
@@ -77,13 +78,51 @@ func TestProjectsStampChangesWithProjectList(t *testing.T) {
 		t.Fatal(err)
 	}
 	record("create")
-	p.Name = "Renamed"
-	if err = st.UpdateProject(p); err != nil {
+	// Multiple writes can share a timestamp; each must invalidate the list.
+	for _, name := range []string{"Renamed", "Renamed again"} {
+		if _, err = st.db.Exec(`UPDATE projects SET name=? WHERE id=?`, name, p.ID); err != nil {
+			t.Fatal(err)
+		}
+		record("rename without timestamp change")
+	}
+	if err = st.TouchProject(p.ID); err != nil {
 		t.Fatal(err)
 	}
-	record("rename")
+	record("touch")
 	if err = st.DeleteProject(p.ID); err != nil {
 		t.Fatal(err)
 	}
 	record("delete")
+	// Delete + recreate between polls must not recreate an earlier stamp.
+	if err = st.CreateProject(p); err != nil {
+		t.Fatal(err)
+	}
+	if err = st.DeleteProject(p.ID); err != nil {
+		t.Fatal(err)
+	}
+	record("create and delete between polls")
+	// Triggers participate in the transaction: failed mutations cannot leave
+	// a revision change, and normal daemon restarts cannot reset the token.
+	tx, err := st.db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = tx.Exec(`INSERT INTO projects(id,name,slug,dir,created_at,updated_at) VALUES('rolled-back','X','x','x',1,1)`); err != nil {
+		tx.Rollback()
+		t.Fatal(err)
+	}
+	if err = tx.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+	if err = st.Close(); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st = reopened
+	if stamp, err := st.ProjectsStamp(); err != nil || stamp != previous {
+		t.Fatalf("revision changed after rollback/reopen: %q, %v; want %q", stamp, err, previous)
+	}
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'preact/hooks';
+import { useCallback, useEffect, useRef, useState } from 'preact/hooks';
 import { api, type DesignSystem, type Health, type Project, type Skill } from './api';
 import { Home } from './pages/Home';
 import { Projects, DesignSystems, Skills } from './pages/Library';
@@ -34,18 +34,24 @@ export function App() {
   const [connectionError, setConnectionError] = useState('');
   const [error, setError] = useState('');
   const report = useCallback((e: string) => setError(e.replace(/^Error: /, '')), []);
-  const refreshProjects = useCallback(() => { api.projects().then((d) => setProjects(d.projects)).catch((e) => report(e.message)); }, [report]);
-  const { runs, monitor, forget, activityError } = useRuns(refreshProjects, refreshProjects);
+  const projectLoad = useRef(0);
+  const loadProjects = useCallback(async () => {
+    const generation = ++projectLoad.current;
+    const { projects } = await api.projects();
+    if (generation === projectLoad.current) setProjects(projects);
+  }, []);
+  const refreshProjects = useCallback(() => { void loadProjects().catch((e) => report(e.message)); }, [loadProjects, report]);
+  const { runs, monitor, forget, activityError } = useRuns(refreshProjects, loadProjects);
   const projectId = route.startsWith('project/') ? route.slice('project/'.length).split('?')[0] : '';
 
   useEffect(() => {
     let active = true;
-    Promise.all([api.projects(), api.systems(), api.skills(), api.health()]).then(([p, s, k, h]) => {
+    Promise.all([loadProjects(), api.systems(), api.skills(), api.health()]).then(([, s, k, h]) => {
       if (!active) return;
-      setProjects(p.projects); setSystems(s.designSystems); setSkills(k.skills); setHealth(h);
+      setSystems(s.designSystems); setSkills(k.skills); setHealth(h);
     }).catch((e) => { if (active) setConnectionError(e.message); }).finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
-  }, []);
+    return () => { active = false; projectLoad.current++; };
+  }, [loadProjects]);
   useEffect(() => { setError(''); }, [route]);
   useEffect(() => {
     // Serialize selection updates so rapid navigation cannot leave the
@@ -71,6 +77,7 @@ export function App() {
     try {
       const name = prompt.replace(/^(build|create|design)\s+(an?\s+)?/i, '').split(/[.!?\n]/)[0].trim().slice(0, 56) || 'Untitled prototype';
       const { project, conversationId } = await api.createProject({ name: name.charAt(0).toUpperCase() + name.slice(1), designSystemId: systemId, skillId });
+      projectLoad.current++; // Earlier list responses must not hide this creation.
       setProjects((all) => [project, ...all]);
       navigate(`project/${project.id}`);
       try { await startRun(project, conversationId, prompt, frame); }
