@@ -58,7 +58,7 @@ const json = (body: unknown, method = 'POST') => ({ method, body: JSON.stringify
 const projectPath = (id: string) => `/api/projects/${encodeURIComponent(id)}`;
 export const api = {
   health: (recheck = false) => req<Health>(`/api/health${recheck ? '?recheck=1' : ''}`),
-  activity: () => req<{ activities: Activity[] }>('/api/activity'),
+  activity: () => req<{ activities: Activity[]; projects: string }>('/api/activity'),
   runLog: (id: string, after = 0) => req<{ events: AgentEvent[] }>(`/api/runs/${encodeURIComponent(id)}/log?after=${after}`),
   runActivity: (id: string) => req<{ activity: Activity }>(`/api/runs/${encodeURIComponent(id)}/activity`),
   respondUI: (id: string, body: { id: string; value?: string; confirmed?: boolean; cancelled?: boolean }) => req(`/api/runs/${encodeURIComponent(id)}/ui-response`, json(body)),

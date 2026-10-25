@@ -328,14 +328,6 @@ func (c *Catalog) Templates() []Template {
 	return append([]Template(nil), c.templates...)
 }
 
-// Template looks one up by id.
-func (c *Catalog) Template(id string) (Template, bool) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	t, ok := c.templatesByK[id]
-	return t, ok
-}
-
 // ParseSkillFrontmatter reads the YAML header of a SKILL.md file.
 func ParseSkillFrontmatter(path string) (SkillFrontmatter, error) {
 	var fm SkillFrontmatter

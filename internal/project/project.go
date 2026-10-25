@@ -29,9 +29,6 @@ func New(root string) *Manager { return &Manager{root: root} }
 // Root returns the project directory.
 func (m *Manager) Root() string { return m.root }
 
-// EnsureDir creates the project directory.
-func (m *Manager) EnsureDir() error { return os.MkdirAll(m.root, 0o755) }
-
 // Resolve turns a client-supplied relative path into an absolute path inside
 // the project, or an error if it would escape.
 func (m *Manager) Resolve(rel string) (string, error) {
@@ -79,15 +76,6 @@ func rootedPath(rel string) (string, error) {
 // beneath it, including when following links below the root.
 func (m *Manager) openRoot() (*os.Root, error) {
 	return os.OpenRoot(m.root)
-}
-
-// Rel converts an absolute path back to a project-relative slash path.
-func (m *Manager) Rel(abs string) string {
-	rel, err := filepath.Rel(m.root, abs)
-	if err != nil {
-		return abs
-	}
-	return filepath.ToSlash(rel)
 }
 
 // List walks the project tree and returns file metadata.

@@ -150,8 +150,10 @@ async function juryReview(cwd: string, model: { provider?: string; id?: string }
 	try { html = await readFile(entry, "utf8"); } catch { return "index.html does not exist yet"; }
 	const brief = await readFile(briefFile, "utf8");
 	await mkdir(renderDir, { recursive: true });
+	// Motion pages are judged at intro beats and, once the intro has played,
+	// across the whole page: a site is more than its first screen.
 	const shots = html.includes("pdSeek")
-		? [1500, 5000, 9000, 14000].map((at) => ["--width", "390", "--height", "844", "--at", String(at)])
+		? [["--width", "1440", "--height", "900", "--at", "1500"], ["--width", "1440", "--height", "900", "--at", "5000"], ["--width", "1440", "--height", "900", "--at", "9000", "--full-page"], ["--width", "390", "--height", "844", "--at", "9000"]]
 		: [["--width", "1440", "--height", "900", "--wait", "1500"], ["--width", "1440", "--height", "900", "--wait", "1500", "--full-page"], ["--width", "390", "--height", "844", "--wait", "1500"]];
 	const files: string[] = [];
 	for (const [i, extra] of shots.entries()) {

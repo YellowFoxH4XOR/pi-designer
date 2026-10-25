@@ -191,3 +191,53 @@ func TestServeWSChecksOrigin(t *testing.T) {
 		t.Fatalf("WebSocket hello = %q", message)
 	}
 }
+
+func TestWatcherPollsOnlyWhileAClientListens(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name, body string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("index.html", "<p>one</p>")
+	hub := NewHub()
+	stop := hub.Watch("demo", dir)
+	defer stop()
+
+	time.Sleep(600 * time.Millisecond)
+	hub.mu.Lock()
+	w := hub.watchers["demo"]
+	hub.mu.Unlock()
+	w.mu.Lock()
+	walked := len(w.last)
+	w.mu.Unlock()
+	if walked != 0 {
+		t.Fatalf("watcher walked %d files with no preview client", walked)
+	}
+	write("index.html", "<p>edited while idle</p>")
+
+	server := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		hub.ServeWS(rw, r, "demo")
+	}))
+	defer server.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	conn, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(server.URL, "http"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close(websocket.StatusNormalClosure, "")
+	if _, _, err = conn.Read(ctx); err != nil {
+		t.Fatalf("reading hello: %v", err)
+	}
+	time.Sleep(100 * time.Millisecond)
+	write("style.css", "p{color:red}")
+	_, message, err := conn.Read(ctx)
+	if err != nil {
+		t.Fatalf("reading change: %v", err)
+	}
+	if !strings.Contains(string(message), `"style.css"`) || strings.Contains(string(message), "index.html") {
+		t.Fatalf("change message = %s; want only style.css", message)
+	}
+}

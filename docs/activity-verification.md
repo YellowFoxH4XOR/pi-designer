@@ -46,6 +46,15 @@ The combined todo/activity view was also exercised with a live 60-step plan at 9
 
 Native OS notification authorization/banner delivery and the actual Quit confirmation dialog were not automated in this pass. Pending notification retries are intentionally in-memory and do not survive app exit. All temporary browser tabs, fixture daemons and build workspaces were removed after verification; no installed app or user data was changed.
 
+## Runtime optimisation verification — 2026-10-25
+
+- `/api/activity`, which the UI and native shell both poll, now reads a compact per-run summary from its own `run_summary` table (written with each journal commit and backfilled from `run_activity` on open) and run headers without prompt or work JSON. Against a copy of real data cloned to 41 projects with 182 KB projections, the handler fell from 48.7 ms to about 8.5 ms in process (104 ms per HTTP request before). The response was byte-identical before and after on the same data.
+- The UI polls activity only while its window is visible and resyncs on return. Projects created or changed outside the window (MCP, another editor) appear through a project stamp in the activity response; an isolated daemon showed an API-created project in the sidebar after 1.45 s without a reload or a separate project-list poll.
+- Preview watchers walk a project only while a preview client is connected and re-baseline silently on connect; previously every project was walked every 250 ms for the daemon's lifetime. A regression test covers idle, connect and change delivery.
+- Run event streams check completion with a status-only query instead of loading the whole run row every 250 ms.
+- Full-page renders scroll the page at the frame height and stitch one snapshot per viewport, hiding fixed and sticky chrome after the first tile. 100vh sections keep their size and scroll-triggered reveals fire. On the Ironline Freight project the previous renderer produced a 5,799 px capture that was black apart from the preloader; the new one shows every section. The independent jury now also sees a full-page capture of `pdSeek` pages after the intro.
+- Passed `go test -race ./...`, `go vet ./...`, nine frontend tests, TypeScript, the production UI build, 24 script-safety tests, all 13 activity/browser/native-WebKit review checks, all nine native app review checks and `codesign --verify --deep --strict` on an isolated build. No installed app or user data was changed; benchmarks used a copy of the database.
+
 ## Manual checks / known limits
 
 - Enable notifications in Settings, then check the macOS authorization prompt, real banner delivery and notification-click restoration. Automation deliberately did not grant permission. Permission denial does not disable in-app/menu-bar/notch activity.

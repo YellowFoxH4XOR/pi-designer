@@ -35,7 +35,7 @@ export function App() {
   const [error, setError] = useState('');
   const report = useCallback((e: string) => setError(e.replace(/^Error: /, '')), []);
   const refreshProjects = useCallback(() => { api.projects().then((d) => setProjects(d.projects)).catch((e) => report(e.message)); }, [report]);
-  const { runs, monitor, forget, activityError } = useRuns(refreshProjects);
+  const { runs, monitor, forget, activityError } = useRuns(refreshProjects, refreshProjects);
   const projectId = route.startsWith('project/') ? route.slice('project/'.length).split('?')[0] : '';
 
   useEffect(() => {

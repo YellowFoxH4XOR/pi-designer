@@ -18,10 +18,6 @@ export const skillNames: Record<string, string> = {
   'simple-deck': 'Slide deck', 'emilkowalski-motion': 'Interaction motion', 'web-design-guidelines': 'Interface review',
 };
 export interface Preferences { model: string; thinking: string }
-export function loadPreferences(): Preferences {
-  try { const p = JSON.parse(localStorage.getItem('pidesigner.preferences') || '{}'); return { model: p.model || '', thinking: p.thinking || 'medium' }; }
-  catch { return { model: '', thinking: 'medium' }; }
-}
 export function useRoute() {
   const [route, setRoute] = useState(location.hash.slice(1) || 'home');
   useEffect(() => {
@@ -43,7 +39,8 @@ export function useRoute() {
 }
 // Discover work globally, including runs started by an editor/MCP. Each stream
 // starts after an authoritative snapshot and resumes using a durable cursor.
-export function useRuns(onFinished: () => void) {
+// onProjects fires when the project list changed elsewhere (MCP, another window).
+export function useRuns(onFinished: () => void, onProjects: () => void) {
   const [runs, setRuns] = useState<Record<string, RunState>>({});
   const [activityError, setActivityError] = useState('');
   const state = useRef(runs); state.current = runs;
@@ -51,6 +48,7 @@ export function useRuns(onFinished: () => void) {
   const loading = useRef(new Set<string>());
   const mounted = useRef(true);
   const finished = useRef(onFinished); finished.current = onFinished;
+  const projectsChanged = useRef(onProjects); projectsChanged.current = onProjects;
 
   async function monitor(run: Pick<Run, 'id'> & Partial<Run>) {
     if (subscriptions.current.has(run.id) || loading.current.has(run.id)) return;
@@ -85,13 +83,16 @@ export function useRuns(onFinished: () => void) {
     finally { loading.current.delete(run.id); }
   }
   useEffect(() => {
-    mounted.current = true; let pending = false;
+    mounted.current = true; let pending = false; let projects = '';
     async function sync() {
-      if (pending) return; pending = true;
+      // A hidden window resumes from an authoritative snapshot when shown.
+      if (pending || document.visibilityState === 'hidden') return; pending = true;
       try {
-        const { activities } = await api.activity();
+        const { activities, projects: stamp } = await api.activity();
         if (!mounted.current) return;
         setActivityError('');
+        if (projects && stamp !== projects) projectsChanged.current();
+        projects = stamp;
         for (const a of activities) {
           const current = state.current[a.projectId];
           if (!current || current.id !== a.runId || current.status !== a.status || current.attention !== a.attention || !subscriptions.current.has(a.runId) && current.seq !== a.seq) {
@@ -106,7 +107,8 @@ export function useRuns(onFinished: () => void) {
       finally { pending = false; }
     }
     void sync(); const timer = window.setInterval(sync, 1500);
-    return () => { mounted.current = false; clearInterval(timer); subscriptions.current.forEach(stop => stop()); subscriptions.current.clear(); };
+    document.addEventListener('visibilitychange', sync);
+    return () => { mounted.current = false; clearInterval(timer); document.removeEventListener('visibilitychange', sync); subscriptions.current.forEach(stop => stop()); subscriptions.current.clear(); };
   }, []);
   // A deleted project's activity is gone server-side; drop it locally too.
   function forget(projectId: string) {
