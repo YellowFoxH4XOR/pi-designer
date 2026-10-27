@@ -8,6 +8,7 @@ let testUpdates = AppUpdateController(enabled: false)
 check(testUpdates.state["configured"] as? Bool == false, "Test sessions cannot start update checks")
 check(testUpdates.state["canCheck"] as? Bool == false, "Unconfigured updater does not enable installation")
 check(!testUpdates.validateMenuItem(NSMenuItem()), "Update menu is disabled without a configured updater")
+check(testUpdates.state["releaseURL"] as? String == "https://github.com/YellowFoxH4XOR/pi-designer/releases/latest", "Manual downloads use the public release page")
 let json = """
 {"runId":"r","projectId":"p","projectName":"Test","conversationId":"c","status":"succeeded","phase":"attention","label":"Needs your answer","startedAt":1000,"endedAt":5000,"attention":true,"attentionSeq":12}
 """

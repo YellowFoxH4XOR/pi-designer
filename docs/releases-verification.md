@@ -1,32 +1,31 @@
-# Release/update implementation verification
+# Free unnotarized release verification
 
-## Implemented surfaces
+## Current policy
 
-- `mac/Sources/AppUpdates.swift`: Sparkle's standard signed updater, native state/preferences and menu validation. Test/capture sessions and unconfigured local builds cannot check/install updates.
-- `ui/src/components/AppUpdates.tsx`: Settings status/version, check/progress action, automatic-check and automatic-download/install-on-quit controls, timeout/unavailable state. Reuses existing accessible settings tokens/components.
-- `mac/Sources/main.swift`: native menu and top-level, same-origin bridge, additionally restricted to the workspace document path. Existing asynchronous unsaved-edit/active-run quit guards are retained.
-- `scripts/build-mac.sh`, `sign-mac.sh`, `package-mac.sh`: matched arm64 binaries, pinned Sparkle framework, inside-out signing, app/DMG notarization and stapling, signed appcast and independent Ed25519 verification.
-- `.github/workflows/checks.yml` and `release.yml`: PR checks/development DMG smoke packaging, and stable-tag releases gated on public distribution and signing credentials.
+User-requested distribution is **free and unnotarized only**. The publisher no longer imports Developer ID certificates, requests Apple credentials, calls notarization/stapling tools or requires a release environment. Ad-hoc signing remains for Apple silicon code integrity; it is not an Apple-verified developer identity.
 
-## Completed locally (Linux)
+With no Sparkle keys configured, publishing produces a DMG and checksum, omits the update feed, and leaves automatic installation disabled. Settings provides a real **Download latest release** link instead of a disabled automatic-update action. A complete optional Sparkle keypair can enable cryptographically verified updates independently of Apple notarization; partial configuration still fails closed.
+
+## Local checks
 
 - `go test -race ./...` and `go vet ./...`: passed.
-- UI tests: 16 passed, including native-only controls, authoritative saved state, busy/unconfigured states, timeout and listener cleanup. TypeScript checking and production Vite build passed.
+- UI tests: 16 passed, including manual release-link fallback, authoritative saved preferences, unavailable/busy states and timeout cleanup. TypeScript checking and production Vite build passed.
 - Script tests: 29 passed.
-- Python release metadata tests: 5 passed, covering version/feed/key validation, no plist writes on invalid input, missing release feed/key configuration, local-build defaults, public-repository routing and monotonic version checks.
-- Shell syntax checking, `git diff --check`, and actionlint 1.7.12: passed.
-- Sparkle 2.10.1 distribution SHA-256 was verified against the pinned upstream release-asset digest.
+- Python metadata tests: 6 passed, including a release build with no Apple credentials or update keys, release-link routing, opt-in signing requirements, version/feed/key validation and monotonic release versions.
+- Shell syntax checks, `git diff --check` and actionlint 1.7.12: passed.
 
-## Blocked native verification
+## macOS CI and publication
 
-PR: https://github.com/YellowFoxH4XOR/pi-designer/pull/13
+The initial Sparkle implementation was merged in PR #13. Its first CI attempts were blocked while the source repository was private. After the owner authorized public visibility, both native and Linux checks passed:
+- https://github.com/YellowFoxH4XOR/pi-designer/actions/runs/40586045947
+- https://github.com/YellowFoxH4XOR/pi-designer/actions/runs/40586539498
 
-The first CI run (https://github.com/YellowFoxH4XOR/pi-designer/actions/runs/40585735571) did **not start either job**. GitHub reported: "recent account payments have failed or your spending limit needs to be increased." This is a runner/billing block, not a passing build and not a compiler/test result. Re-run Checks after resolving the account restriction.
+Those runs compiled/signed the app, ran native and cryptographic signature tests, and built a development DMG. They did not publish a release.
 
-The macOS job is configured to compile/sign the actual app, run native model/updater tests, accept correctly signed archives while rejecting wrong keys/tampering with the real CryptoKit verifier, and create/verify a development DMG. None of those native results are claimed yet. No downloadable release DMG has been published.
+For the free-release follow-up, `checks.yml` now exercises the actual `PIDESIGNER_RELEASE_BUILD=1` packaging path without any Apple credentials or Sparkle keys and asserts there is no unsigned `appcast.xml`. The native test checks the public manual-download destination. PR CI must pass before merging and tagging the first public release; the tag workflow repeats tests and verifies the DMG before publication.
 
-## Release prerequisites and remaining manual coverage
+## Coverage limits
 
-The source repository remains private, and no production signing secrets or release-destination variables were configured by this change. Follow `releases.md` to choose a public binary repository (or explicitly make the source public), configure an approval-protected release environment, Apple Developer ID/notarization credentials and a persistent Sparkle keypair. Workflow-upload permission was granted separately; no token was embedded in app files or committed.
+CI verifies build, code integrity, packaging and signature rejection—not a human macOS installation or Gatekeeper override. A full keyboard/VoiceOver/visual settings pass, physical-Mac first launch and actual older-to-newer Sparkle installation remain manual checks. Automatic updates are not enabled in the initial keyless release, so no claim of a working production auto-update path is made. Existing keyless builds need a manual DMG replacement before they can trust a future update key.
 
-Before public release, complete an actual notarized older-to-newer installation on a Mac. Verify cancellation, download/verification errors, readonly DMG vs Applications, persisted opt-outs, automatic install-on-quit, unsaved-source and active-run termination protection, and preservation of local project/session state. A full keyboard/VoiceOver/visual settings pass remains outstanding. Old app versions without this updater need the first new DMG installed manually.
+The repository is now public. No billing plan or spending budget was changed. No private key or GitHub token is embedded in the app or committed.

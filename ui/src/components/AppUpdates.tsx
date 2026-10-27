@@ -8,6 +8,7 @@ type UpdateSettings = {
   automaticChecks: boolean;
   automaticDownloads: boolean;
   message: string;
+  releaseURL: string;
 };
 
 function send(action: string, preferences?: Partial<UpdateSettings>) {
@@ -34,17 +35,21 @@ export function AppUpdates() {
     };
   }, [native]);
   return <section class="settings-section" aria-labelledby="app-updates-heading">
-    <div class="settings-section-heading"><h2 id="app-updates-heading">App updates</h2><p>Keep πDesigner up to date with signed releases from GitHub.</p></div>
+    <div class="settings-section-heading"><h2 id="app-updates-heading">App updates</h2><p>Download new versions of πDesigner from GitHub Releases.</p></div>
     {!native ? <p class="settings-note">App updates are available in the πDesigner Mac app.</p>
       : failure ? <p class="inline-error" role="alert">{failure}</p>
       : !settings ? <p class="loading-state" role="status">Reading app update settings…</p>
       : <div class="native-preferences">
         <p>Installed version <code>{settings.version}</code></p>
         <p class="native-permission" role="status">{settings.message}</p>
-        <div><button class="button secondary" disabled={!settings.canCheck} onClick={() => send('checkForUpdates')}>{settings.busy ? 'Show update progress…' : 'Check for updates…'}</button></div>
+        <div>{settings.configured
+          ? <button class="button secondary" disabled={!settings.canCheck} onClick={() => send('checkForUpdates')}>{settings.busy ? 'Show update progress…' : 'Check for updates…'}</button>
+          : <a class="button secondary" href={settings.releaseURL}>Download latest release</a>}</div>
         <label><input type="checkbox" checked={settings.automaticChecks} disabled={!settings.configured} onChange={e => send('updateUpdateSettings', { automaticChecks: e.currentTarget.checked })}/>Automatically check for new releases</label>
         <label><input type="checkbox" checked={settings.automaticDownloads} disabled={!settings.configured || !settings.automaticChecks} onChange={e => send('updateUpdateSettings', { automaticDownloads: e.currentTarget.checked })}/>Automatically download and install updates when I quit</label>
-        <p class="settings-note">Checks run daily. Downloads are verified before installation. Updates preserve your projects; restarting still asks before stopping active tasks or discarding unsaved edits.</p>
+        <p class="settings-note">{settings.configured
+          ? 'Checks run daily. Downloads are verified before installation. Updates preserve your projects; restarting still asks before stopping active tasks or discarding unsaved edits.'
+          : 'This is a free, unnotarized build. Automatic installation stays disabled without update-signing keys. Download the latest DMG and replace the app in Applications; your saved projects stay on this Mac.'}</p>
       </div>}
   </section>;
 }

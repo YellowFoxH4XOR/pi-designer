@@ -13,9 +13,9 @@ open build/πDesigner.app
 
 Build prerequisites: Xcode Command Line Tools, Go at the version declared in `go.mod` or newer, and Node/npm for building the embedded interface. pi 1.1.0 or newer must be installed separately (`curl -fsSL https://pi.dev/install.sh | sh` or `npm install -g @earendil-works/pi-coding-agent`; see https://pi.dev). Because a Finder launch does not inherit a login-shell `PATH`, the app searches `~/.bun/bin`, `~/.local/bin`, `~/.pi/agent/bin` and Homebrew locations before the inherited `PATH`. Settings → pi agent shows the executable, version and setup steps, and re-checks after you install or update pi.
 
-The app targets Apple Silicon, macOS 13 or later. Local builds are ad-hoc signed; public release builds use Developer ID signing and Apple notarization. The tag-driven release workflow produces a drag-to-Applications `.dmg`, a signed Sparkle update feed, and checksums. Publishing requires configured signing credentials and a public release destination; see [Release setup](docs/releases.md).
+The app targets Apple Silicon, macOS 13 or later. Download the **free, unnotarized DMG** from [GitHub Releases](https://github.com/YellowFoxH4XOR/pi-designer/releases/latest). Drag πDesigner into Applications. macOS may block the first launch; if you trust this release, use **System Settings → Privacy & Security → Open Anyway** after trying to open it. Do not disable Gatekeeper globally. Builds are ad-hoc signed, not Developer ID signed or notarized by Apple.
 
-In a configured release build, **Settings → App updates** or **πDesigner → Check for Updates…** downloads, verifies and installs new releases without manually replacing the app. Daily background checks are enabled by default; automatic download/install-on-quit is opt-in. Projects stay in Application Support. Local builds without a feed/key show an explicit disabled state rather than offering unverified updates.
+Publishing requires no paid Apple account or certificate: stable version tags build a `.dmg` and checksums. **Settings → App updates → Download latest release** opens the current release for manual installation. Automatic updates remain disabled without signing keys. Optional free Sparkle keys can enable verified in-app updates in a later build; they are independent of Apple notarization. Projects stay in Application Support. See [Release setup](docs/releases.md).
 
 Optional local installation:
 
@@ -145,7 +145,7 @@ node scripts/review-activity.cjs
 python3 -m unittest discover -s scripts/tests -p '*_test.py'
 ./scripts/test-mac.sh                   # macOS: native models/updater and real signature tests
 ./scripts/build-mac.sh
-./scripts/package-mac.sh --development # smoke DMG, not for public distribution
+./scripts/package-mac.sh --development # unnotarized smoke DMG
 codesign --verify --deep --strict build/πDesigner.app
 ```
 
