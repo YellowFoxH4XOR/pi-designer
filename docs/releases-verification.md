@@ -24,6 +24,11 @@ Those runs compiled/signed the app, ran native and cryptographic signature tests
 
 For the free-release follow-up, `checks.yml` now exercises the actual `PIDESIGNER_RELEASE_BUILD=1` packaging path without any Apple credentials or Sparkle keys and asserts there is no unsigned `appcast.xml`. The native test checks the public manual-download destination. PR CI must pass before merging and tagging the first public release; the tag workflow repeats tests and verifies the DMG before publication.
 
+The free-release follow-up passed both jobs in PR #14:
+https://github.com/YellowFoxH4XOR/pi-designer/actions/runs/40587878977
+
+This verified the real macOS app build, native/signature tests, and no-credentials release DMG packaging. The expected absence of `appcast.xml` and the automatic-update-disabled notice were checked. The workflow uploaded the unnotarized DMG as a CI artifact; publication is performed separately by the version-tag workflow.
+
 ## Coverage limits
 
 CI verifies build, code integrity, packaging and signature rejection—not a human macOS installation or Gatekeeper override. A full keyboard/VoiceOver/visual settings pass, physical-Mac first launch and actual older-to-newer Sparkle installation remain manual checks. Automatic updates are not enabled in the initial keyless release, so no claim of a working production auto-update path is made. Existing keyless builds need a manual DMG replacement before they can trust a future update key.
