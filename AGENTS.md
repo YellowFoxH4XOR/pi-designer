@@ -87,7 +87,7 @@ To restart the installed dev app: quit `build/πDesigner.app`, then `open build/
 - macOS 13+ on arm64. Swift is compiled directly with `swiftc` by `build-mac.sh`; there is no SwiftPM or Xcode project.
 - There is no ESLint, Prettier, Makefile, or CI; the checks below are the gate.
 - `bin/`, `build/`, `ui/dist/`, `ui/node_modules/`, and `data/` are generated and gitignored.
-- `master` is the default branch. Land changes through a PR (`gh pr create` → `gh pr merge --merge`).
+- `main` is the default branch. Land changes through a PR (`gh pr create` → `gh pr merge --merge`).
 
 ## Testing & QA
 ```bash

@@ -90,6 +90,20 @@ func TestRunsRecordArtifactVersionsThatPreviewAndRestore(t *testing.T) {
 	if !strings.Contains(file.Content, "Good work") {
 		t.Fatalf("restored content = %q", file.Content)
 	}
+	// The manual edit remains available as a version, so restore is undoable
+	// even when the current files were never part of an agent-run snapshot.
+	if requestJSON(t, a.URL, "GET", base+"/versions", nil, &list) != 200 || len(list.Versions) != 3 {
+		t.Fatalf("versions after restore = %+v", list)
+	}
+	resp, err = http.Get(a.URL + "/preview/" + p.Project.ID + "/@v/2/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err = io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil || resp.StatusCode != 200 || !strings.Contains(string(body), "<p>edited</p>") {
+		t.Fatalf("pre-restore edits were not preserved: %d %q, %v", resp.StatusCode, body, err)
+	}
 	if requestJSON(t, a.URL, "POST", base+"/versions/9/restore", nil, nil) != 404 {
 		t.Fatal("unknown version restored")
 	}

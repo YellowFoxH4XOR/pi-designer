@@ -33,4 +33,20 @@ The adjacent `report.json` preserves complete per-round evidence and the tempora
 
 ## Limits
 
-Independent review adds real inference cost and latency. If it cannot run or its response is invalid, the extension explicitly discloses fallback to the self-panel; this is not a fail-closed certification gate. The jury currently assumes an `index.html` entry and uses screenshot-visible evidence, not interactive browser execution. No broad benchmark suite or motion-quality comparison was run in this pass.
+Independent review adds real inference cost and latency. If it cannot run or its response is invalid, the extension explicitly discloses fallback to the self-panel; this is not a fail-closed certification gate. At the time of this pass, the jury assumed an `index.html` entry (corrected in the review follow-up below) and used screenshot-visible evidence, not interactive browser execution. No broad benchmark suite or motion-quality comparison was run in this pass.
+
+## Review follow-up — restore safety and jury correctness
+
+Changes:
+- Jury issues now prevent `ship`, even with a passing overall score. After three unresolved rounds the result remains `ship_with_issues`. Blank issue strings do not create artificial blockers.
+- The runner passes the configured project entry to the extension. Independent review uses it, or the most recently rendered file for a new project, with `index.html` as the final default. `submit_critique.path` can select another entry. Realpath confinement rejects traversal and escaping symlinks.
+- Version restore validates paths, blob hashes and size limits and stages the entire target before mutation. Current files are backed up on disk. A write/delete failure rolls back touched files, original permissions and newly created directories; rollback failures retain the backup and return its recovery path.
+- The API saves pre-restore manual edits as a version, making those edits recoverable after a successful restore.
+
+Verification:
+- `go test -race ./...` and `go vet ./...`: passed using a temporary Go 1.26.0 toolchain.
+- UI tests, TypeScript checking and production build: passed (12 UI tests).
+- `node --test scripts/tests/*.test.cjs`: passed (29 tests). The embedded extension is exercised with mocked rendering/process boundaries, including passing-score jury issues, round limits, nested/configured/explicit/rendered entries, and path confinement.
+- Go regressions cover missing/corrupt blobs without project mutation, injected partial-write and delete failures with rollback, retained backups when rollback fails, symlink/directory conflicts, preserved excluded state/oversized files, and pre-restore edit history through the real HTTP API.
+
+Limits: no live inference, native WebKit, macOS bundle or browser visual verification was performed for these backend/tool changes. Restore is not crash-atomic and does not coordinate with external filesystem writers. Symlinks and file/directory shape conflicts are conservatively rejected. An abrupt termination can leave a `.restore-*` directory; automatic startup recovery is not implemented. For manual recovery, stop project writers, preserve a copy of the project and recovery directory, inspect `recovery.json`, remove newly introduced files recorded only in `after/`, and restore original files from `before/` (permissions are recorded in `modes`). Do not replace the entire project directory: excluded `.pi`, `.git`, and dependency state are intentionally outside the backup.

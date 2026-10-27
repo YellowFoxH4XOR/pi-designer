@@ -139,15 +139,17 @@ function runJury(bin: string, args: string[], cwd: string, signal?: AbortSignal)
 	return promise;
 }
 
-async function juryReview(cwd: string, model: { provider?: string; id?: string } | undefined, signal?: AbortSignal): Promise<JuryReview | string> {
+async function juryReview(cwd: string, entryPath: string, model: { provider?: string; id?: string } | undefined, signal?: AbortSignal): Promise<JuryReview | string> {
 	const bin = process.env.PIDESIGNER_PI_BIN, renderer = process.env.PIDESIGNER_RENDERER, renderDir = process.env.PIDESIGNER_RENDER_DIR, briefFile = process.env.PIDESIGNER_BRIEF_FILE;
 	if (!bin || !renderer || !renderDir || !briefFile) return "independent review is unavailable in this session";
 	const juryModel = process.env.PIDESIGNER_JURY_MODEL || (model?.provider && model?.id ? `${model.provider}/${model.id}` : "");
 	if (!juryModel) return "no model is available for the independent review";
 	const root = await realpath(cwd);
-	const entry = path.join(root, "index.html");
+	let entry: string;
+	try { entry = await realpath(path.resolve(root, entryPath)); } catch { return `${entryPath} does not exist yet`; }
+	if (entry === root || !entry.startsWith(root + path.sep)) throw new Error("The review entry must be inside the project.");
 	let html: string;
-	try { html = await readFile(entry, "utf8"); } catch { return "index.html does not exist yet"; }
+	try { html = await readFile(entry, "utf8"); } catch { return `${entryPath} could not be read`; }
 	const brief = await readFile(briefFile, "utf8");
 	await mkdir(renderDir, { recursive: true });
 	// Motion pages are judged at intro beats and, once the intro has played,
@@ -170,11 +172,12 @@ async function juryReview(cwd: string, model: { provider?: string; id?: string }
 		return [k, score];
 	})) as JuryReview["scores"];
 	const overall = Math.round((Object.keys(JURY_WEIGHTS) as (keyof typeof JURY_WEIGHTS)[]).reduce((sum, k) => sum + JURY_WEIGHTS[k] * scores[k], 0) * 10) / 10;
-	return { model: juryModel, scores, overall, verdict: String(json.verdict || ""), issues: Array.isArray(json.issues) ? json.issues.map(String).slice(0, 5) : [] };
+	return { model: juryModel, scores, overall, verdict: String(json.verdict || ""), issues: Array.isArray(json.issues) ? json.issues.map((issue: unknown) => String(issue).trim()).filter(Boolean).slice(0, 5) : [] };
 }
 
 export default function pidesigner(pi: ExtensionAPI) {
 	let renders = 0;
+	let renderedEntry: string | undefined;
 
 	const TodoItem = Type.Object({
 		content: Type.String({ description: "Short imperative step, e.g. 'Build the pricing section'." }),
@@ -260,6 +263,7 @@ export default function pidesigner(pi: ExtensionAPI) {
 			"Name the signature moment as it appears in a render; an independent jury scores self-reviewed work 1.5–2 points lower, so score as that jury would. " +
 			`After your panel, an independent jury — a fresh model with no tools that sees only the brief and new renders — scores the design on the Awwwards rubric. It ships when the jury scores at least ${JURY_SHIP} and your panel has no must-fix items; the jury's issues become must-fix items. At most ${MAX_ROUNDS} rounds.`,
 		parameters: Type.Object({
+			path: Type.Optional(Type.String({ description: "Project-relative HTML entry to review. Defaults to the configured project entry, then the most recently rendered file, then index.html. Set this when creating a different entry file." })),
 			designer: Type.String({ description: "One sentence: the design intent this round was judged against." }),
 			signatureMoment: Type.String({ minLength: 4, maxLength: 300, description: "The one moment a visitor will remember, and where it is visible in the renders. Write 'none' if there is not one yet." }),
 			panelists: Type.Array(
@@ -306,7 +310,8 @@ export default function pidesigner(pi: ExtensionAPI) {
 			let jury: JuryReview | undefined;
 			let juryNote = "";
 			try {
-				const review = await juryReview(ctx.cwd, ctx.model as { provider?: string; id?: string } | undefined, signal);
+				const entry = params.path || process.env.PIDESIGNER_ENTRY_FILE || renderedEntry || "index.html";
+				const review = await juryReview(ctx.cwd, entry, ctx.model as { provider?: string; id?: string } | undefined, signal);
 				if (typeof review === "string") juryNote = `Independent review skipped: ${review}.`;
 				else jury = review;
 			} catch (e) {
@@ -314,8 +319,7 @@ export default function pidesigner(pi: ExtensionAPI) {
 				juryNote = `Independent review failed (${e instanceof Error ? e.message : String(e)}); this round is decided by your panel alone.`;
 			}
 			if (jury) for (const issue of jury.issues) mustFix.push(`Jury: ${issue}`);
-			const selfFix = mustFix.filter((m) => !m.startsWith("Jury: "));
-			const passes = jury ? jury.overall >= JURY_SHIP && selfFix.length === 0 : composite >= SHIP_THRESHOLD && mustFix.length === 0;
+			const passes = (jury ? jury.overall >= JURY_SHIP : composite >= SHIP_THRESHOLD) && mustFix.length === 0;
 			const decision = passes ? "ship" : round >= MAX_ROUNDS ? "ship_with_issues" : "revise";
 
 			const next =
@@ -391,6 +395,7 @@ export default function pidesigner(pi: ExtensionAPI) {
 			if (params.at) args.push("--at", String(params.at));
 			const report = lastJSONLine(await run(renderer, args, signal));
 			if (!report.ok) throw new Error(`Render failed: ${report.error ?? "unknown error"}`);
+			renderedEntry = path.relative(root, file);
 
 			const facts: string[] = [
 				`Rendered ${path.relative(root, file)} at ${viewport.label} ${viewport.width}×${viewport.height}${params.slide ? `, slide ${params.slide}` : params.fullPage ? " (full page)" : params.at ? `, ${params.at} ms in` : ""}.`,
