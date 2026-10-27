@@ -86,7 +86,7 @@ To restart the installed dev app: quit `build/πDesigner.app`, then `open build/
 ## Runtime/Tooling Preferences
 - Go **1.26** (`go.mod`). npm with `ui/package-lock.json` (no Bun, no Node engine pin). Preact + Vite + TypeScript (strict, `noEmit`).
 - macOS 13+ on arm64. Swift is compiled directly with `swiftc` by `build-mac.sh`; there is no SwiftPM or Xcode project.
-- There is no ESLint, Prettier, or Makefile. `.github/workflows/checks.yml` runs Go/UI/script tests and a native macOS build/DMG smoke check on PRs and main. Stable `v*` tags use `.github/workflows/release.yml`; see `docs/releases.md` for signing secrets and public binary distribution.
+- There is no ESLint, Prettier, or Makefile. `.github/workflows/checks.yml` runs Go/UI/script tests and a native macOS build/DMG smoke check on PRs and main. Stable `v*` tags use `.github/workflows/release.yml` to publish free, unnotarized DMGs without Apple credentials. Optional Sparkle signing keys enable verified update feeds; absent keys mean manual downloads only. See `docs/releases.md`.
 - `bin/`, `build/`, `ui/dist/`, `ui/node_modules/`, and `data/` are generated and gitignored. `scripts/fetch-sparkle.sh` downloads a pinned, SHA-256-verified Sparkle distribution into `build/deps`; it is linked directly by `swiftc` (no SwiftPM).
 - `main` is the default branch. Land changes through a PR (`gh pr create` → `gh pr merge --merge`).
 

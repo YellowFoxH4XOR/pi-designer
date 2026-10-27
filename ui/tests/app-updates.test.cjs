@@ -45,7 +45,7 @@ function text(tree) {
   if (tree && typeof tree === 'object') return text(tree.props?.children);
   return tree == null || typeof tree === 'boolean' ? '' : String(tree);
 }
-const ready = { version: '0.3.0', configured: true, canCheck: true, busy: false, automaticChecks: true, automaticDownloads: false, message: 'Ready to check.' };
+const ready = { version: '0.3.0', configured: true, canCheck: true, busy: false, automaticChecks: true, automaticDownloads: false, message: 'Ready to check.', releaseURL: 'https://github.com/YellowFoxH4XOR/pi-designer/releases/latest' };
 
 test('update settings are native-only and subscribe before requesting authoritative state', () => {
   const browser = harness(false);
@@ -78,7 +78,9 @@ test('check button and automatic-update controls call the native bridge without 
 test('unconfigured builds cannot check/install and disabled checks disable automatic downloads', () => {
   const h = harness(); h.render();
   h.receive({ ...ready, configured: false, canCheck: false, message: 'No signed feed.' });
-  assert.equal(elements(h.render(), 'button')[0].props.disabled, true);
+  assert.equal(elements(h.render(), 'button').length, 0, 'no nonfunctional automatic-update button');
+  assert.equal(elements(h.render(), 'a')[0].props.href, ready.releaseURL);
+  assert.match(text(h.render()), /Download latest release/);
   assert.ok(elements(h.render(), 'input').every(input => input.props.disabled));
   assert.match(text(h.render()), /No signed feed/);
   h.receive({ ...ready, automaticChecks: false });

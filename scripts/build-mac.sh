@@ -82,7 +82,7 @@ swiftc -O -framework Cocoa -o bin/generate-icon scripts/generate-icon.swift
 bin/generate-icon build/AppIcon.iconset
 iconutil -c icns build/AppIcon.iconset -o "${BUNDLE}/Contents/Resources/AppIcon.icns"
 
-echo "==> signing (${MACOS_SIGNING_IDENTITY:-ad-hoc})"
+echo "==> signing (free ad-hoc; not notarized)"
 "$ROOT/scripts/sign-mac.sh" "$BUNDLE"
 
 echo

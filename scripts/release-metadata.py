@@ -34,9 +34,9 @@ def configure_plist(filename, env):
     public_key = env.get("SPARKLE_PUBLIC_KEY", "").strip()
     feed = env.get("PIDESIGNER_UPDATE_FEED_URL", "").strip()
     if bool(public_key) != bool(feed):
-        raise ValueError("Supply both SPARKLE_PUBLIC_KEY and PIDESIGNER_UPDATE_FEED_URL, or neither for a local build.")
-    if env.get("PIDESIGNER_RELEASE_BUILD") == "1" and not public_key:
-        raise ValueError("Release builds require a signed update feed and public key.")
+        raise ValueError("Supply both SPARKLE_PUBLIC_KEY and PIDESIGNER_UPDATE_FEED_URL, or neither to disable automatic updates.")
+    if env.get("PIDESIGNER_ENABLE_UPDATES") == "1" and not public_key:
+        raise ValueError("Automatic updates require a signed feed and public key.")
     if public_key:
         if len(base64.b64decode(public_key, validate=True)) != 32:
             raise ValueError("Sparkle public key must contain 32 base64-encoded bytes.")
@@ -48,6 +48,8 @@ def configure_plist(filename, env):
     else:
         info.pop("SUPublicEDKey", None)
         info.pop("SUFeedURL", None)
+    repository = env.get("RELEASE_REPOSITORY") or env.get("GITHUB_REPOSITORY") or "YellowFoxH4XOR/pi-designer"
+    info["PIDesignerReleaseURL"] = feed_url(repository).removesuffix("/download/appcast.xml")
     # Defaults only: Sparkle persists user changes itself. Never reset them at launch.
     info["SUEnableAutomaticChecks"] = True
     info["SUAutomaticallyUpdate"] = False

@@ -28,7 +28,7 @@ jobs:
       - run: cd ui && npm test && npx tsc --noEmit && npm run build
       - run: node --test scripts/tests/*.test.cjs
       - run: python3 -m unittest discover -s scripts/tests -p '*_test.py'
-      - run: bash -n scripts/build-mac.sh scripts/fetch-sparkle.sh scripts/sign-mac.sh scripts/package-mac.sh
+      - run: bash -n scripts/build-mac.sh scripts/fetch-sparkle.sh scripts/sign-mac.sh scripts/package-mac.sh scripts/test-mac.sh
   mac-build:
     runs-on: macos-15
     timeout-minutes: 30
@@ -48,9 +48,17 @@ jobs:
       - run: ./scripts/build-mac.sh
       - name: Native tests
         run: ./scripts/test-mac.sh
-      - run: ./scripts/package-mac.sh --development
+      - name: Package release with no paid credentials or update keys
+        env:
+          PIDESIGNER_RELEASE_BUILD: '1'
+          RELEASE_REPOSITORY: ${{ github.repository }}
+        run: |
+          ./scripts/package-mac.sh
+          VERSION="$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' 'build/πDesigner.app/Contents/Info.plist')"
+          test ! -f "build/release/v$VERSION/appcast.xml"
+          grep -q 'Automatic updates are' "build/release/v$VERSION/release-notes.md"
       - uses: actions/upload-artifact@v7
         with:
-          name: PiDesigner-development-dmg-NOT-NOTARIZED
+          name: PiDesigner-unnotarized-dmg
           path: build/release/**/*.dmg
           retention-days: 3

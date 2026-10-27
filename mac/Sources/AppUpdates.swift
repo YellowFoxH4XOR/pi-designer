@@ -16,7 +16,7 @@ final class AppUpdateController: NSObject, SPUUpdaterDelegate, NSMenuItemValidat
         guard let key = info["SUPublicEDKey"] as? String, Data(base64Encoded: key)?.count == 32,
               let feed = info["SUFeedURL"] as? String, let url = URL(string: feed),
               url.scheme == "https", url.host != nil, url.user == nil, url.password == nil else {
-            message = "This local build has no signed update feed. Install a release build to enable updates."
+            message = "Automatic updates aren’t configured in this build. Download new versions from GitHub Releases."
             return
         }
         controller = SPUStandardUpdaterController(startingUpdater: false, updaterDelegate: self, userDriverDelegate: nil)
@@ -44,8 +44,18 @@ final class AppUpdateController: NSObject, SPUUpdaterDelegate, NSMenuItemValidat
             "busy": updater?.sessionInProgress ?? false,
             "automaticChecks": updater?.automaticallyChecksForUpdates ?? false,
             "automaticDownloads": updater?.automaticallyDownloadsUpdates ?? false,
-            "message": message
+            "message": message,
+            "releaseURL": releaseURL.absoluteString
         ]
+    }
+
+    private var releaseURL: URL {
+        if let value = Bundle.main.object(forInfoDictionaryKey: "PIDesignerReleaseURL") as? String,
+           let url = URL(string: value), url.scheme == "https", url.host == "github.com",
+           url.user == nil, url.password == nil {
+            return url
+        }
+        return URL(string: "https://github.com/YellowFoxH4XOR/pi-designer/releases/latest")!
     }
 
     @objc func checkForUpdates(_ sender: Any? = nil) {

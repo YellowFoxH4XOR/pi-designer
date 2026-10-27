@@ -1,4 +1,4 @@
-name: Release macOS
+name: Release macOS (free, unnotarized)
 on:
   push:
     tags: ['v*']
@@ -10,46 +10,38 @@ concurrency:
 jobs:
   release:
     runs-on: macos-15
-    timeout-minutes: 60
-    environment: release
+    timeout-minutes: 45
     permissions:
       contents: write
     env:
       RELEASE_REPOSITORY: ${{ vars.RELEASE_REPOSITORY || github.repository }}
-      MACOS_SIGNING_IDENTITY: ${{ vars.MACOS_SIGNING_IDENTITY }}
       SPARKLE_PUBLIC_KEY: ${{ vars.SPARKLE_PUBLIC_KEY }}
       PIDESIGNER_RELEASE_BUILD: '1'
-      NOTARY_PROFILE: pidesigner-release
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Validate release configuration
+      - name: Validate release and optional update signing
         id: release
         env:
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
-          CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
-          CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
           UPDATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
         run: |
           set -euo pipefail
-          : "${CERTIFICATE:?Configure MACOS_CERTIFICATE_BASE64}"
-          : "${CERTIFICATE_PASSWORD:?Configure MACOS_CERTIFICATE_PASSWORD}"
-          : "${APPLE_ID:?Configure APPLE_ID}"
-          : "${APPLE_TEAM_ID:?Configure APPLE_TEAM_ID}"
-          : "${APPLE_APP_PASSWORD:?Configure APPLE_APP_PASSWORD}"
-          : "${UPDATE_KEY:?Configure SPARKLE_PRIVATE_KEY}"
-          : "${SPARKLE_PUBLIC_KEY:?Configure SPARKLE_PUBLIC_KEY variable}"
-          [[ "$MACOS_SIGNING_IDENTITY" == 'Developer ID Application: '* ]] || { echo 'Configure MACOS_SIGNING_IDENTITY variable.' >&2; exit 1; }
           git merge-base --is-ancestor HEAD origin/main
           python3 scripts/release-metadata.py release-info >> "$GITHUB_OUTPUT"
-          [[ "$(gh api "repos/$RELEASE_REPOSITORY" --jq '.private')" == false ]] || { echo 'Use a public release repository; private assets cannot be downloaded by the app without credentials.' >&2; exit 1; }
+          [[ "$(gh api "repos/$RELEASE_REPOSITORY" --jq '.private')" == false ]] || { echo 'Release downloads must be public.' >&2; exit 1; }
           LATEST="$(gh release list --repo "$RELEASE_REPOSITORY" --exclude-drafts --exclude-pre-releases --limit 1 --json tagName --jq '.[0].tagName // ""')"
           python3 scripts/release-metadata.py check-newer "${GITHUB_REF_NAME#v}" "$LATEST"
+          if [[ -n "$UPDATE_KEY" || -n "$SPARKLE_PUBLIC_KEY" ]]; then
+            : "${UPDATE_KEY:?Configure SPARKLE_PRIVATE_KEY or remove the public key}"
+            : "${SPARKLE_PUBLIC_KEY:?Configure SPARKLE_PUBLIC_KEY or remove the private key}"
+            echo 'updates=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'updates=false' >> "$GITHUB_OUTPUT"
+            echo 'No update-signing keys: publishing a manual-download release with automatic updates disabled.'
+          fi
       - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
@@ -65,37 +57,22 @@ jobs:
           (cd ui && npm test && npx tsc --noEmit)
           node --test scripts/tests/*.test.cjs
           python3 -m unittest discover -s scripts/tests -p '*_test.py'
-      - name: Import signing credentials into an ephemeral keychain
-        env:
-          CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
-          CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
-        run: |
-          set -euo pipefail
-          umask 077
-          KEYCHAIN="$RUNNER_TEMP/pidesigner-signing.keychain-db"
-          KEYCHAIN_PASSWORD="$(openssl rand -hex 32)"
-          printf '%s' "$CERTIFICATE" | base64 -D > "$RUNNER_TEMP/pidesigner-certificate.p12"
-          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
-          security set-keychain-settings -lut 21600 "$KEYCHAIN"
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
-          security import "$RUNNER_TEMP/pidesigner-certificate.p12" -P "$CERTIFICATE_PASSWORD" -k "$KEYCHAIN" -t cert -f pkcs12 -T /usr/bin/codesign -T /usr/bin/security
-          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
-          security list-keychains -d user -s "$KEYCHAIN"
-          xcrun notarytool store-credentials "$NOTARY_PROFILE" --keychain "$KEYCHAIN" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD"
-          echo "NOTARY_KEYCHAIN=$KEYCHAIN" >> "$GITHUB_ENV"
-      - name: Build, notarize, package and verify signed updates
+          ./scripts/test-mac.sh
+      - name: Build and package unnotarized DMG
         env:
           PIDESIGNER_VERSION: ${{ steps.release.outputs.version }}
-          PIDESIGNER_UPDATE_FEED_URL: ${{ steps.release.outputs.feed }}
+          FEED: ${{ steps.release.outputs.feed }}
+          UPDATES: ${{ steps.release.outputs.updates }}
           UPDATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
         run: |
           set -euo pipefail
           umask 077
-          export SPARKLE_PRIVATE_KEY_FILE="$RUNNER_TEMP/sparkle-private-key"
-          printf '%s' "$UPDATE_KEY" > "$SPARKLE_PRIVATE_KEY_FILE"
+          if [[ "$UPDATES" == true ]]; then
+            export PIDESIGNER_ENABLE_UPDATES=1
+            export PIDESIGNER_UPDATE_FEED_URL="$FEED"
+            export SPARKLE_PRIVATE_KEY_FILE="$RUNNER_TEMP/sparkle-private-key"
+            printf '%s' "$UPDATE_KEY" > "$SPARKLE_PRIVATE_KEY_FILE"
+          fi
           unset UPDATE_KEY
           ./scripts/build-mac.sh
           ./scripts/package-mac.sh
@@ -107,20 +84,10 @@ jobs:
         run: |
           set -euo pipefail
           OUT="build/release/v$VERSION"
-          cat > "$RUNNER_TEMP/release-notes.md" <<'NOTES'
-          ## Install πDesigner
-          Download the Apple silicon `.dmg`, open it, and drag πDesigner into Applications.
-
-          Requires macOS 13 or later and the separately installed pi coding agent (1.1.0 or newer).
-          Install pi from https://pi.dev, launch pi and use `/login` to configure your model provider.
-
-          This release is Developer ID signed and notarized. Future releases can be installed from **Settings → App updates** or **πDesigner → Check for Updates…**. Automatic downloads/install-on-quit are optional. Projects remain in your local Application Support directory.
-          NOTES
-          gh release create "$TAG" --repo "$RELEASE_REPOSITORY" --draft --title "πDesigner $VERSION" --notes-file "$RUNNER_TEMP/release-notes.md" \
-            "$OUT/PiDesigner-$VERSION-arm64.dmg" "$OUT/appcast.xml" "$OUT/SHA256SUMS"
+          ASSETS=("$OUT/PiDesigner-$VERSION-arm64.dmg" "$OUT/SHA256SUMS")
+          if [[ -f "$OUT/appcast.xml" ]]; then ASSETS+=("$OUT/appcast.xml"); fi
+          gh release create "$TAG" --repo "$RELEASE_REPOSITORY" --draft --title "πDesigner $VERSION — unnotarized" --notes-file "$OUT/release-notes.md" "${ASSETS[@]}"
           gh release edit "$TAG" --repo "$RELEASE_REPOSITORY" --draft=false --latest
-      - name: Remove signing material
+      - name: Remove optional update signing key
         if: always()
-        run: |
-          security delete-keychain "$RUNNER_TEMP/pidesigner-signing.keychain-db" || true
-          rm -f "$RUNNER_TEMP/pidesigner-certificate.p12" "$RUNNER_TEMP/sparkle-private-key"
+        run: rm -f "$RUNNER_TEMP/sparkle-private-key"

@@ -36,6 +36,15 @@ class ReleaseMetadataTests(unittest.TestCase):
         self.assertTrue(info['SUVerifyUpdateBeforeExtraction'])
         self.assertTrue(info['SURequireSignedFeed'])
 
+    def test_free_release_needs_no_apple_credentials_or_update_keys(self):
+        info = self.configure({'PIDESIGNER_RELEASE_BUILD': '1', 'PIDESIGNER_VERSION': '0.3.0', 'RELEASE_REPOSITORY': 'example/releases'})
+        self.assertEqual(info['CFBundleVersion'], '0.3.0')
+        self.assertNotIn('SUFeedURL', info)
+        self.assertNotIn('SUPublicEDKey', info)
+        self.assertEqual(info['PIDesignerReleaseURL'], 'https://github.com/example/releases/releases/latest')
+        self.assertTrue(info['SUVerifyUpdateBeforeExtraction'])
+        self.assertTrue(info['SURequireSignedFeed'])
+
     def test_release_embeds_version_and_public_key_but_no_private_key(self):
         info = self.configure({'PIDESIGNER_RELEASE_BUILD': '1', 'PIDESIGNER_VERSION': '0.3.0', 'SPARKLE_PUBLIC_KEY': KEY, 'PIDESIGNER_UPDATE_FEED_URL': FEED})
         self.assertEqual(info['CFBundleVersion'], '0.3.0')
@@ -48,7 +57,7 @@ class ReleaseMetadataTests(unittest.TestCase):
     def test_missing_or_invalid_configuration_never_modifies_plist(self):
         original = self.info.read_bytes()
         for env in [
-            {'PIDESIGNER_RELEASE_BUILD': '1'},
+            {'PIDESIGNER_ENABLE_UPDATES': '1'},
             {'SPARKLE_PUBLIC_KEY': KEY},
             {'PIDESIGNER_UPDATE_FEED_URL': FEED},
             {'SPARKLE_PUBLIC_KEY': 'invalid', 'PIDESIGNER_UPDATE_FEED_URL': FEED},
