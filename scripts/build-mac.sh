@@ -16,6 +16,11 @@ BUNDLE="build/${APP_NAME}.app"
 INSTALL=false
 [ "${1:-}" = "--install" ] && INSTALL=true
 
+if [ "$(uname -s)" != Darwin ]; then echo 'Building the Mac app requires macOS and Xcode Command Line Tools.' >&2; exit 1; fi
+SPARKLE_DIR="$("$ROOT/scripts/fetch-sparkle.sh")"
+# All shipped executables target the same architecture, even on an Intel runner.
+export GOOS=darwin GOARCH=arm64 CGO_ENABLED=0
+
 echo "==> building Go daemon + MCP server"
 mkdir -p bin
 go build -trimpath -ldflags="-s -w" -o bin/pidesigner ./cmd/pidesigner
@@ -23,7 +28,7 @@ go build -trimpath -ldflags="-s -w" -o bin/pidesigner-mcp ./cmd/pidesigner-mcp
 
 echo "==> building web UI"
 if [ ! -d ui/node_modules ]; then
-  (cd ui && npm install --silent)
+  (cd ui && npm ci --silent)
 fi
 (cd ui && npm run build --silent)
 
@@ -38,6 +43,8 @@ swiftc \
   -framework WebKit \
   -framework SwiftUI \
   -framework UserNotifications \
+  -F "$SPARKLE_DIR" -framework Sparkle \
+  -Xlinker -rpath -Xlinker '@executable_path/../Frameworks' \
   -o "${BUNDLE}/Contents/MacOS/pidesigner-app" \
   mac/Sources/*.swift
 
@@ -54,6 +61,10 @@ swiftc \
 
 echo "==> assembling bundle"
 cp mac/Info.plist "${BUNDLE}/Contents/Info.plist"
+python3 scripts/release-metadata.py configure-plist "${BUNDLE}/Contents/Info.plist"
+mkdir -p "${BUNDLE}/Contents/Frameworks"
+ditto "$SPARKLE_DIR/Sparkle.framework" "${BUNDLE}/Contents/Frameworks/Sparkle.framework"
+cp "$SPARKLE_DIR/LICENSE" "${BUNDLE}/Contents/Resources/Sparkle-LICENSE.txt"
 cp ui/public/brand-symbol.svg "${BUNDLE}/Contents/Resources/BrandTemplate.svg"
 cp bin/pidesigner "${BUNDLE}/Contents/MacOS/pidesigner"
 cp bin/pidesigner-mcp "${BUNDLE}/Contents/MacOS/pidesigner-mcp"
@@ -71,11 +82,8 @@ swiftc -O -framework Cocoa -o bin/generate-icon scripts/generate-icon.swift
 bin/generate-icon build/AppIcon.iconset
 iconutil -c icns build/AppIcon.iconset -o "${BUNDLE}/Contents/Resources/AppIcon.icns"
 
-echo "==> signing (ad-hoc)"
-# Ad-hoc signing is enough for local use; it makes the bundle launchable
-# without a Gatekeeper prompt on the machine that built it.
-codesign --force --deep --sign - "$BUNDLE"
-codesign --verify --deep --strict "$BUNDLE"
+echo "==> signing (${MACOS_SIGNING_IDENTITY:-ad-hoc})"
+"$ROOT/scripts/sign-mac.sh" "$BUNDLE"
 
 echo
 echo "built: $BUNDLE"

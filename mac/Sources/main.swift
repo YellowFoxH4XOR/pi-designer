@@ -12,6 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
     private var captureStarted = false
     private var discardConfirmed = false
     private var activity: NativeActivityController?
+    private var updates: AppUpdateController?
 
     private var terminationCheckInProgress = false
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -21,6 +22,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
            let icon = NSImage(contentsOf: resources.appendingPathComponent("AppIcon.icns")) {
             NSApp.applicationIconImage = icon
         }
+        updates = AppUpdateController(enabled: Self.argument("--capture") == nil && ProcessInfo.processInfo.environment["PIDESIGNER_DISABLE_UPDATES"] != "1")
+        updates?.onChange = { [weak self] in self?.publishUpdateSettings() }
         buildMenu()
         if Self.argument("--capture") == nil {
             let controller = NativeActivityController()
@@ -82,6 +85,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         launch()
+        updates?.start()
     }
     private func launch() {
         daemon.onReady = { [weak self] url in
@@ -266,8 +270,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
               let base = baseURL, message.frameInfo.securityOrigin.host == base.host,
               message.frameInfo.securityOrigin.protocol == base.scheme,
               message.frameInfo.securityOrigin.port == base.port,
-              let body = message.body as? [String: Any], let action = body["action"] as? String,
-              let activity else { return }
+              let document = message.frameInfo.request.url, ["/", "/index.html"].contains(document.path),
+              let body = message.body as? [String: Any], let action = body["action"] as? String else { return }
+        switch action {
+        case "getUpdateSettings": publishUpdateSettings(); return
+        case "checkForUpdates": updates?.checkForUpdates(nil); publishUpdateSettings(); return
+        case "updateUpdateSettings": updates?.setPreferences(body["preferences"] as? [String: Any] ?? [:]); publishUpdateSettings(); return
+        default: break
+        }
+        guard let activity else { return }
         let reply = { [weak self] in
             activity.settings { settings in
                 guard let data = try? JSONSerialization.data(withJSONObject: settings), let json = String(data: data, encoding: .utf8) else { return }
@@ -281,6 +292,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         default: break
         }
     }
+    private func publishUpdateSettings() {
+        guard webView != nil, let state = updates?.state,
+              let data = try? JSONSerialization.data(withJSONObject: state),
+              let json = String(data: data, encoding: .utf8) else { return }
+        webView.evaluateJavaScript("window.dispatchEvent(new CustomEvent('pidesigner:update-settings', {detail: " + json + "}))")
+    }
     private func buildMenu() {
         let bar = NSMenu()
         func menu(_ title: String) -> NSMenu {
@@ -293,6 +310,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         }
         let app = menu(Config.name)
         action(app, "About πDesigner", #selector(NSApplication.orderFrontStandardAboutPanel(_:)), "")
+        action(app, "Check for Updates…", #selector(AppUpdateController.checkForUpdates(_:)), "", target: updates)
         app.addItem(.separator())
         action(app, "Settings…", #selector(settings), ",", target: self)
         action(app, "Open Project Folder", #selector(openDataFolder), "", target: self)
