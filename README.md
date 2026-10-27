@@ -13,7 +13,9 @@ open build/πDesigner.app
 
 Build prerequisites: Xcode Command Line Tools, Go at the version declared in `go.mod` or newer, and Node/npm for building the embedded interface. pi 1.1.0 or newer must be installed separately (`curl -fsSL https://pi.dev/install.sh | sh` or `npm install -g @earendil-works/pi-coding-agent`; see https://pi.dev). Because a Finder launch does not inherit a login-shell `PATH`, the app searches `~/.bun/bin`, `~/.local/bin`, `~/.pi/agent/bin` and Homebrew locations before the inherited `PATH`. Settings → pi agent shows the executable, version and setup steps, and re-checks after you install or update pi.
 
-The current build targets Apple Silicon, macOS 13 or later. It is ad-hoc signed for local use, **not Developer ID signed or notarized for public distribution**. Copying it to another Mac is not a supported installer flow yet.
+The app targets Apple Silicon, macOS 13 or later. Local builds are ad-hoc signed; public release builds use Developer ID signing and Apple notarization. The tag-driven release workflow produces a drag-to-Applications `.dmg`, a signed Sparkle update feed, and checksums. Publishing requires configured signing credentials and a public release destination; see [Release setup](docs/releases.md).
+
+In a configured release build, **Settings → App updates** or **πDesigner → Check for Updates…** downloads, verifies and installs new releases without manually replacing the app. Daily background checks are enabled by default; automatic download/install-on-quit is opt-in. Projects stay in Application Support. Local builds without a feed/key show an explicit disabled state rather than offering unverified updates.
 
 Optional local installation:
 
@@ -140,9 +142,10 @@ go vet ./...
 node --test scripts/tests/*.test.cjs
 go build -o bin/pidesigner ./cmd/pidesigner
 node scripts/review-activity.cjs
-swiftc -o /tmp/pidesigner-native-tests mac/Sources/ActivityModels.swift mac/Tests/main.swift
-/tmp/pidesigner-native-tests
+python3 -m unittest discover -s scripts/tests -p '*_test.py'
+./scripts/test-mac.sh                   # macOS: native models/updater and real signature tests
 ./scripts/build-mac.sh
+./scripts/package-mac.sh --development # smoke DMG, not for public distribution
 codesign --verify --deep --strict build/πDesigner.app
 ```
 

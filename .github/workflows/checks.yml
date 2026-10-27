@@ -1,0 +1,56 @@
+name: Checks
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - run: npm ci --prefix ui
+      - run: go test -race ./... && go vet ./...
+      - run: cd ui && npm test && npx tsc --noEmit && npm run build
+      - run: node --test scripts/tests/*.test.cjs
+      - run: python3 -m unittest discover -s scripts/tests -p '*_test.py'
+      - run: bash -n scripts/build-mac.sh scripts/fetch-sparkle.sh scripts/sign-mac.sh scripts/package-mac.sh
+  mac-build:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - run: npm ci --prefix ui
+      - run: ./scripts/build-mac.sh
+      - name: Native tests
+        run: ./scripts/test-mac.sh
+      - run: ./scripts/package-mac.sh --development
+      - uses: actions/upload-artifact@v7
+        with:
+          name: PiDesigner-development-dmg-NOT-NOTARIZED
+          path: build/release/**/*.dmg
+          retention-days: 3

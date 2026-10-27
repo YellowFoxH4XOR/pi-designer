@@ -5,6 +5,7 @@ import { AgentMark, Icon } from '../components/Icon';
 import { ModelButton, useModels } from '../model-context';
 import type { Preferences } from '../state';
 import { NativePreferences } from '../components/NativePreferences';
+import { AppUpdates } from '../components/AppUpdates';
 
 const INSTALL_COMMAND = 'curl -fsSL https://pi.dev/install.sh | sh';
 
@@ -100,6 +101,7 @@ export function Settings({ health, preferences, onSave, onHealth, onError }: { h
     <section class="settings-section"><div class="settings-section-heading"><h2>pi agent</h2><p>The engine behind every design.</p></div><PiAgent health={health} onHealth={onHealth} onError={onError}/>
       <form class="preferences-form" onSubmit={async (e) => { e.preventDefault(); try { await onSave(draft); setSaved(true); } catch (err) { onError(String(err)); } }}><div class="settings-model-field"><span class="settings-field-label">Model</span><span class="settings-field-help">Models come from pi. Selecting one saves it for the next run; run pi and use /login to add providers.</span><ModelButton settings/></div><label>Thinking level<select value={draft.thinking} disabled={levelsLoading || !levels.length} onChange={(e) => setDraft({ ...draft, thinking: e.currentTarget.value })}>{!levels.length && <option value={draft.thinking}>{levelsLoading ? 'Loading…' : draft.thinking}</option>}{!!levels.length && !levels.includes(draft.thinking) && <option value={draft.thinking} disabled>{draft.thinking} · not supported</option>}{levels.map((level) => <option key={level} value={level}>{level}</option>)}</select></label><div class="save-preferences"><button class="button primary" type="submit" disabled={levelsLoading || !levels.includes(draft.thinking)}>Save preferences</button><span role="status">{saved ? 'Preferences saved' : 'Applies to your next generation.'}</span></div></form>{modelError && <p class="inline-error" role="alert">{modelError}</p>}
     </section>
+    <AppUpdates/>
     <NativePreferences/>
     <DesignReferences onError={onError}/>
     <section class="settings-section" id="editor-connection"><div class="settings-section-heading"><h2>Connect your editor</h2><p>Read, edit, and generate in this workspace through MCP.</p></div><div class="connection-heading"><div class="connection-icon"><Icon name="connect" size={24}/></div><div><strong>πDesigner MCP server</strong><p>Keep the Mac app open while your editor is connected.</p></div>{connection && <CopyButton text={config} label="Copy config" onError={onError}/>}</div>

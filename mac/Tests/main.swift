@@ -4,6 +4,10 @@ func check(_ condition: @autoclosure () -> Bool, _ message: String) {
     guard condition() else { fputs("FAIL: \(message)\n", stderr); exit(1) }
     print("PASS", message)
 }
+let testUpdates = AppUpdateController(enabled: false)
+check(testUpdates.state["configured"] as? Bool == false, "Test sessions cannot start update checks")
+check(testUpdates.state["canCheck"] as? Bool == false, "Unconfigured updater does not enable installation")
+check(!testUpdates.validateMenuItem(NSMenuItem()), "Update menu is disabled without a configured updater")
 let json = """
 {"runId":"r","projectId":"p","projectName":"Test","conversationId":"c","status":"succeeded","phase":"attention","label":"Needs your answer","startedAt":1000,"endedAt":5000,"attention":true,"attentionSeq":12}
 """

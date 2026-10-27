@@ -79,14 +79,15 @@ To restart the installed dev app: quit `build/πDesigner.app`, then `open build/
 - `internal/agentext/pidesigner.ts`: agent tools (edit here; the data-dir copy is overwritten)
 - `internal/prompt/prompt.go`, `internal/prompt/workflow.md`: agent instructions
 - `mac/Sources/Daemon.swift`: child daemon launch, PATH, `PIDESIGNER_PI_BIN` override
+- `mac/Sources/AppUpdates.swift`: Sparkle updater, native update state and preferences. Keep installation behind signed feeds/archives and retain the app's termination guards. Never embed GitHub tokens or private signing keys in the app.
 - Data dir layout: `.daemon.lock`, `pidesigner.db`, `projects/`, `sessions/`, `renders/`, `agent/`, `knowledge/`, `preferences.json`, `runtime.json`
 - Docs: `README.md`, `docs/activity-architecture.md`, `docs/design-reference-updates.md`, `docs/activity-verification.md`
 
 ## Runtime/Tooling Preferences
 - Go **1.26** (`go.mod`). npm with `ui/package-lock.json` (no Bun, no Node engine pin). Preact + Vite + TypeScript (strict, `noEmit`).
 - macOS 13+ on arm64. Swift is compiled directly with `swiftc` by `build-mac.sh`; there is no SwiftPM or Xcode project.
-- There is no ESLint, Prettier, Makefile, or CI; the checks below are the gate.
-- `bin/`, `build/`, `ui/dist/`, `ui/node_modules/`, and `data/` are generated and gitignored.
+- There is no ESLint, Prettier, or Makefile. `.github/workflows/checks.yml` runs Go/UI/script tests and a native macOS build/DMG smoke check on PRs and main. Stable `v*` tags use `.github/workflows/release.yml`; see `docs/releases.md` for signing secrets and public binary distribution.
+- `bin/`, `build/`, `ui/dist/`, `ui/node_modules/`, and `data/` are generated and gitignored. `scripts/fetch-sparkle.sh` downloads a pinned, SHA-256-verified Sparkle distribution into `build/deps`; it is linked directly by `swiftc` (no SwiftPM).
 - `main` is the default branch. Land changes through a PR (`gh pr create` → `gh pr merge --merge`).
 
 ## Testing & QA
@@ -94,6 +95,8 @@ To restart the installed dev app: quit `build/πDesigner.app`, then `open build/
 go test -race ./... && go vet ./...
 (cd ui && npm test && npx tsc --noEmit && npm run build)   # node --test ui/tests/*.test.cjs
 node --test scripts/tests/*.test.cjs    # clone/import safety and E2E failure semantics
+python3 -m unittest discover -s scripts/tests -p '*_test.py'
+./scripts/test-mac.sh                  # native models/updater and signature verification (macOS)
 go build -o bin/pidesigner ./cmd/pidesigner # browser review requires this generated binary
 node scripts/review-activity.cjs        # real daemon + SQLite/SSE + Playwright/Chrome, fixture RPC
 node scripts/review-native-activity.cjs # built-app lifecycle/accessibility review

@@ -23,6 +23,7 @@ Go daemon, SQLite projects, Preact UI, installed pi over JSONL RPC. The macOS ap
 ## Capabilities and Constraints
 
 - Prototypes, interface motion, and website-clone workflows.
+- Apple silicon DMG distribution through GitHub Releases, with Developer ID signing/notarization and Sparkle-signed updates. Settings and the native app menu can check/install updates; automatic checking and download/install-on-quit are user-controlled. Private source repositories require a separately configured public release repository for anonymous distribution.
 - Preserve the complete bundled design-system catalog, skills, existing project files, and MCP integration.
 - Only the user's installed pi coding agent is the generation engine. Credentials remain with pi.
 - No image generation, video generation, cloud accounts, billing, or fabricated collaboration features.
