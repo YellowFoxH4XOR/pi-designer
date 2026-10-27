@@ -213,7 +213,10 @@ func (r *Runner) execute(run model.Run, proj model.Project, req RunRequest, b *e
 		Dir:      proj.Dir,
 		Model:    req.Model,
 		Thinking: req.Thinking,
-		Env:      append(os.Environ(), "PIDESIGNER_RENDER_DIR="+renderDir),
+		Env: append(os.Environ(),
+			"PIDESIGNER_RENDER_DIR="+renderDir,
+			"PIDESIGNER_ENTRY_FILE="+proj.EntryFile,
+		),
 	}
 	if r.cfg.Extension != "" {
 		opts.Extensions = []string{r.cfg.Extension}

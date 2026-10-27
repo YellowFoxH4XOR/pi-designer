@@ -222,41 +222,6 @@ func (s *Store) ReadFile(id string, n int, path string) ([]byte, time.Time, erro
 	return b, v.CreatedAt, err
 }
 
-// Restore makes the project's files match version n: it rewrites changed
-// files and removes files the version did not have. Hidden agent state
-// skipped by project listings (.pi, .git, node_modules) is left alone.
-func (s *Store) Restore(id string, n int, pm *project.Manager) error {
-	v, err := s.Get(id, n)
-	if err != nil {
-		return err
-	}
-	dir, err := s.dir(id)
-	if err != nil {
-		return err
-	}
-	current, err := pm.List()
-	if err != nil {
-		return err
-	}
-	for _, f := range current {
-		if _, keep := v.Files[f.Path]; !keep && f.Size <= maxFileBytes {
-			if err := pm.Delete(f.Path); err != nil {
-				return err
-			}
-		}
-	}
-	for p, h := range v.Files {
-		b, err := os.ReadFile(filepath.Join(dir, "blobs", h))
-		if err != nil {
-			return fmt.Errorf("version %d is missing %s: %w", n, p, err)
-		}
-		if err := pm.Write(p, string(b)); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // Delete removes a project's whole history.
 func (s *Store) Delete(id string) error {
 	s.mu.Lock()

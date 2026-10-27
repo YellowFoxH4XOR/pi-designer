@@ -199,6 +199,11 @@ func (r *Runner) RestoreVersion(proj model.Project, pm *project.Manager, n int) 
 	if err != nil {
 		return versions.Version{}, err
 	}
+	// Preserve manual edits made since the last agent turn before replacing
+	// them. Recording only the restored result would make those edits lost.
+	if _, _, err := store.Snapshot(proj.ID, pm, versions.Meta{Label: "Before restoring version " + strconv.Itoa(n), Entry: proj.EntryFile}); err != nil {
+		return versions.Version{}, fmt.Errorf("save current project before restore: %w", err)
+	}
 	if err := store.Restore(proj.ID, n, pm); err != nil {
 		return versions.Version{}, err
 	}
