@@ -93,6 +93,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("DELETE /api/projects/{id}/file", s.handleDeleteFile)
 	mux.HandleFunc("GET /api/projects/{id}/search", s.handleSearch)
 	mux.HandleFunc("GET /api/projects/{id}/artifact", s.handleArtifact)
+	mux.HandleFunc("GET /api/projects/{id}/export", s.handleExportProject)
 	mux.HandleFunc("GET /api/projects/{id}/versions", s.handleListVersions)
 	mux.HandleFunc("POST /api/projects/{id}/versions/{n}/restore", s.handleRestoreVersion)
 	mux.HandleFunc("GET /api/projects/{id}/versions/{n}/download", s.handleDownloadVersion)

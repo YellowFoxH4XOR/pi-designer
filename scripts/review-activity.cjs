@@ -126,6 +126,8 @@ const assert = require('node:assert/strict');
   });
   await page.getByRole('button',{name:'Save changes',exact:true}).click();
   assert.ok(await page.getByRole('button',{name:'b.txt',exact:true}).isDisabled());
+  await page.getByRole('button',{name:'Close the canvas'}).click();
+  assert.ok(await page.getByRole('textbox',{name:'Source for a.txt',exact:true}).isVisible());
   await page.getByRole('textbox',{name:'Source for a.txt',exact:true}).fill('A newer edit');
   releaseSave();
   await page.waitForFunction(()=>!document.querySelector('.source-toolbar button').disabled);
@@ -143,6 +145,44 @@ const assert = require('node:assert/strict');
   await page.waitForFunction(()=>document.documentElement.dataset.unsavedChanges==='false');
   assert.equal((await api(`/api/projects/${projectId}/file?path=b.txt`)).content,'A snapshot');
   pass('Pending saves lock file selection, preserve newer edits, and cannot mark another file clean');
+  const draft=page.getByRole('textbox',{name:'Source for b.txt',exact:true});
+  await draft.fill('Keep this draft');
+  for (const leave of [
+    ()=>page.getByRole('button',{name:'Close the canvas'}).click(),
+    ()=>page.getByLabel('Version',{exact:true}).selectOption('1'),
+    ()=>page.getByRole('button',{name:/Open index.html, version 1/}).click()
+  ]) {
+    const dialog=page.waitForEvent('dialog').then(d=>d.dismiss());
+    await Promise.all([dialog,leave()]);
+    assert.equal(await draft.inputValue(),'Keep this draft');
+    assert.equal(await page.getByLabel('Version',{exact:true}).inputValue(),'live');
+  }
+  const discard=page.waitForEvent('dialog').then(d=>d.accept());
+  await Promise.all([discard,page.getByLabel('Version',{exact:true}).selectOption('1')]);
+  assert.ok(await page.getByRole('link',{name:'Download version 1'}).isVisible());
+  await page.getByRole('button',{name:'Back to current files'}).click();
+  assert.ok(await page.getByRole('link',{name:'Export current project'}).isVisible());
+  await page.getByRole('button',{name:'Preview',exact:true}).click();
+  pass('Close, history selector and conversation cards preserve drafts; live and saved exports are distinct');
+  const prompt=page.getByLabel('Refine your design');
+  await prompt.fill('Make the action easier to find.');
+  const pick=page.getByRole('button',{name:'Select element to refine'});
+  await pick.click();
+  const artifact=page.frameLocator('.device-viewport iframe');
+  const action=artifact.getByText('Explore the work',{exact:true});
+  // The sandbox is a separate frame with a real 1440px viewport scaled to
+  // fit the canvas. Exercise the actual on-screen pointer position.
+  const point=await action.evaluate(e=>{const r=e.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2,width:innerWidth};});
+  const rect=await page.locator('.device-viewport iframe').boundingBox(), scale=rect.width/point.width;
+  await page.mouse.click(rect.x+point.x*scale,rect.y+point.y*scale);
+  await page.getByRole('button',{name:'Remove selected element'}).waitFor();
+  assert.equal(await prompt.inputValue(),'Make the action easier to find.');
+  assert.equal((await api(`/api/projects/${projectId}/runs`)).runs.length,1,'picking must never submit a run');
+  const submitted=page.waitForRequest(r=>r.method()==='POST'&&r.url().endsWith(`/projects/${projectId}/chat`));
+  await page.getByRole('button',{name:'Send message'}).click();
+  const text=(await submitted).postDataJSON().prompt;
+  assert.ok(text.includes('Make the action easier to find.')&&text.includes('button:nth-of-type(1)')&&text.includes('"file":"index.html"'));
+  pass('Sandboxed click-to-refine attaches a file and element to the draft and waits for explicit submission');
   const stress=await api('/api/projects',{name:'Scroll containment fixture',skillId:'web-prototype'});
   const stressRun=await api(`/api/projects/${stress.project.id}/chat`,{prompt:'SCROLL_STRESS',conversationId:stress.conversationId,model:'openai/gpt-fixture',thinking:'medium'});
   await waitForRun(stressRun.runId,'succeeded');

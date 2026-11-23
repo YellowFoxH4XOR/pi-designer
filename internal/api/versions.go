@@ -4,7 +4,9 @@ import (
 	"archive/zip"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -140,6 +142,35 @@ func (s *Server) handleRestoreVersion(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"version": summarize(v)})
 }
 
+// Finish writing the archive before committing a successful download response.
+func serveArchive(w http.ResponseWriter, r *http.Request, filename string, write func(io.Writer) error) {
+	f, err := os.CreateTemp("", "pidesigner-export-*.zip")
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	defer os.Remove(f.Name())
+	defer f.Close()
+	if err := write(f); err != nil {
+		writeErr(w, http.StatusInternalServerError, "Could not export project: "+err.Error())
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+	http.ServeContent(w, r, filename, time.Time{}, f)
+}
+
+func (s *Server) handleExportProject(w http.ResponseWriter, r *http.Request) {
+	proj, pm, ok := s.resolveProject(w, r)
+	if !ok {
+		return
+	}
+	serveArchive(w, r, proj.Slug+".zip", func(out io.Writer) error {
+		return pm.WriteArchive(r.Context(), out, proj.Slug)
+	})
+}
+
 // handleDownloadVersion returns a version's files as a zip.
 func (s *Server) handleDownloadVersion(w http.ResponseWriter, r *http.Request) {
 	proj, _, ok := s.resolveProject(w, r)
@@ -160,23 +191,23 @@ func (s *Server) handleDownloadVersion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	paths := summarize(v).Files
-	w.Header().Set("Content-Type", "application/zip")
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s-v%d.zip"`, proj.Slug, n))
-	zw := zip.NewWriter(w)
-	for _, p := range paths {
-		data, _, err := store.ReadFile(proj.ID, n, p)
-		if err != nil {
-			continue
+	serveArchive(w, r, fmt.Sprintf("%s-v%d.zip", proj.Slug, n), func(out io.Writer) error {
+		zw := zip.NewWriter(out)
+		for _, p := range paths {
+			data, _, err := store.ReadFile(proj.ID, n, p)
+			if err != nil {
+				return err
+			}
+			f, err := zw.CreateHeader(&zip.FileHeader{Name: proj.Slug + "/" + p, Method: zip.Deflate, Modified: v.CreatedAt})
+			if err != nil {
+				return err
+			}
+			if _, err := f.Write(data); err != nil {
+				return err
+			}
 		}
-		f, err := zw.CreateHeader(&zip.FileHeader{Name: proj.Slug + "/" + p, Method: zip.Deflate, Modified: v.CreatedAt})
-		if err != nil {
-			return
-		}
-		if _, err := f.Write(data); err != nil {
-			return
-		}
-	}
-	_ = zw.Close()
+		return zw.Close()
+	})
 }
 
 // RestoreVersion makes the project match version n and records the result as

@@ -117,3 +117,4 @@ export function versionPreviewURL(id: string, n: number, entry = 'index.html') {
 export function versionDownloadURL(id: string, n: number) {
   return `/api/projects/${encodeURIComponent(id)}/versions/${n}/download`;
 }
+export function projectExportURL(id: string) { return `${projectPath(id)}/export`; }
