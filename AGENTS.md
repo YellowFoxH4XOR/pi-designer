@@ -16,8 +16,9 @@ pidesigner-mcp (cmd/pidesigner-mcp) finds the daemon via <DataDir>/runtime.json 
 - **Startup:** `cmd/pidesigner/main.go` → `app.Start` (`internal/app/app.go`) acquires an exclusive `.daemon.lock` before opening SQLite, recovering stale runs, or writing discovery. Startup rejects non-loopback bindings; shutdown drains HTTP and closes SQLite before releasing ownership. Do not unlink the lock file or introduce a second daemon for the same data root.
 - **Runs:** `Runner.Start` validates input, enforces **one active run per project** (`active[projectID]`), refuses runs on projects being deleted, commits the opening user message and run atomically, then runs `execute` asynchronously. Assistant transcript failures fail the run. An acknowledged abort has a 500 ms settlement grace period before force-closing that session.
 - **Sessions:** each conversation is a persistent pi session in `sessions/<conversationID>/pi/`. A conversation with no pi session yet (new, or from the earlier omp harness) gets its transcript replayed once through `prompt.TurnInput.Transcript`.
+- **Versions:** `internal/versions` stores content-addressed snapshots under `<DataDir>/versions/` after each agent turn and around restores. A restore snapshots current edits first, validates target paths and blobs, stages a backup, and rolls back on failure; `Runner.restoring` (checked by `Start`) keeps runs out while it mutates files. Crash recovery is manual, not transactional.
 - **Prompting:** `internal/prompt/prompt.go` builds a *stable* system prompt (embedded charter, `workflow.md`, craft, and deck files, plus the active skill, design system, and installed knowledge). It writes that prompt to a temp file that is appended to pi's system prompt. Per-turn data (viewport, `SourceCatalog`, transcript, `SkipDiscovery`) goes in `<turn-context>` in `Turn()`.
-- **Agent tools:** `internal/agentext/pidesigner.ts` is `//go:embed`-ed and rewritten atomically only when it changes. Tools: `todo_write`, `select_design_sources`, `study_references`, `render_preview`, `submit_critique`. It is a pi extension: import `ExtensionAPI` from `@earendil-works/pi-coding-agent` and `Type` from `typebox` (pi supplies both). Keep the default `direct` exposure so the model calls tools by name; the UI cards key on those names.
+- **Agent tools:** `internal/agentext/pidesigner.ts` is `//go:embed`-ed and rewritten atomically only when it changes. Tools: `todo_write`, `select_design_sources`, `study_references`, `render_preview`, `submit_critique`. It is a pi extension: import `ExtensionAPI` from `@earendil-works/pi-coding-agent` and `Type` from `typebox` (pi supplies both). Keep the default `direct` exposure so the model calls tools by name; the UI cards key on those names. `submit_critique` also asks a fresh, no-tools pi jury (`PIDESIGNER_JURY_MODEL`, else the active model) to score renders and turn its issues into must-fix items; keep that independent gate intact.
 
 ## Key Directories
 | Path | Purpose |
@@ -33,6 +34,7 @@ pidesigner-mcp (cmd/pidesigner-mcp) finds the daemon via <DataDir>/runtime.json 
 | `internal/knowledge/` | Allowlisted external design references (`Approved` list) |
 | `internal/preview/` | File-polling watcher hub and WebSocket broadcast |
 | `internal/project/` | Project files accessed through `os.Root`; `Resolve` is a lexical path helper, not sufficient for secure I/O |
+| `internal/versions/` | Content-addressed project snapshots; list, download, and restore version history |
 | `ui/src/` | Preact app: `api.ts`, `state.ts` (`useRuns`), `activity.ts` (`reduceActivity`), `pages/`, `components/` |
 | `mac/Sources`, `mac/Render`, `mac/Tests` | AppKit shell, WebKit renderer CLI, native tests |
 | `content/` | Vendored design systems, skills, design templates, craft |
@@ -53,10 +55,10 @@ Daemon flags worth knowing: `--port 0` (free port), `--print-url` (emits `PIDESI
 To restart the installed dev app: quit `build/πDesigner.app`, then `open build/πDesigner.app`. Before killing it, check `/api/activity` (URL in `runtime.json`) so you don't kill a live run.
 
 ## Code Conventions & Common Patterns
-- **Go:** use `gofmt`. Dependencies are injected through exported struct fields (`api.Server{Store, Catalog, Knowledge, Runner, Hub, PiExplicit, Models}`), not globals. Register routes in `Server.Routes()` as Go 1.22+ method patterns (`"DELETE /api/projects/{id}"`).
+- **Go:** use `gofmt`. Dependencies are injected through exported struct fields (`api.Server{Store, Catalog, Knowledge, Runner, Hub, Versions, PiExplicit, Models}`), not globals. Register routes in `Server.Routes()` as Go 1.22+ method patterns (`"DELETE /api/projects/{id}"`).
 - **HTTP errors:** `writeErr(w, status, msg)` → `{"error": msg}`; success → `writeJSON`. Request decoding rejects unknown fields. Resolve the project with `s.resolveProject(w, r)` and return when `!ok`.
 - **Errors:** wrap with `fmt.Errorf`. User-facing strings say "πDesigner" / "pi" (e.g. `"pi is already working in this project"`). The engine is the user's installed pi coding agent (`@earendil-works/pi-coding-agent`, needs `pirun.MinVersion` or newer); omp is no longer supported.
-- **Concurrency:** `Runner` maps (`sessions`, `sessionSettled`, `journals`, `active`, `deleting`, `cancelRequested`) share `r.mu`. `uiMu` is separate, and `wg` gates shutdown. The preview `Hub` and each watcher have their own mutex and stop via `sync.Once`.
+- **Concurrency:** `Runner` maps (`sessions`, `sessionSettled`, `journals`, `active`, `deleting`, `restoring`, `cancelRequested`) share `r.mu`. `uiMu` is separate, and `wg` gates shutdown. The preview `Hub` and each watcher have their own mutex and stop via `sync.Once`.
 - **Persistence:** SQLite is the source of truth (WAL, foreign keys, one connection, Store mutex). Artifacts are plain files under `projects/<slug>`.
 - **Security:** `httpguard.Protect` wraps the entire app handler. API/WS require same-origin browser requests; Origin-less native clients remain supported. Preview responses must retain their CSP sandbox without `allow-same-origin`, including when opened standalone. Opaque-origin CORS exceptions are only for read-only preview assets. Use `os.Root` operations, not lexical validation followed by unrestricted `os.*` calls; file deletion must reject the root.
 - **Deletion:** retain the project row/slug until all filesystem cleanup succeeds. Errors leave the project reserved for retry, preventing create/delete path reuse races.
@@ -74,14 +76,14 @@ To restart the installed dev app: quit `build/πDesigner.app`, then `open build/
 ## Important Files
 - `cmd/pidesigner/main.go`: flags, default data dir (`~/.pidesigner` for the CLI, `~/Library/Application Support/PiDesigner` for the app)
 - `internal/app/app.go`: wiring and lifecycle
-- `internal/api/api.go`, `internal/api/runner.go`: API surface and run orchestration
+- `internal/api/api.go`, `internal/api/runner.go`, `internal/api/versions.go`: API surface, run orchestration, version history
 - `internal/pirun/pi.go`: pi resolution (`PATH`, `~/.bun/bin`, `~/.local/bin`, `~/.pi/agent/bin`, Homebrew), RPC process; `version.go`: `pi --version` check against `MinVersion`
 - `internal/agentext/pidesigner.ts`: agent tools (edit here; the data-dir copy is overwritten)
 - `internal/prompt/prompt.go`, `internal/prompt/workflow.md`: agent instructions
 - `mac/Sources/Daemon.swift`: child daemon launch, PATH, `PIDESIGNER_PI_BIN` override
 - `mac/Sources/AppUpdates.swift`: Sparkle updater, native update state and preferences. Keep installation behind signed feeds/archives and retain the app's termination guards. Never embed GitHub tokens or private signing keys in the app.
-- Data dir layout: `.daemon.lock`, `pidesigner.db`, `projects/`, `sessions/`, `renders/`, `agent/`, `knowledge/`, `preferences.json`, `runtime.json`
-- Docs: `README.md`, `docs/activity-architecture.md`, `docs/design-reference-updates.md`, `docs/activity-verification.md`
+- Data dir layout: `.daemon.lock`, `pidesigner.db`, `projects/`, `sessions/`, `renders/`, `versions/`, `agent/`, `knowledge/`, `preferences.json`, `runtime.json`
+- Docs: `README.md`, `docs/activity-architecture.md`, `docs/activity-verification.md`, `docs/design-reference-updates.md`, `docs/design-review.md`, `docs/releases.md`
 
 ## Runtime/Tooling Preferences
 - Go **1.26** (`go.mod`). npm with `ui/package-lock.json` (no Bun, no Node engine pin). Preact + Vite + TypeScript (strict, `noEmit`).
@@ -94,9 +96,10 @@ To restart the installed dev app: quit `build/πDesigner.app`, then `open build/
 ```bash
 go test -race ./... && go vet ./...
 (cd ui && npm test && npx tsc --noEmit && npm run build)   # node --test ui/tests/*.test.cjs
-node --test scripts/tests/*.test.cjs    # clone/import safety and E2E failure semantics
+node --test scripts/tests/*.test.cjs    # clone/import safety, E2E failure semantics, agent-tool/jury behavior
 python3 -m unittest discover -s scripts/tests -p '*_test.py'
 ./scripts/test-mac.sh                  # native models/updater and signature verification (macOS)
+./scripts/package-mac.sh --development # smoke DMG from build/πDesigner.app (macOS)
 go build -o bin/pidesigner ./cmd/pidesigner # browser review requires this generated binary
 node scripts/review-activity.cjs        # real daemon + SQLite/SSE + Playwright/Chrome, fixture RPC
 node scripts/review-native-activity.cjs # built-app lifecycle/accessibility review
@@ -107,6 +110,6 @@ codesign --verify --deep --strict build/πDesigner.app
 - **Browser reviews:** use `ui/node_modules/playwright-core` with system Chrome (`CHROME_PATH` to override). Output goes to `.impeccable/review/`.
 - **Live pi tests are opt-in.** `PIDESIGNER_LIVE_PI=1 go test ./internal/pirun -run 'TestLive(PiRPC|InstalledPiModels)$' -v` checks metadata only. `PIDESIGNER_LIVE_MODEL=provider/model ...TestLiveExplicitModelPrompt` runs real inference. `scripts/e2e.sh` runs live generation against a daemon on `:7457`.
 - **Review safety:** `review-ui.cjs` leaves its own fixture, never deletes a supplied project ID or rewrites metadata/preferences, and restores the prior active selection. Use isolated daemon data. E2E outputs are per-run temporary files; set `PIDESIGNER_E2E_BASE` for a test endpoint and `PIDESIGNER_E2E_KEEP_OUTPUTS=1` to retain output.
-- **Design quality benchmark (real inference, opt-in):** `node scripts/design-bench.cjs --model provider/id [--judge provider/id] [--only id,…]` runs the briefs in `scripts/bench/briefs.json` through a real daemon and pi, renders each result (motion at several beats via `window.pdSeek`), and has an independent judge model score the screenshots on the Awwwards rubric (Design 40 · Usability 30 · Creativity 20 · Content 10). Report: `.impeccable/bench/<timestamp>/index.html`. Use it to compare prompt or model changes; never trust the agent's own critique score alone.
+- **Design quality benchmark (real inference, opt-in):** `node scripts/design-bench.cjs --model provider/id [--judge provider/id] [--only id,…]` runs the briefs in `scripts/bench/briefs.json` through a real daemon and pi, renders each result (motion at several beats via `window.pdSeek`), and has an independent judge model score the screenshots on the Awwwards rubric (Design 40 · Usability 30 · Creativity 20 · Content 10); the same judge drives the in-loop jury via `PIDESIGNER_JURY_MODEL`. Report: `.impeccable/bench/<timestamp>/index.html`. Use it to compare prompt or model changes; never trust the agent's own critique score alone.
 - **Renderer:** `pidesigner-render` disables WebKit occlusion throttling so requestAnimationFrame, canvas and WebGL pages run; `--wait MS` lets a live page run, `--at MS` seeks animation clocks (prefers the page's `window.pdSeek`).
 - There is no coverage threshold. Add tests for consumer-visible behavior (API contracts, run lifecycle, event replay, path confinement), and record verification evidence in `docs/*-verification.md` when changing activity/UI behavior.
