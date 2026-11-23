@@ -59,6 +59,10 @@ This app is **ad-hoc signed, not Developer ID signed or notarized by Apple**. ma
 
 Projects and sessions remain in your local Application Support directory. App downloads do not install or update pi.
 EOF
+if [[ -f "docs/releases/$VERSION.md" ]]; then
+  printf '\n' >> "$OUT/release-notes.md"
+  cat "docs/releases/$VERSION.md" >> "$OUT/release-notes.md"
+fi
 if $UPDATES; then
   printf '\n### Updates\nThis build includes a signed Sparkle update feed. Check from Settings → App updates. Automatic download/install-on-quit is optional. Update signatures are separate from Apple notarization.\n' >> "$OUT/release-notes.md"
 else

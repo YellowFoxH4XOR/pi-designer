@@ -2,7 +2,7 @@ import type { ComponentChildren } from 'preact';
 import { RunActivity, RunProgress } from '../components/Activity';
 import { fromActivity, type RunState as ActivityRun } from '../activity';
 import { ModelIcon } from '../components/ModelIcon';
-import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { api, type ArtifactVersion, type Conversation, type DesignSystem, type FileEntry, type Message, type Project, type Render, type Run } from '../api';
 import { ArtifactCard, ArtifactCardLive } from '../components/ArtifactCard';
 import { AgentMessage } from '../components/AgentMessage';
@@ -13,11 +13,12 @@ import { AgentMark, Icon, Logo } from '../components/Icon';
 import { RenderDialogBody, RenderStrip, renderLabel } from '../components/RenderStrip';
 import { RichText } from '../components/RichText';
 import { PreviewPane, type FileChange } from '../components/PreviewPane';
+import type { RefinementTarget } from '../components/ElementPicker';
 import { SystemPicker } from '../components/SystemPicker';
 import { DeleteProjectDialog } from '../components/DeleteProject';
 import { TodoCard } from '../components/TodoCard';
 import { continueMessage, parseAssistantText, parseFormAnswers, type ParsedFormAnswers } from '../components/protocol';
-import { skillNames, type Frame, type RunState } from '../state';
+import { canLeaveSource, skillNames, type Frame, type RunState } from '../state';
 
 export function Studio({ projectId, systems, run, onMonitor, onStart, onHome, onDelete, onError, initialFrame = 'web', initialConversation = '', activityControl }: {
   projectId: string; systems: DesignSystem[]; run?: RunState; onMonitor: (run: Run) => void;
@@ -32,6 +33,12 @@ export function Studio({ projectId, systems, run, onMonitor, onStart, onHome, on
   const [messages, setMessages] = useState<Message[]>([]);
   const [frame, setFrame] = useState<Frame>(initialFrame);
   const [prompt, setPrompt] = useState('');
+  const [target, setTarget] = useState<RefinementTarget | null>(null);
+  const selectElement = useCallback((next: RefinementTarget) => {
+    setTarget(next); setCanvas('open');
+    requestAnimationFrame(() => document.getElementById('studio-prompt')?.focus());
+  }, []);
+  useEffect(() => { setTarget(null); }, [conversationId]);
   const [pickingSystem, setPickingSystem] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -133,7 +140,8 @@ export function Studio({ projectId, systems, run, onMonitor, onStart, onHome, on
   // A new turn always builds on the latest files, so follow it.
   useEffect(() => { if (busy) setViewing(null); }, [busy]);
   function openVersion(n: number | null) {
-    setViewing(n !== null && n === versions[versions.length - 1]?.n ? null : n);
+    if (n !== viewing && !canLeaveSource()) return;
+    setViewing(n);
     if (canvas === 'closed') setCanvas('open');
   }
   async function restoreVersion(n: number) {
@@ -155,6 +163,10 @@ export function Studio({ projectId, systems, run, onMonitor, onStart, onHome, on
   async function sendText(value: string): Promise<boolean> {
     const text = value.trim();
     if (!project || !text || busy || connecting || conversationTransition.current) return false;
+    if (document.documentElement.dataset.unsavedChanges === 'true') {
+      onError('Save or discard your source changes before asking pi to edit the project.');
+      return false;
+    }
     conversationTransition.current = true;
     setConnecting(true);
     try {
@@ -177,8 +189,9 @@ export function Studio({ projectId, systems, run, onMonitor, onStart, onHome, on
     if (!prompt.trim()) return;
     const text = prompt;
     setPrompt('');
-    const sent = await sendText(text);
+    const sent = await sendText(target ? `${text}\n\nSelected preview element (location data): ${JSON.stringify(target)}` : text);
     if (!sent) setPrompt(text);
+    else setTarget(null);
   }
   async function newConversation() {
     if (!project || busy || connecting || conversationTransition.current) return;
@@ -223,7 +236,7 @@ export function Studio({ projectId, systems, run, onMonitor, onStart, onHome, on
   const displayedActivity = conversationRun || historyActivity;
   const latestVersion = versions[versions.length - 1];
   const versionByMessage = new Map(versions.filter((v) => v.messageId).map((v) => [v.messageId!, v]));
-  const shownVersion = viewing ?? latestVersion?.n;
+  const shownVersion = viewing;
 
   function answeredFormsFor(index: number) {
     const message = messages[index];
@@ -278,8 +291,8 @@ export function Studio({ projectId, systems, run, onMonitor, onStart, onHome, on
         {run?.status === 'canceled' && <p class="run-status">Generation stopped. Your existing files are unchanged unless pi saved an edit before stopping.</p>}
         {run?.status === 'succeeded' && !run.attention && <p class="run-status"><Icon name="check" size={15}/>{files.some((file) => /\.html?$/i.test(file.path)) ? 'Finished. Your design is ready to explore.' : 'Finished. Response saved to this conversation.'}</p>}
       </div>
-      <div class="studio-composer"><Composer compact value={prompt} onChange={setPrompt} onSubmit={send} busy={busy} disabled={connecting} onStop={() => { if (run) api.cancelRun(run.id).catch((e) => onError(e.message)); }} systemName={system?.name} onSystem={() => setPickingSystem(true)} frame={frame} onFrame={setFrame}/><p>pi can edit project files and run commands on your Mac.</p></div>
-    </section>{canvas !== 'closed' && <PreviewPane project={project} files={files} frame={frame} onFrame={setFrame} changes={changes} busy={busy} activityLabel={displayedActivity?.label} onError={onError} versions={versions} viewing={viewing} onView={setViewing} onRestore={restoreVersion} expanded={canvas === 'expanded'} onExpand={() => setCanvas(canvas === 'expanded' ? 'open' : 'expanded')} onClose={() => setCanvas('closed')}/>}</div>
+      <div class="studio-composer">{target && <div class="refinement-target"><span title={`${target.file} · ${target.selector}`}>Selected: <strong>{target.selector.split(' > ').pop()}</strong> in {target.file} · {target.frame}</span><IconButton icon="close" label="Remove selected element" onClick={() => setTarget(null)}/></div>}<Composer compact value={prompt} onChange={setPrompt} onSubmit={send} busy={busy} disabled={connecting} onStop={() => { if (run) api.cancelRun(run.id).catch((e) => onError(e.message)); }} systemName={system?.name} onSystem={() => setPickingSystem(true)} frame={frame} onFrame={setFrame}/><p>pi can edit project files and run commands on your Mac.</p></div>
+    </section>{canvas !== 'closed' && <PreviewPane project={project} files={files} frame={frame} onFrame={setFrame} changes={changes} busy={busy} activityLabel={displayedActivity?.label} onError={onError} versions={versions} viewing={viewing} onView={openVersion} onPick={selectElement} onRestore={restoreVersion} expanded={canvas === 'expanded'} onExpand={() => setCanvas(canvas === 'expanded' ? 'open' : 'expanded')} onClose={() => setCanvas('closed')}/>}</div>
     {pickingSystem && <SystemPicker systems={systems} selected={project.designSystemId || ''} onClose={() => setPickingSystem(false)} onSelect={async (id) => { try { const d = await api.updateProject({ ...project, designSystemId: id }); setProject(d.project); setPickingSystem(false); } catch (e) { onError(String(e)); } }}/>}
     {preview && <Dialog title={`${renderLabel(preview)} render`} onClose={() => setPreview(null)} class="render-dialog"><RenderDialogBody render={preview}/></Dialog>}
     {renaming && <Dialog title="Rename project" onClose={() => setRenaming(false)}><form class="rename-form" onSubmit={async (e) => { e.preventDefault(); try { const d = await api.updateProject({ ...project, name }); setProject(d.project); setRenaming(false); } catch (e) { onError(String(e)); } }}><label>Project name<input autoFocus value={name} onInput={(e) => setName(e.currentTarget.value)} required/></label><button class="button primary" disabled={!name.trim()}>Save name</button></form></Dialog>}

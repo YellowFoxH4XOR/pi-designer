@@ -18,6 +18,9 @@ export const skillNames: Record<string, string> = {
   'simple-deck': 'Slide deck', 'emilkowalski-motion': 'Interaction motion', 'web-design-guidelines': 'Interface review',
 };
 export interface Preferences { model: string; thinking: string }
+export function canLeaveSource() {
+  return window.dispatchEvent(new Event('pidesigner:navigate', { cancelable: true }));
+}
 export function useRoute() {
   const [route, setRoute] = useState(location.hash.slice(1) || 'home');
   useEffect(() => {
@@ -25,8 +28,7 @@ export function useRoute() {
     const h = () => {
       const next = location.hash.slice(1) || 'home';
       if (next === current) return;
-      const request = new Event('pidesigner:navigate', { cancelable: true });
-      if (current.split('?')[0] !== next.split('?')[0] && !window.dispatchEvent(request)) {
+      if (current.split('?')[0] !== next.split('?')[0] && !canLeaveSource()) {
         history.replaceState(null, '', `${location.pathname}${location.search}#${current}`);
         return;
       }

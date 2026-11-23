@@ -273,6 +273,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
               let document = message.frameInfo.request.url, ["/", "/index.html"].contains(document.path),
               let body = message.body as? [String: Any], let action = body["action"] as? String else { return }
         switch action {
+        case "exportArchive": exportArchive(body, base: base); return
         case "getUpdateSettings": publishUpdateSettings(); return
         case "checkForUpdates": updates?.checkForUpdates(nil); publishUpdateSettings(); return
         case "updateUpdateSettings": updates?.setPreferences(body["preferences"] as? [String: Any] ?? [:]); publishUpdateSettings(); return
@@ -290,6 +291,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNa
         case "updateSettings": activity.updatePreferences(body["preferences"] as? [String: Any] ?? [:]); reply()
         case "requestNotifications": activity.requestNotificationPermission(completion: reply)
         default: break
+        }
+    }
+    private func exportArchive(_ body: [String: Any], base: URL) {
+        guard let project = body["project"] as? String,
+              project.range(of: #"^[A-Za-z0-9_-]{1,128}$"#, options: .regularExpression) != nil else { return }
+        var url = base.appendingPathComponent("api/projects/\(project)")
+        var suffix = ""
+        if let n = body["version"] as? Int, n > 0 {
+            url.appendPathComponent("versions/\(n)/download")
+            suffix = "-v\(n)"
+        } else {
+            url.appendPathComponent("export")
+        }
+        let panel = NSSavePanel()
+        let name = (body["slug"] as? String).flatMap {
+            $0.range(of: #"^[A-Za-z0-9_-]{1,128}$"#, options: .regularExpression) == nil ? nil : $0
+        } ?? "Project"
+        panel.nameFieldStringValue = name + suffix + ".zip"
+        panel.beginSheetModal(for: window) { [weak self] result in
+            guard result == .OK, let destination = panel.url, let self else { return }
+            Task { @MainActor in
+                do {
+                    let (temporary, response) = try await URLSession.shared.download(from: url)
+                    defer { try? FileManager.default.removeItem(at: temporary) }
+                    guard (response as? HTTPURLResponse)?.statusCode == 200, response.mimeType == "application/zip" else {
+                        let detail = (try? Data(contentsOf: temporary)).flatMap { try? JSONDecoder().decode([String: String].self, from: $0) }?["error"]
+                        throw NSError(domain: "PiDesigner.Export", code: 1, userInfo: [NSLocalizedDescriptionKey: detail ?? "The project archive could not be exported."])
+                    }
+                    let fm = FileManager.default
+                    if fm.fileExists(atPath: destination.path) {
+                        _ = try fm.replaceItemAt(destination, withItemAt: temporary)
+                    } else {
+                        try fm.moveItem(at: temporary, to: destination)
+                    }
+                } catch {
+                    NSAlert(error: error).beginSheetModal(for: self.window, completionHandler: nil)
+                }
+            }
         }
     }
     private func publishUpdateSettings() {

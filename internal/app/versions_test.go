@@ -1,9 +1,12 @@
 package app
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"io"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -80,6 +83,11 @@ func TestRunsRecordArtifactVersionsThatPreviewAndRestore(t *testing.T) {
 	if requestJSON(t, a.URL, "PUT", base+"/file", map[string]string{"path": "index.html", "content": "<p>edited</p>"}, nil) != 200 {
 		t.Fatal("edit")
 	}
+	live := readArchive(t, a.URL+base+"/export")
+	saved := readArchive(t, a.URL+base+"/versions/1/download")
+	if string(live[p.Project.Slug+"/index.html"]) != "<p>edited</p>" || !bytes.Contains(saved[p.Project.Slug+"/index.html"], []byte("Good work")) {
+		t.Fatal("live export must include manual edits without changing the saved version")
+	}
 	if requestJSON(t, a.URL, "POST", base+"/versions/1/restore", nil, nil) != 200 {
 		t.Fatal("restore")
 	}
@@ -114,5 +122,75 @@ func TestRunsRecordArtifactVersionsThatPreviewAndRestore(t *testing.T) {
 	resp.Body.Close()
 	if resp.StatusCode != 200 || resp.Header.Get("Content-Type") != "application/zip" {
 		t.Fatalf("download: %d %s", resp.StatusCode, resp.Header.Get("Content-Type"))
+	}
+}
+
+func readArchive(t *testing.T, url string) map[string][]byte {
+	t.Helper()
+	resp, err := http.Get(url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(resp.Body)
+	if err != nil || resp.StatusCode != 200 || resp.Header.Get("Content-Type") != "application/zip" || !strings.HasPrefix(resp.Header.Get("Content-Disposition"), "attachment;") {
+		t.Fatalf("invalid download: %v %v", resp.Status, err)
+	}
+	z, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := map[string][]byte{}
+	for _, f := range z.File {
+		r, err := f.Open()
+		if err != nil {
+			t.Fatal(err)
+		}
+		result[f.Name], err = io.ReadAll(r)
+		r.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	return result
+}
+
+func TestExportWithoutHistoryPreservesAssetsAndRejectsIncompleteArchives(t *testing.T) {
+	dir := t.TempDir()
+	a, err := Start(Options{DataDir: dir, ContentDir: fixtureCatalog(t)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Shutdown(context.Background())
+	var p struct{ Project model.Project }
+	if requestJSON(t, a.URL, "POST", "/api/projects", map[string]string{"name": "Export"}, &p) != 201 {
+		t.Fatal("create")
+	}
+	root := filepath.Join(dir, "projects", p.Project.Slug)
+	binary := []byte{0, 0xff, 0x80, 4}
+	for _, name := range []string{"assets/image.png", ".pi/config", "node_modules/x.js", ".env"} {
+		path := filepath.Join(root, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, binary, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	url := a.URL + "/api/projects/" + p.Project.ID + "/export"
+	files := readArchive(t, url)
+	if len(files) != 1 || !bytes.Equal(files[p.Project.Slug+"/assets/image.png"], binary) {
+		t.Fatalf("unexpected export: %+v", files)
+	}
+	if err := os.Symlink(filepath.Join(dir, "pidesigner.db"), filepath.Join(root, "linked")); err != nil {
+		t.Fatal(err)
+	}
+	resp, err := http.Get(url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == 200 || resp.Header.Get("Content-Type") == "application/zip" {
+		t.Fatalf("unexpected partial ZIP: %v", resp.Status)
 	}
 }

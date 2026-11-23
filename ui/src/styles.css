@@ -331,6 +331,9 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 .tool-log code { color: var(--muted); font-family: var(--mono); font-size: 10px; }
 .run-status { display: flex; gap: 6px; align-items: center; font-size: 10.5px; color: var(--success); line-height: 1.7; }
 .studio-composer { padding: 7px 3px 0; flex: 0 0 auto; }
+.refinement-target { display: flex; align-items: center; gap: 6px; background: var(--accent-soft); color: var(--accent); border-radius: 7px; padding: 2px 4px 2px 9px; margin-bottom: 5px; font-size: 11px; }
+.refinement-target span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pick-element[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); }
 .composer-compact { padding: 12px; border-radius: 14px; box-shadow: none; border-color: var(--line); }
 .composer-compact textarea { font-size: 12px; min-height: 72px; }
 .composer-compact .composer-tools { gap: 3px; margin-top: 5px; }

@@ -11,6 +11,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha1"
+	_ "embed"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -446,11 +447,15 @@ func setPreviewCORS(w http.ResponseWriter, r *http.Request, name string) {
 	}
 }
 
+//go:embed picker.js
+var pickerScript string
+
 // bridgeScript is injected into every previewed HTML document. It listens for
 // postMessage hot-swap instructions from the parent UI.
 const bridgeScript = `<script data-pidesigner-bridge>
 (function () {
   var VERSION = "__BRIDGE_VERSION__";
+  __ELEMENT_PICKER__
   function swapCSS(files) {
     (files || []).forEach(function (f) {
       var links = document.querySelectorAll('link[rel="stylesheet"]');
@@ -475,6 +480,8 @@ const bridgeScript = `<script data-pidesigner-bridge>
     if (ev.source !== window.parent || !d || d.source !== "pidesigner") return;
     if (d.type === "css-update") {
       swapCSS(d.files);
+    } else if (d.type === "pick-element" && window.parent !== window) {
+      pickElement(d.token, ev.origin);
     } else if (d.type === "reload") {
       location.reload();
     }
@@ -488,6 +495,7 @@ var bridgeVersion = fmt.Sprintf("%d", time.Now().UnixNano())
 // InjectBridge inserts the hot-swap bridge into an HTML document.
 func InjectBridge(doc []byte) []byte {
 	script := strings.ReplaceAll(bridgeScript, "__BRIDGE_VERSION__", bridgeVersion)
+	script = strings.Replace(script, "__ELEMENT_PICKER__", pickerScript, 1)
 	if i := strings.LastIndex(strings.ToLower(string(doc)), "</body>"); i >= 0 {
 		out := make([]byte, 0, len(doc)+len(script))
 		out = append(out, doc[:i]...)
